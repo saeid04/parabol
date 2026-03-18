@@ -1,6 +1,13 @@
-FROM node:24.13.1
+# Ubuntu Noble (24.04) provides GLIBC 2.39 required by uWebSockets.js
+FROM ubuntu:noble
 
 WORKDIR /parabol
+
+# Install Node.js 24 via NodeSource and system deps
+RUN apt-get update && apt-get install -y curl ca-certificates build-essential python3 postgresql-client && \
+    curl -fsSL https://deb.nodesource.com/setup_24.x | bash - && \
+    apt-get install -y nodejs && \
+    apt-get clean && rm -rf /var/lib/apt/lists/*
 
 # Enable corepack for pnpm
 RUN corepack enable
@@ -11,7 +18,6 @@ COPY packages/embedder/package.json ./packages/embedder/package.json
 COPY packages/integration-tests/package.json ./packages/integration-tests/package.json
 COPY packages/mattermost-plugin/package.json ./packages/mattermost-plugin/package.json
 COPY packages/server/package.json ./packages/server/package.json
-COPY packages/types/package.json ./packages/types/package.json
 
 RUN pnpm install --frozen-lockfile
 

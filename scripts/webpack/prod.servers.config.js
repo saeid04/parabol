@@ -19,7 +19,7 @@ const INIT_LOGGING = path.join(SERVER_ROOT, 'initLogging.ts')
 const MONKEYPATCHES = path.join(SERVER_ROOT, 'monkeyPatches.ts')
 const DUMP_ON_USR2 = path.join(SERVER_ROOT, 'dumpOnUSR2.ts')
 
-const COMMIT_HASH = cp.execSync('git rev-parse HEAD').toString().trim()
+const COMMIT_HASH = process.env.COMMIT_HASH || (() => { try { return cp.execSync('git rev-parse HEAD').toString().trim() } catch { return 'unknown' } })()
 const runtimePlatform = `${process.platform}-${process.arch}`
 
 module.exports = (config) => {
