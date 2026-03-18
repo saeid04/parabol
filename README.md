@@ -1,127 +1,252 @@
-# Parabol - We're [hiring](https://www.parabol.co/join)!
+# Easily deploy Parabol on Dokku
 
-## Overview
+Upstream parabol have some issue that makes end user can’t deploy to their self hosted dokku instance or simply running `docker-compose up -d` on their local
 
-[Parabol](https://www.parabol.co) is an open-source application for knowledge
-management and running structured meetings such as team retrospectives or Sprint Poker™.
-You may try a single-player demo of Parabol (no login creation required) at:
-https://parabol.co/retro-demo
+Some of the problems are the outdated Dockerfile and misconfigured env. Most of the scripts in the root project either need dependencies that are only available in sub-packages, or require a fully connected and migrated database before they can run.
 
-We endeavor to be a
-transparent organization and publish
-our company's [history and SaaS metrics](https://www.parabol.co/blog/tag/friday-ship).
-
-![Dashboard](./docs/images/d2.gif)
-![Discuss](./docs/images/d1.gif)
-
-## Stack Information
-
-| Concern                | Solution                                                        |
-| ---------------------- | --------------------------------------------------------------- |
-| Server                 | [Node](https://nodejs.org/)                                     |
-| Server Framework       | [μWebSockets.js](https://github.com/uNetworking/uWebSockets.js) |
-| Database               | [PostgreSQL](https://www.postgresql.org/)                       |
-| PubSub & Cache         | [Valkey](https://valkey.io)                                       |
-| Data Transport         | [GraphQL](https://github.com/graphql/graphql-js)                |
-| Real-time Connectivity | [graphql-ws](https://github.com/enisdenjo/graphql-ws)           |
-| Client Cache           | [Relay](https://facebook.github.io/relay/)                      |
-| UI Framework           | [React](https://facebook.github.io/react/)                      |
-| Styling (Legacy)       | [Emotion](https://emotion.sh/)                                  |
-| Styling                | [Tailwind CSS](https://tailwindcss.com/)                        |
-
-## Setup
-
-### Prerequisites
-
-- [Node](https://nodejs.org/en/download/)
-- [pnpm](https://pnpm.io/)
-
-#### Production
-
-- [PostgreSQL](https://www.postgresql.org/) (current specific version available in the [build action](./.github/workflows/build.yml)) with [pgvector plugin](https://github.com/pgvector/pgvector)
-- [Valkey](https://valkey.io) (current specific version available in the [build action](./.github/workflows/build.yml))
-
-#### Development
-
-- [Docker Compose](https://docs.docker.com/compose/install/) (Development only)
-- [Watchman](https://facebook.github.io/watchman/docs/install.html) (Development only)
-
-> 📘 Notes on Docker Resources
+> Features:
 >
-> Some of Parabol's container services can be resource intensive (I'm looking at you, text-embedding-inference!)
-> You may need to increase Docker's resource limits (e.g. Docker Desktop -> Settings -> Resources) to increase
-> the memory limit to ~16GB.
+> - Enterprise org by default (via `IS_ENTERPRISE=true`)
+> - Single-stage Docker build with migration at container startup
+> - PostgreSQL 16 with pgvector, Valkey (Redis-compatible), no RethinkDB
+> - Uses pnpm (Node 24)
 
-### Installation
+---
 
-```bash
-$ git clone https://github.com/ParabolInc/parabol.git
-$ cd parabol
-$ cp .env.example .env # Add your own vars here
-$ pnpm i
-$ pnpm db:start
-$ pnpm dev
+There are two way to deploy the app:
+
+## The docker-compose way
+
+The easiest way, you just need to clone this repo and then you should be able to `cp .env.example .env` and run `docker-compose up -d` that should be the bare minimum to run it
+
+Then you can config the other .env value later. Please refer to upstream repo for available .env config https://github.com/ParabolInc/parabol
+
+> You might wanna run
+> `docker-compose -f docker-compose.yml -f ./docker/docker-compose.selfHosted.yml up -d`
+> instead to make the storage persistance
+
+If you saw connection refused when try to open the parabol app, since the migration and build need fully connected DB, after the container is created you might need to check parabol app log until you saw something like 
+
+```
+2023-02-10T02:45:26.698581809Z app[web.1]: 🔥🔥🔥 Server ID: 1. Ready for Sockets: Port 80 🔥🔥🔥
+2023-02-10T02:45:30.390679700Z app[web.1]: 💧💧💧 Server ID: 11. Ready for GraphQL Execution 💧💧💧
+2023-02-10T02:45:31.257729102Z app[web.1]: 💧💧💧 Server ID: 1. Ready for GraphQL Execution 💧💧💧
 ```
 
-- By default, the app will run at: http://localhost:3000/
+Then after that you can try to open again in the browser
 
-- If `pnpm db:start` failed and `localhost:5050` isn't working, a docker
-  container, volume, or image may be corrupted and need to be pruned.
+## Dokku Deployment
 
-### Development
+The most preferred way if you want to deploy it on server
 
-- [Code Reviews](./docs/codeReview.md)
-- [Create new GraphQL Mutations](./packages/server/graphql/public/README.md)
-- [Docker](./docker/README.md)
-- [Dev.js](./scripts/README.md)
-- [File Storage (CDN, Local, S3)](./packages/server/fileStorage/README.md)
-- [GraphiQL, Private Schema Admin](./packages/server/graphql/private/README.md)
-- [Integrations (GitHub, Jira, Slack, etc.)](./docs/integrations.md)
-- [PostgreSQL](./packages/server/postgres/README.md)
-- [Shared Scripts](./packages/client/shared/README.md)
-- [VS Code Tips](.vscode/tips.md)
-- [Tailwind CSS migration guide](./packages/client/README.md)
+> Pre-req to using this guideline:
+>
+> - You need to have Dokku (https://github.com/dokku/dokku) installed on your server and you need to understand Dokku
+> - Better if a domain already pointed to your server and you already config it as global domain in dokku
+> - Your local computer SSH public key already registered on your dokku server (so you can deploy 🚀)
 
-### Deploy
+### 1. Create Parabol app
 
-```bash
-# There's a pesky bug in pnpm if you don't have an SSH key: https://github.com/pnpm/pnpm/issues/7243
-$ git config --global url."https://github.com/enahum/redux-offline.git".insteadOf git@github.com:enahum/redux-offline.git
-$ pnpm i && pnpm build && pnpm predeploy && pnpm start
+```
+sudo dokku apps:create parabol
+sudo dokku proxy:ports-set parabol http:80:80
+sudo dokku storage:ensure-directory parabol-data
+sudo dokku storage:mount parabol /var/lib/dokku/data/storage/parabol-data:/parabol/self-hosted
 ```
 
-- [How to Ship](./docs/deployment.md)
+That will create the app and mount the self hosted directory
 
-## Getting Involved
+### 2. You need to install 2 plugins: `postgres`, `redis`
 
-Parabol offers equity for qualified contributions.
+> Note: RethinkDB is no longer required — the upstream has fully migrated to PostgreSQL 16.
 
-See [CONTRIBUTING.md](./CONTRIBUTING.md) for more information on how to
-get involved and how to get compensated.
+```
+sudo dokku plugin:install https://github.com/dokku/dokku-postgres.git postgres
+sudo dokku plugin:install https://github.com/dokku/dokku-redis.git redis
 
-## Have feedback, ideas or feature requests?
+### 3. Then create DB
 
-Please review our [Discussions](https://github.com/ParabolInc/parabol/discussions) to see if there's already a similar suggestion, and if not please feel free to [start a new one](https://github.com/ParabolInc/parabol/discussions/new).
+```
+sudo dokku postgres:create pb-pg --image "pgvector/pgvector" --image-version "0.8.0-pg16"
+sudo dokku redis:create pb-redis
+```
 
-## Releases
+Save the `postgres` DSN printed after creation, e.g. `postgres://username:thepassword@the-db-host:5432/pb_pg` — you'll need it in step 5.
 
-For details on all releases, refer to [CHANGELOG.md](./CHANGELOG.md).
+### 4. Link created DB
 
-## Parabol Core Team
+```
+sudo dokku postgres:link pb-pg parabol -a "POSTGRES_URL"
+sudo dokku redis:link pb-redis parabol
+```
 
-- [Jordan Husney](https://github.com/jordanh)
-- [Terry Acker](https://github.com/ackernaut)
-- [Matt Krick](https://github.com/mattkrick)
+### 5. Submit ENV
 
-## Parabol Maintainers
+For postgres we need to manually set this value first, because by default it’s not using DSN
+Based value that you’re copied on step 3, for example: `postgres://username:thepassword@the-db-host:5432/pb_pg` then you can run
 
-- [Matt Krick](https://github.com/mattkrick)
-- [Georg Bremer](https://github.com/Dschoordsch)
+```
+sudo dokku config:set parabol POSTGRES_DB=pb_pg --no-restart
+sudo dokku config:set parabol POSTGRES_HOST=the-db-host --no-restart
+sudo dokku config:set parabol POSTGRES_PASSWORD=thepassword --no-restart
+sudo dokku config:set parabol POSTGRES_USER=username --no-restart
+```
 
-## License
+Then excluding:
 
-Copyright (c) 2016-present, Parabol, Inc.
+- `POSTGRES_DB`
+- `POSTGRES_HOST`
+- `POSTGRES_PASSWORD`
+- `POSTGRES_USER`
+- `REDIS_URL`
 
-This codebase is dual-licensed under the GNU AFFERO GENERAL PUBLIC LICENSE,
-Version 3.0 while holding, at Parabol's sole discretion, the right to create
-new licenses. For details please read [LICENSE](LICENSE).
+You can copy the rest of environments on `.env.example`
+
+Then using nano editor to paste it to dokku ENV file (instead of set up one by one like above)
+
+```
+sudo nano /home/dokku/parabol/ENV
+```
+
+Paste the environment variable there and `Ctrl + X` >>>> `Y` >>>> `Enter` to save
+
+This should give you bare minimum to run the app, you can config it again later (Refer to https://github.com/ParabolInc/parabol
+for more config)
+
+### 6. Installing letsencrypt to activate SSL
+
+```
+sudo dokku plugin:install https://github.com/dokku/dokku-letsencrypt.git
+sudo dokku letsencrypt:set --global <your@email.address>
+sudo dokku letsencrypt:enable parabol
+sudo dokku letsencrypt:cron-job --add
+```
+
+### 7. Decide using Heroku buildpack / Dockerfile
+
+You can actually skip this step if you want to use Heroku buildpack
+
+> But I'm not tested it again since it's just too slow
+
+If you choose to use Heroku buildpacks, then go straight to step 8, otherwise 👇🏻
+
+So the other option is try to use dockerfile instead heroku buildpack (dockerfile is faster as well)
+
+```
+sudo dokku builder-dockerfile:set parabol dockerfile-path docker/Dockerfile.prod
+```
+
+But the trade off are the migration process and build will happens AFTER the container is up, because as i mention earlier even the build process need to be connected to fully migrated database, and the Dockerfile build process is not connected yet to database and not exposed to ENV
+ Probably need to skip check as well
+
+> 🔥 BEWARE 🔥 This will disable zero downtime deployment, you might need to wait up to 10 mins after deployment until the migration finish successfully and the app will unaccessible during that time
+
+```
+sudo dokku checks:skip parabol
+```
+
+### 8. Deploy the app
+
+Assuming your SSH key already setted up on pre-req
+
+First you need to clone this repo on your local computer
+
+```
+git remote add dokku@<your-server-domain-or-ip>:parabol
+```
+
+then
+
+```
+git push dokku master
+```
+
+After push success, go to your server console, then monitor it using
+
+```
+sudo dokku logs parabol -t
+```
+
+Until you saw something like
+
+```
+2023-02-10T02:45:26.698581809Z app[web.1]: 🔥🔥🔥 Server ID: 1. Ready for Sockets: Port 80 🔥🔥🔥
+2023-02-10T02:45:30.390679700Z app[web.1]: 💧💧💧 Server ID: 11. Ready for GraphQL Execution 💧💧💧
+2023-02-10T02:45:31.257729102Z app[web.1]: 💧💧💧 Server ID: 1. Ready for GraphQL Execution 💧💧💧
+```
+
+then try to open it on your browser, for example if your domain is `foo.com` then by default it should be
+
+```
+https://parabol.foo.com
+```
+
+This isn’t ideal, but the easiest way. You could actually use CI/CD to spin up temporary database, migrate it, and building all the assets before actually pushing it to dokku, feel free to refer to circle ci `config.yaml` if you want to do that.
+
+# FAQ
+
+If postgres fails to connect, check the logs:
+
+```
+sudo dokku postgres:logs pb-pg -t
+```
+
+Make sure you're using the `pgvector/pgvector:0.8.0-pg16` image.
+
+# Another known config
+
+## Update invitation link
+
+For example if your parabol domain is `parabol.foo.com` then on your server run:
+
+```
+sudo dokku config:set parabol INVITATION_SHORTLINK=parabol.foo.com/invitation-link
+```
+
+## If something goes wrong, you might need to set this as well
+
+```
+sudo dokku config:set parabol PROTO=http --no-restart
+sudo dokku config:set parabol HOST=<you.domain> --no-restart
+sudo dokku config:set parabol PORT=80 --no-restart
+sudo dokku ps:restart parabol
+```
+
+## Enable Google Sign In
+
+```
+sudo dokku config:set parabol GOOGLE_OAUTH_CLIENT_ID='client_id' --no-restart
+sudo dokku config:set parabol GOOGLE_OAUTH_CLIENT_SECRET='secret' --no-restart
+sudo dokku config:set parabol PROTO=https --no-restart
+sudo dokku config:set parabol HOST=<your.domain>
+sudo dokku config:set parabol PORT=443 --no-restart
+sudo dokku ps:restart parabol
+```
+
+The value of `client id` and `secret` can be gather on google cloud console https://developers.google.com/identity/protocols/oauth2. You don't need to pay anything to enable it
+
+You need to set Authorized redirect URI's to `https://<your.domain>/auth/google` on google cloud console
+
+> Make sure to correctly set vaalue for `PROTO` `HOST` and `PORT`, since it'll be used on `packages/server/appOrigin.ts` to construct app origin and later will be use to construct google callback URL. If you find `Invalid Login Code` during google login you might wanna check these setting or the callback url you set on google cloud console
+
+## Enable JIRA integration
+
+You need to create account on developer.atlassian.com https://developer.atlassian.com/cloud/confluence/oauth-2-3lo-apps/
+set auth callback url to `https://<your.domain>/auth/callback`
+and set `OAUTH2_REDIRECT` env
+
+```
+sudo dokku config:set parabol OAUTH2_REDIRECT=https://<your.domain>/auth/callback
+```
+
+from attlasian developer console you can receive `client_id` and `secret`. Then on your server run:
+
+```
+sudo dokku config:set parabol ATLASSIAN_CLIENT_ID="your_client_id" --no-restart
+sudo dokku config:set parabol ATLASSIAN_CLIENT_SECRET="your_secret" --no-restart
+sudo dokku ps:restart parabol
+```
+
+## Other things?
+
+Other things please refer to the upstream repo https://github.com/ParabolInc/parabol, The change in here probably will breaking to upstream so it's not possible to merge it there, will try keep maintain to be up to date with upstream.

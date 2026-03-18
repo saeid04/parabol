@@ -18,6 +18,7 @@
   "private": true,
   "scripts": {
     "start": "pm2-runtime start pm2.config.js",
+    "heroku-postbuild": "pnpm build && pnpm predeploy",
     "build": "node --max-old-space-size=8192 scripts/prod.js",
     "clean": "git clean -fdx -e .env",
     "codegen": "node scripts/codegenGraphQL.js",

@@ -1,0 +1,24 @@
+FROM node:24.13.1
+
+WORKDIR /parabol
+
+# Enable corepack for pnpm
+RUN corepack enable
+
+COPY package.json pnpm-lock.yaml pnpm-workspace.yaml ./
+COPY packages/client/package.json ./packages/client/package.json
+COPY packages/embedder/package.json ./packages/embedder/package.json
+COPY packages/integration-tests/package.json ./packages/integration-tests/package.json
+COPY packages/mattermost-plugin/package.json ./packages/mattermost-plugin/package.json
+COPY packages/server/package.json ./packages/server/package.json
+COPY packages/types/package.json ./packages/types/package.json
+
+RUN pnpm install --frozen-lockfile
+
+COPY . .
+
+RUN cp docker/entrypoint.prod.sh /bin/entrypoint && \
+      chmod +x /bin/entrypoint
+EXPOSE 80
+ENTRYPOINT ["entrypoint"]
+CMD ["pnpm", "start"]
