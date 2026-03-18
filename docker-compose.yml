@@ -30,8 +30,8 @@ services:
       context: .
       dockerfile: ./docker/Dockerfile.prod
     env_file: .env
-    ports:
-      - '3000:3000'
+    # ports:
+      # - '3000:3000'
     depends_on:
       postgres:
         condition: service_healthy
@@ -40,11 +40,8 @@ services:
     restart: unless-stopped
     networks:
       - parabol-network
-    volumes:
-      - app-data:/parabol/self-hosted
 networks:
   parabol-network:
 volumes:
   valkey-data: {}
   postgres-data: {}
-  app-data: {}
