@@ -40,8 +40,11 @@ services:
     restart: unless-stopped
     networks:
       - parabol-network
+    volumes:
+      - app-data:/parabol/self-hosted
 networks:
   parabol-network:
 volumes:
   valkey-data: {}
   postgres-data: {}
+  app-data: {}
