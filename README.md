@@ -25,7 +25,7 @@ Then you can config the other .env value later. Please refer to upstream repo fo
 > `docker-compose -f docker-compose.yml -f ./docker/docker-compose.selfHosted.yml up -d`
 > instead to make the storage persistance
 
-If you saw connection refused when try to open the parabol app, since the migration and build need fully connected DB, after the container is created you might need to check parabol app log until you saw something like 
+If you saw connection refused when try to open the parabol app, since the migration and build need fully connected DB, after the container is created you might need to check parabol app log until you saw something like
 
 ```
 2023-02-10T02:45:26.698581809Z app[web.1]: 🔥🔥🔥 Server ID: 1. Ready for Sockets: Port 80 🔥🔥🔥
@@ -137,7 +137,7 @@ sudo dokku builder-dockerfile:set parabol dockerfile-path docker/Dockerfile.prod
 ```
 
 But the trade off are the migration process and build will happens AFTER the container is up, because as i mention earlier even the build process need to be connected to fully migrated database, and the Dockerfile build process is not connected yet to database and not exposed to ENV
- Probably need to skip check as well
+Probably need to skip check as well
 
 > 🔥 BEWARE 🔥 This will disable zero downtime deployment, you might need to wait up to 10 mins after deployment until the migration finish successfully and the app will unaccessible during that time
 
@@ -206,9 +206,7 @@ sudo dokku config:set parabol INVITATION_SHORTLINK=parabol.foo.com/invitation-li
 ## If something goes wrong, you might need to set this as well
 
 ```
-sudo dokku config:set parabol PROTO=http --no-restart
-sudo dokku config:set parabol HOST=<you.domain> --no-restart
-sudo dokku config:set parabol PORT=80 --no-restart
+sudo dokku config:set parabol APP_ORIGIN=https://<your.domain> --no-restart
 sudo dokku ps:restart parabol
 ```
 
@@ -217,9 +215,7 @@ sudo dokku ps:restart parabol
 ```
 sudo dokku config:set parabol GOOGLE_OAUTH_CLIENT_ID='client_id' --no-restart
 sudo dokku config:set parabol GOOGLE_OAUTH_CLIENT_SECRET='secret' --no-restart
-sudo dokku config:set parabol PROTO=https --no-restart
-sudo dokku config:set parabol HOST=<your.domain>
-sudo dokku config:set parabol PORT=443 --no-restart
+sudo dokku config:set parabol APP_ORIGIN=https://<your.domain>
 sudo dokku ps:restart parabol
 ```
 
@@ -227,7 +223,7 @@ The value of `client id` and `secret` can be gather on google cloud console http
 
 You need to set Authorized redirect URI's to `https://<your.domain>/auth/google` on google cloud console
 
-> Make sure to correctly set vaalue for `PROTO` `HOST` and `PORT`, since it'll be used on `packages/server/appOrigin.ts` to construct app origin and later will be use to construct google callback URL. If you find `Invalid Login Code` during google login you might wanna check these setting or the callback url you set on google cloud console
+> Make sure to set `APP_ORIGIN` to your public URL (e.g. `https://your.domain`), since it is used in `packages/server/appOrigin.ts` to construct the app origin for OAuth callbacks. If you see `Invalid Login Code` during Google login, check this value and the redirect URI you set in the Google Cloud Console.
 
 ## Enable JIRA integration
 
