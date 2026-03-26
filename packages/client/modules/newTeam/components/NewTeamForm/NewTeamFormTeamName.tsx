@@ -1,5 +1,5 @@
 import styled from '@emotion/styled'
-import React, {ChangeEvent} from 'react'
+import type {ChangeEvent} from 'react'
 import FieldLabel from '../../../../components/FieldLabel/FieldLabel'
 import BasicInput from '../../../../components/InputField/BasicInput'
 import {Breakpoint} from '../../../../types/constEnums'
@@ -18,15 +18,17 @@ interface Props {
   onChange(e: ChangeEvent<HTMLInputElement>): void
   teamName: string
   disabled?: boolean
+  autoFocus?: boolean
 }
 
 const NewTeamFormTeamName = (props: Props) => {
-  const {error, onChange, teamName, disabled} = props
+  const {error, onChange, teamName, disabled, autoFocus} = props
   return (
     <FormBlockInline>
       <FieldLabel fieldSize='medium' htmlFor='teamName' indent inline label='Team Name' />
       <NewTeamFieldBlock>
         <BasicInput
+          autoFocus={autoFocus}
           disabled={disabled}
           error={error}
           name='teamName'

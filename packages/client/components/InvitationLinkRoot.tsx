@@ -1,18 +1,18 @@
-import React, {Suspense} from 'react'
-import {RouteComponentProps} from 'react-router'
-import invitationLinkQuery, {InvitationLinkQuery} from '~/__generated__/InvitationLinkQuery.graphql'
+import {Suspense} from 'react'
+import {useParams} from 'react-router'
+import invitationLinkQuery, {
+  type InvitationLinkQuery
+} from '~/__generated__/InvitationLinkQuery.graphql'
 import useNoIndex from '../hooks/useNoIndex'
 import useQueryLoaderNow from '../hooks/useQueryLoaderNow'
 import InvitationLink from './InvitationLink'
 
-interface Props extends RouteComponentProps<{token: string}> {}
-
-const InvitationLinkRoot = (props: Props) => {
+const InvitationLinkRoot = () => {
   useNoIndex()
-  const {match} = props
-  const {params} = match
-  const {token} = params
-  const queryRef = useQueryLoaderNow<InvitationLinkQuery>(invitationLinkQuery, {token})
+  const {token} = useParams()
+  const queryRef = useQueryLoaderNow<InvitationLinkQuery>(invitationLinkQuery, {
+    token: token!
+  })
   return <Suspense fallback={''}>{queryRef && <InvitationLink queryRef={queryRef} />}</Suspense>
 }
 

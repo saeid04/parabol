@@ -1,3 +1,4 @@
+import {fetch} from '@whatwg-node/fetch'
 import crypto from 'crypto'
 import OAuth from 'oauth-1.0a'
 import appOrigin from '../../appOrigin'
@@ -45,6 +46,7 @@ export default class JiraServerOAuth1Manager {
     const response = await fetch(request.url, {
       method: request.method,
       headers: {
+        'User-Agent': 'parabol',
         ...this.oauth.toHeader(auth)
       }
     })
@@ -87,6 +89,7 @@ export default class JiraServerOAuth1Manager {
     const response = await fetch(request.url, {
       method: request.method,
       headers: {
+        'User-Agent': 'parabol',
         ...this.oauth.toHeader(auth)
       }
     })

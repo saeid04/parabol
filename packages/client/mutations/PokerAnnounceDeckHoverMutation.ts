@@ -1,11 +1,11 @@
 import graphql from 'babel-plugin-relay/macro'
 import {commitMutation} from 'react-relay'
-import {RecordProxy} from 'relay-runtime'
-import {SharedUpdater, SimpleMutation} from '../types/relayMutations'
+import type {RecordProxy} from 'relay-runtime'
+import type {PokerAnnounceDeckHoverMutation as TPokerAnnounceDeckHoverMutation} from '../__generated__/PokerAnnounceDeckHoverMutation.graphql'
+import type {PokerAnnounceDeckHoverMutation_meeting$data} from '../__generated__/PokerAnnounceDeckHoverMutation_meeting.graphql'
+import type {PokerMeeting_meeting$data} from '../__generated__/PokerMeeting_meeting.graphql'
+import type {SharedUpdater, SimpleMutation} from '../types/relayMutations'
 import createProxyRecord from '../utils/relay/createProxyRecord'
-import {PokerAnnounceDeckHoverMutation as TPokerAnnounceDeckHoverMutation} from '../__generated__/PokerAnnounceDeckHoverMutation.graphql'
-import {PokerAnnounceDeckHoverMutation_meeting} from '../__generated__/PokerAnnounceDeckHoverMutation_meeting.graphql'
-import {PokerMeeting_meeting} from '../__generated__/PokerMeeting_meeting.graphql'
 
 // asking for the correct hoveringUsers array would be fine, except we know a user can existing in exactly 1 hoveringUsers array at a time
 // which means we have to iterate over each stage & remove it from all others (because mouseEnter/mouseLeave are not always reliable)
@@ -34,7 +34,7 @@ const mutation = graphql`
     }
   }
 `
-type EstimatePhase = PokerMeeting_meeting['phases'][0]
+type EstimatePhase = PokerMeeting_meeting$data['phases'][0]
 type EstimateStage = EstimatePhase['stages'][0]
 
 const removeHoveringUserFromStage = (stage: RecordProxy<EstimateStage>, userId: string) => {
@@ -50,14 +50,14 @@ const removeHoveringUserFromStage = (stage: RecordProxy<EstimateStage>, userId: 
   stage.setLinkedRecords(nextHoveringUsers, 'hoveringUsers')
 }
 export const pokerAnnounceDeckHoverMeetingUpdater: SharedUpdater<
-  PokerAnnounceDeckHoverMutation_meeting
+  PokerAnnounceDeckHoverMutation_meeting$data
 > = (payload, {store}) => {
   const meetingId = payload.getValue('meetingId')
   const user = payload.getLinkedRecord('user')
   const userId = user.getValue('id')
   const stageId = payload.getValue('stageId')
   const isHover = payload.getValue('isHover')
-  const meeting = store.get<PokerMeeting_meeting>(meetingId)
+  const meeting = store.get<PokerMeeting_meeting$data>(meetingId)
   if (!meeting) return
   if (isHover) {
     const phases = meeting.getLinkedRecords('phases')!
@@ -103,7 +103,10 @@ const PokerAnnounceDeckHoverMutation: SimpleMutation<TPokerAnnounceDeckHoverMuta
         isHover
       })
       payload.setLinkedRecord(store.getRoot().getLinkedRecord('viewer'), 'user')
-      pokerAnnounceDeckHoverMeetingUpdater(payload as any, {atmosphere, store})
+      pokerAnnounceDeckHoverMeetingUpdater(payload as any, {
+        atmosphere,
+        store
+      })
     }
   })
 }

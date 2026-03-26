@@ -1,24 +1,28 @@
-import {AcceptTeamInvitationMutationReply} from '~/__generated__/AcceptTeamInvitationMutationReply.graphql'
-import {OnNextHandler, OnNextHistoryContext} from '../../types/relayMutations'
+import type {AcceptTeamInvitationMutationReply$data} from '~/__generated__/AcceptTeamInvitationMutationReply.graphql'
+import type {OnNextHandler, OnNextNavigateContext} from '../../types/relayMutations'
 import getValidRedirectParam from '../../utils/getValidRedirectParam'
-import SendClientSegmentEventMutation from '../SendClientSegmentEventMutation'
+import SendClientSideEvent from '../../utils/SendClientSideEvent'
 
-interface OnNextMeetingId extends OnNextHistoryContext {
+interface OnNextMeetingId extends OnNextNavigateContext {
   meetingId?: string | null
+  redirectPath?: string
 }
 
 const handleAuthenticationRedirect: OnNextHandler<
-  AcceptTeamInvitationMutationReply | undefined,
+  AcceptTeamInvitationMutationReply$data | undefined,
   OnNextMeetingId
-> = (acceptTeamInvitation, {meetingId: locallyRequestedMeetingId, history, atmosphere}) => {
-  SendClientSegmentEventMutation(atmosphere, 'User Login')
+> = (
+  acceptTeamInvitation,
+  {meetingId: locallyRequestedMeetingId, navigate, atmosphere, redirectPath = '/meetings'}
+) => {
+  SendClientSideEvent(atmosphere, 'User Login')
   const redirectTo = getValidRedirectParam()
   if (redirectTo) {
-    history.push(redirectTo)
+    navigate(redirectTo)
     return
   }
   if (!acceptTeamInvitation?.team) {
-    history.push('/meetings')
+    navigate(redirectPath)
     return
   }
   const {meetingId: invitedMeetingId, team} = acceptTeamInvitation
@@ -27,9 +31,9 @@ const handleAuthenticationRedirect: OnNextHandler<
   const activeMeeting =
     (meetingId && activeMeetings.find((meeting) => meeting.id === meetingId)) || activeMeetings[0]
   if (activeMeeting) {
-    history.push(`/meet/${activeMeeting.id}`)
+    navigate(`/meet/${activeMeeting.id}`)
   } else {
-    history.push(`/team/${teamId}`)
+    navigate(`/team/${teamId}`)
   }
 }
 export default handleAuthenticationRedirect

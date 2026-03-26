@@ -1,15 +1,15 @@
 import graphql from 'babel-plugin-relay/macro'
 import {commitMutation} from 'react-relay'
 import {SprintPokerDefaults} from '~/types/constEnums'
-import {BaseLocalHandlers, SharedUpdater, StandardMutation} from '../types/relayMutations'
+import type {AddPokerTemplateDimensionMutation as TAddPokerTemplateDimensionMutation} from '../__generated__/AddPokerTemplateDimensionMutation.graphql'
+import type {AddPokerTemplateDimensionMutation_dimension$data} from '../__generated__/AddPokerTemplateDimensionMutation_dimension.graphql'
+import type {BaseLocalHandlers, SharedUpdater, StandardMutation} from '../types/relayMutations'
 import createProxyRecord from '../utils/relay/createProxyRecord'
-import {AddPokerTemplateDimensionMutation as TAddPokerTemplateDimensionMutation} from '../__generated__/AddPokerTemplateDimensionMutation.graphql'
-import {AddPokerTemplateDimensionMutation_dimension} from '../__generated__/AddPokerTemplateDimensionMutation_dimension.graphql'
 import handleAddPokerTemplateDimension from './handlers/handleAddPokerTemplateDimension'
 
 interface Handlers extends BaseLocalHandlers {
   dimensionCount: number
-  sortOrder: number
+  sortOrder: string
 }
 
 graphql`
@@ -35,7 +35,7 @@ const mutation = graphql`
 `
 
 export const addPokerTemplateDimensionTeamUpdater: SharedUpdater<
-  AddPokerTemplateDimensionMutation_dimension
+  AddPokerTemplateDimensionMutation_dimension$data
 > = (payload, {store}) => {
   const dimension = payload.getLinkedRecord('dimension')
   if (!dimension) return

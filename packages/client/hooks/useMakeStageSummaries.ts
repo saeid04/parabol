@@ -1,7 +1,7 @@
 import graphql from 'babel-plugin-relay/macro'
 import {useMemo} from 'react'
 import {readInlineData} from 'react-relay'
-import {useMakeStageSummaries_phase$key} from '../__generated__/useMakeStageSummaries_phase.graphql'
+import type {useMakeStageSummaries_phase$key} from '../__generated__/useMakeStageSummaries_phase.graphql'
 
 interface StageSummary {
   title: string
@@ -48,6 +48,11 @@ graphql`
           __typename
           title
           iid
+        }
+        ... on _xLinearIssue {
+          __typename
+          title
+          identifier
         }
       }
     }
@@ -117,6 +122,11 @@ const useMakeStageSummaries = (phaseRef: useMakeStageSummaries_phase$key, localS
             title: integration.title,
             subtitle: `#${integration.iid}`
           }
+        } else if (integration.__typename === '_xLinearIssue') {
+          return {
+            title: integration.title,
+            subtitle: `${integration.identifier}`
+          }
         }
         return {
           title: '<Unknown Story>',
@@ -129,7 +139,7 @@ const useMakeStageSummaries = (phaseRef: useMakeStageSummaries_phase$key, localS
         isNavigable: batch.some(({isNavigable}) => isNavigable),
         isActive: !!batch.find(({id}) => id === localStageId),
         stageIds: batch.map(({id}) => id) as [string, ...string[]],
-        finalScores: batch.map(({finalScore}) => finalScore),
+        finalScores: batch.map(({finalScore}) => finalScore || null),
         taskId
       })
       i += batch.length - 1

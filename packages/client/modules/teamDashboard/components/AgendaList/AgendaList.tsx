@@ -1,17 +1,17 @@
 import styled from '@emotion/styled'
+import {DragDropContext, Draggable, Droppable, type DropResult} from '@hello-pangea/dnd'
 import graphql from 'babel-plugin-relay/macro'
-import React, {useMemo} from 'react'
-import {DragDropContext, Draggable, Droppable, DropResult} from 'react-beautiful-dnd'
-import {createFragmentContainer} from 'react-relay'
-import {AgendaList_agendaItems} from '~/__generated__/AgendaList_agendaItems.graphql'
-import {AgendaList_meeting} from '~/__generated__/AgendaList_meeting.graphql'
+import {useMemo} from 'react'
+import {useFragment} from 'react-relay'
+import type {AgendaList_agendaItems$key} from '~/__generated__/AgendaList_agendaItems.graphql'
+import type {AgendaList_meeting$key} from '~/__generated__/AgendaList_meeting.graphql'
 import useAtmosphere from '../../../../hooks/useAtmosphere'
 import useEventCallback from '../../../../hooks/useEventCallback'
-import useGotoStageId from '../../../../hooks/useGotoStageId'
+import type useGotoStageId from '../../../../hooks/useGotoStageId'
 import UpdateAgendaItemMutation from '../../../../mutations/UpdateAgendaItemMutation'
+import {getSortOrder} from '../../../../shared/sortOrder'
 import {navItemRaised} from '../../../../styles/elevation'
-import {AGENDA_ITEM, SORT_STEP} from '../../../../utils/constants'
-import dndNoise from '../../../../utils/dndNoise'
+import {AGENDA_ITEM} from '../../../../utils/constants'
 import AgendaItem from '../AgendaItem/AgendaItem'
 import AgendaListEmptyState from './AgendaListEmptyState'
 
@@ -30,15 +30,36 @@ const DraggableAgendaItem = styled('div')<{isDragging: boolean}>(({isDragging}) 
 }))
 
 interface Props {
-  agendaItems: AgendaList_agendaItems
+  agendaItems: AgendaList_agendaItems$key
   dashSearch?: string
   gotoStageId: ReturnType<typeof useGotoStageId> | undefined
-  meeting: AgendaList_meeting | null
+  meeting: AgendaList_meeting$key | null | undefined
 }
 
 const AgendaList = (props: Props) => {
   const atmosphere = useAtmosphere()
-  const {agendaItems, meeting, dashSearch, gotoStageId} = props
+  const {agendaItems: agendaItemsRef, meeting: meetingRef, dashSearch, gotoStageId} = props
+  const meeting = useFragment(
+    graphql`
+      fragment AgendaList_meeting on ActionMeeting {
+        id
+        endedAt
+        ...AgendaItem_meeting
+      }
+    `,
+    meetingRef
+  )
+  const agendaItems = useFragment(
+    graphql`
+      fragment AgendaList_agendaItems on AgendaItem @relay(plural: true) {
+        id
+        content
+        sortOrder
+        ...AgendaItem_agendaItem
+      }
+    `,
+    agendaItemsRef
+  )
   const meetingId = meeting?.id
   const endedAt = meeting?.endedAt
   const filteredAgendaItems = useMemo(() => {
@@ -62,17 +83,7 @@ const AgendaList = (props: Props) => {
       return
     }
 
-    let sortOrder
-    if (destination.index === 0) {
-      sortOrder = destinationItem.sortOrder - SORT_STEP + dndNoise()
-    } else if (destination.index === agendaItems.length - 1) {
-      sortOrder = destinationItem.sortOrder + SORT_STEP + dndNoise()
-    } else {
-      const offset = source.index > destination.index ? -1 : 1
-      sortOrder =
-        (agendaItems[destination.index + offset]!.sortOrder + destinationItem.sortOrder) / 2 +
-        dndNoise()
-    }
+    const sortOrder = getSortOrder(agendaItems, source.index, destination.index)
     UpdateAgendaItemMutation(
       atmosphere,
       {updatedAgendaItem: {id: sourceItem.id, sortOrder}},
@@ -128,20 +139,4 @@ const AgendaList = (props: Props) => {
   )
 }
 
-export default createFragmentContainer(AgendaList, {
-  meeting: graphql`
-    fragment AgendaList_meeting on ActionMeeting {
-      id
-      endedAt
-      ...AgendaItem_meeting
-    }
-  `,
-  agendaItems: graphql`
-    fragment AgendaList_agendaItems on AgendaItem @relay(plural: true) {
-      id
-      content
-      sortOrder
-      ...AgendaItem_agendaItem
-    }
-  `
-})
+export default AgendaList

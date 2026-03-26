@@ -1,10 +1,10 @@
 import styled from '@emotion/styled'
 import graphql from 'babel-plugin-relay/macro'
-import React, {RefObject, useRef} from 'react'
-import {PreloadedQuery, usePreloadedQuery} from 'react-relay'
+import {type RefObject, useRef} from 'react'
+import {type PreloadedQuery, usePreloadedQuery} from 'react-relay'
+import type {SpotlightResultsQuery} from '~/__generated__/SpotlightResultsQuery.graphql'
 import useResultsHeight from '~/hooks/useResultsHeight'
 import {ElementHeight, ElementWidth} from '~/types/constEnums'
-import {SpotlightResultsQuery} from '~/__generated__/SpotlightResultsQuery.graphql'
 import useGroupMatrix from '../hooks/useGroupMatrix'
 import ReflectionGroup from './ReflectionGroup/ReflectionGroup'
 import SpotlightResultsEmptyState from './SpotlightResultsEmptyState'
@@ -82,8 +82,7 @@ const SpotlightResults = (props: Props) => {
         }
       }
     `,
-    queryRef,
-    {UNSTABLE_renderPolicy: 'full'}
+    queryRef
   )
   const {viewer} = data
   const {meeting, similarReflectionGroups} = viewer
@@ -105,7 +104,6 @@ const SpotlightResults = (props: Props) => {
                   meetingRef={meeting!}
                   phaseRef={phaseRef}
                   reflectionGroupRef={group}
-                  expandedReflectionGroupPortalParentId='spotlight'
                   isSpotlightEntering={isSpotlightEntering}
                 />
               ))}

@@ -1,8 +1,8 @@
 import base64url from 'base64url'
-import cheerio from 'cheerio'
 import crypto from 'crypto'
 import ms from 'ms'
-import AtlassianManager from 'parabol-client/utils/AtlassianManager'
+import {parse} from 'node-html-parser'
+import type AtlassianServerManager from '../AtlassianServerManager'
 import getRedis from '../getRedis'
 
 export const NO_IMAGE_BUFFER = Buffer.from('X')
@@ -23,26 +23,25 @@ if (!serverSecret) {
 export const updateJiraImageUrls = (cloudId: string, descriptionHTML: string) => {
   const imageUrlToHash = {} as Record<string, string>
   const projectBaseUrl = `https://api.atlassian.com/ex/jira/${cloudId}`
+  if (!descriptionHTML) return {updatedDescription: descriptionHTML, imageUrlToHash}
 
-  const $ = cheerio.load(descriptionHTML)
-  $('body')
-    .find('img')
-    .each((_i, img) => {
-      const imageUrl = $(img).attr('src')
-      if (!imageUrl) return
+  const root = parse(descriptionHTML)
+  const imgTags = root.getElementsByTagName('img')
+  imgTags.forEach((img) => {
+    const imageUrl = img.getAttribute('src')
+    if (!imageUrl) return
 
-      const absoluteImageUrl = `${projectBaseUrl}${imageUrl}`
-      const hashedImageUrl = createImageUrlHash(absoluteImageUrl)
-      imageUrlToHash[absoluteImageUrl] = hashedImageUrl
+    const absoluteImageUrl = `${projectBaseUrl}${imageUrl}`
+    const hashedImageUrl = createImageUrlHash(absoluteImageUrl)
+    imageUrlToHash[absoluteImageUrl] = hashedImageUrl
 
-      $(img).attr('src', createParabolImageUrl(hashedImageUrl))
-    })
-
-  return {updatedDescription: $.html(), imageUrlToHash}
+    img.setAttribute('src', createParabolImageUrl(hashedImageUrl))
+  })
+  return {updatedDescription: root.toString(), imageUrlToHash}
 }
 
 export const downloadAndCacheImages = async (
-  manager: AtlassianManager,
+  manager: AtlassianServerManager,
   imageUrlToHash: Record<string, string>
 ) => {
   return Promise.all(
@@ -53,7 +52,7 @@ export const downloadAndCacheImages = async (
 }
 
 export const downloadAndCacheImage = async (
-  manager: AtlassianManager,
+  manager: AtlassianServerManager,
   imageUrlHash: string,
   imageUrl: string
 ) => {
@@ -69,7 +68,7 @@ export const downloadAndCacheImage = async (
     .exec()
   const imageResponse = await manager.getImage(imageUrl)
   if (!imageResponse?.contentType) {
-    await redis.hdel(imageKey)
+    await redis.del(imageKey)
     return
   }
 

@@ -1,15 +1,13 @@
-import convertToTaskContent from 'parabol-client/utils/draftjs/convertToTaskContent'
-import getTagsFromEntityMap from 'parabol-client/utils/draftjs/getTagsFromEntityMap'
 import makeAppURL from 'parabol-client/utils/makeAppURL'
+import {getTagsFromTipTapTask} from '../../../../client/shared/tiptap/getTagsFromTipTapTask'
+import {serverTipTapExtensions} from '../../../../client/shared/tiptap/serverTipTapExtensions'
 import appOrigin from '../../../appOrigin'
-import getRethink from '../../../database/rethinkDriver'
-import {RValue} from '../../../database/stricterR'
-import {TaskStatusEnum} from '../../../database/types/Task'
 import generateUID from '../../../generateUID'
-import {convertHtmlToTaskContent} from '../../../utils/draftjs/convertHtmlToTaskContent'
+import getKysely from '../../../postgres/getKysely'
+import {generateJSON} from '../../../utils/tiptap/generateJSON'
 
 const NORMAL_TASK_STRING = `This is a task card. They can be created here, in a meeting, or via an integration`
-const INTEGRATIONS_TASK_STRING = `Parabol supports integrations for Jira, GitHub, GitLab, Slack and Mattermost. Connect your tools on Settings > Integrations.`
+const INTEGRATIONS_TASK_STRING = `Parabol supports integrations for Jira, GitHub, GitLab, Slack and Mattermost. Connect your tools in Settings > Integrations.`
 
 function getSeedTasks(teamId: string) {
   const searchParams = {
@@ -18,27 +16,30 @@ function getSeedTasks(teamId: string) {
     utm_campaign: 'onboarding'
   }
   const options = {searchParams}
-  const integrationURL = makeAppURL(appOrigin, `team/${teamId}/settings/integrations`, options)
-  const integrationTaskHTML = `Parabol supports integrations for Jira, GitHub, GitLab, Slack and Mattermost. Connect your tools on <a href="${integrationURL}">Settings > Integrations</a>.`
-
+  const integrationURL = makeAppURL(appOrigin, `team/${teamId}/integrations`, options)
   return [
     {
-      status: 'active' as TaskStatusEnum,
+      status: 'active' as const,
       sortOrder: 1,
-      content: convertToTaskContent(NORMAL_TASK_STRING),
+      content: JSON.stringify(generateJSON(`<p>${NORMAL_TASK_STRING}</p>`, serverTipTapExtensions)),
       plaintextContent: NORMAL_TASK_STRING
     },
     {
-      status: 'active' as TaskStatusEnum,
+      status: 'active' as const,
       sortOrder: 0,
-      content: convertHtmlToTaskContent(integrationTaskHTML),
+      content: JSON.stringify(
+        generateJSON(
+          `<p>Parabol supports integrations for Jira, GitHub, GitLab, Slack and Mattermost. Connect your tools in <a href="${integrationURL}">Integrations</a>.</p>`,
+          serverTipTapExtensions
+        )
+      ),
       plaintextContent: INTEGRATIONS_TASK_STRING
     }
   ]
 }
 
 export default async (userId: string, teamId: string) => {
-  const r = await getRethink()
+  const pg = getKysely()
   const now = new Date()
 
   const seedTasks = getSeedTasks(teamId).map((proj) => ({
@@ -46,27 +47,10 @@ export default async (userId: string, teamId: string) => {
     id: `${teamId}::${generateUID()}`,
     createdAt: now,
     createdBy: userId,
-    tags: getTagsFromEntityMap(JSON.parse(proj.content).entityMap),
+    tags: getTagsFromTipTapTask(JSON.parse(proj.content)),
     teamId,
     userId,
     updatedAt: now
   }))
-
-  return r
-    .table('Task')
-    .insert(seedTasks, {returnChanges: true})
-    .do((result: RValue) => {
-      return r.table('TaskHistory').insert(
-        result('changes').map((change: RValue) => ({
-          id: generateUID(),
-          content: change('new_val')('content'),
-          taskId: change('new_val')('id'),
-          status: change('new_val')('status'),
-          teamId: change('new_val')('teamId'),
-          userId: change('new_val')('userId'),
-          updatedAt: change('new_val')('updatedAt')
-        }))
-      )
-    })
-    .run()
+  await pg.insertInto('Task').values(seedTasks).execute()
 }

@@ -1,14 +1,17 @@
 import graphql from 'babel-plugin-relay/macro'
-import React, {useMemo, useRef} from 'react'
-import {createFragmentContainer} from 'react-relay'
+import {useMemo, useRef} from 'react'
+import {useFragment} from 'react-relay'
+import {useNavigate} from 'react-router'
 import useAtmosphere from '~/hooks/useAtmosphere'
-import useRouter from '~/hooks/useRouter'
 import useSearchFilter from '~/hooks/useSearchFilter'
-import {UserTaskViewFilterLabels} from '~/types/constEnums'
-import constructUserTaskFilterQueryParamURL from '~/utils/constructUserTaskFilterQueryParamURL'
-import {useUserTaskFilters} from '~/utils/useUserTaskFilters'
-import {MenuProps} from '../hooks/useMenu'
-import {UserDashTeamMemberMenu_viewer} from '../__generated__/UserDashTeamMemberMenu_viewer.graphql'
+import {FilterLabels} from '~/types/constEnums'
+import constructFilterQueryParamURL from '~/utils/constructFilterQueryParamURL'
+import {useQueryParameterParser} from '~/utils/useQueryParameterParser'
+import type {
+  UserDashTeamMemberMenu_viewer$data,
+  UserDashTeamMemberMenu_viewer$key
+} from '../__generated__/UserDashTeamMemberMenu_viewer.graphql'
+import type {MenuProps} from '../hooks/useMenu'
 import DropdownMenuLabel from './DropdownMenuLabel'
 import {EmptyDropdownMenuItemLabel} from './EmptyDropdownMenuItemLabel'
 import Menu from './Menu'
@@ -17,17 +20,36 @@ import {SearchMenuItem} from './SearchMenuItem'
 
 interface Props {
   menuProps: MenuProps
-  viewer: UserDashTeamMemberMenu_viewer | null
+  viewer: UserDashTeamMemberMenu_viewer$key | null | undefined
 }
 
 const UserDashTeamMemberMenu = (props: Props) => {
-  const {history} = useRouter()
-  const {menuProps, viewer} = props
+  const navigate = useNavigate()
+  const {menuProps, viewer: viewerRef} = props
+
+  const viewer = useFragment(
+    graphql`
+      fragment UserDashTeamMemberMenu_viewer on User {
+        id
+        teams {
+          id
+          name
+          teamMembers(sortBy: "preferredName") {
+            user {
+              userId: id
+              preferredName
+            }
+          }
+        }
+      }
+    `,
+    viewerRef
+  )
 
   const atmosphere = useAtmosphere()
-  const {userIds, teamIds, showArchived} = useUserTaskFilters(atmosphere.viewerId)
+  const {userIds, teamIds, showArchived} = useQueryParameterParser(atmosphere.viewerId)
 
-  const oldTeamsRef = useRef<UserDashTeamMemberMenu_viewer['teams']>([])
+  const oldTeamsRef = useRef<UserDashTeamMemberMenu_viewer$data['teams']>([])
   const nextTeams = viewer?.teams ?? oldTeamsRef.current
   if (nextTeams) {
     oldTeamsRef.current = nextTeams
@@ -42,12 +64,12 @@ const UserDashTeamMemberMenu = (props: Props) => {
       userId: string
       preferredName: string
     }[]
-    const teamMembers = filteredTeams.map(({teamMembers}) => teamMembers.flat()).flat()
-    teamMembers.forEach((teamMember) => {
-      const userKey = teamMember.userId
+    const teamMembers = filteredTeams.flatMap(({teamMembers}) => teamMembers.flat())
+    teamMembers.forEach(({user}) => {
+      const userKey = user.userId
       if (!keySet.has(userKey)) {
         keySet.add(userKey)
-        filteredTeamMembers.push(teamMember)
+        filteredTeamMembers.push(user)
       }
     })
     filteredTeamMembers.sort((a, b) => (a.preferredName > b.preferredName ? 1 : -1))
@@ -84,10 +106,8 @@ const UserDashTeamMemberMenu = (props: Props) => {
       {query === '' && showAllTeamMembers && (
         <MenuItem
           key={'teamMemberFilterNULL'}
-          label={UserTaskViewFilterLabels.ALL_TEAM_MEMBERS}
-          onClick={() =>
-            history.push(constructUserTaskFilterQueryParamURL(teamIds, null, showArchived))
-          }
+          label={FilterLabels.ALL_TEAM_MEMBERS}
+          onClick={() => navigate(constructFilterQueryParamURL(teamIds, null, showArchived))}
         />
       )}
       {matchedFilteredTeamMembers.map((teamMember) => (
@@ -96,9 +116,7 @@ const UserDashTeamMemberMenu = (props: Props) => {
           dataCy={`team-member-filter-${teamMember.userId}`}
           label={teamMember.preferredName}
           onClick={() =>
-            history.push(
-              constructUserTaskFilterQueryParamURL(teamIds, [teamMember.userId], showArchived)
-            )
+            navigate(constructFilterQueryParamURL(teamIds, [teamMember.userId], showArchived))
           }
         />
       ))}
@@ -106,18 +124,4 @@ const UserDashTeamMemberMenu = (props: Props) => {
   )
 }
 
-export default createFragmentContainer(UserDashTeamMemberMenu, {
-  viewer: graphql`
-    fragment UserDashTeamMemberMenu_viewer on User {
-      id
-      teams {
-        id
-        name
-        teamMembers(sortBy: "preferredName") {
-          userId
-          preferredName
-        }
-      }
-    }
-  `
-})
+export default UserDashTeamMemberMenu

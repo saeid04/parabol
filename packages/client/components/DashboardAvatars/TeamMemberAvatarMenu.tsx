@@ -1,10 +1,9 @@
 import styled from '@emotion/styled'
 import graphql from 'babel-plugin-relay/macro'
-import React from 'react'
-import {createFragmentContainer} from 'react-relay'
+import {useFragment} from 'react-relay'
 import useAtmosphere from '~/hooks/useAtmosphere'
-import {MenuProps} from '../../hooks/useMenu'
-import {TeamMemberAvatarMenu_teamMember} from '../../__generated__/TeamMemberAvatarMenu_teamMember.graphql'
+import type {TeamMemberAvatarMenu_teamMember$key} from '../../__generated__/TeamMemberAvatarMenu_teamMember.graphql'
+import type {MenuProps} from '../../hooks/useMenu'
 import Menu from '../Menu'
 import MenuItem from '../MenuItem'
 import MenuItemLabel from '../MenuItemLabel'
@@ -12,7 +11,8 @@ import MenuItemLabel from '../MenuItemLabel'
 interface Props {
   isLead: boolean
   isViewerLead: boolean
-  teamMember: TeamMemberAvatarMenu_teamMember
+  isViewerOrgAdmin: boolean
+  teamMember: TeamMemberAvatarMenu_teamMember$key
   menuProps: MenuProps
   handleNavigate?: () => void
   togglePromote: () => void
@@ -25,26 +25,45 @@ const StyledLabel = styled(MenuItemLabel)({
 })
 
 const TeamMemberAvatarMenu = (props: Props) => {
-  const {isViewerLead, teamMember, menuProps, togglePromote, toggleRemove, toggleLeave} = props
+  const {
+    isViewerLead,
+    isViewerOrgAdmin,
+    teamMember: teamMemberRef,
+    menuProps,
+    togglePromote,
+    toggleRemove,
+    toggleLeave
+  } = props
+  const teamMember = useFragment(
+    graphql`
+      fragment TeamMemberAvatarMenu_teamMember on TeamMember {
+        isSelf
+        userId
+        isLead
+      }
+    `,
+    teamMemberRef
+  )
   const atmosphere = useAtmosphere()
-  const {preferredName, userId} = teamMember
+  const {userId} = teamMember
   const {viewerId} = atmosphere
   const isSelf = userId === viewerId
+  const isViewerTeamAdmin = isViewerLead || isViewerOrgAdmin
 
   return (
     <Menu ariaLabel={'Select what to do with this team member'} {...menuProps}>
-      {isViewerLead && !isSelf && (
+      {isViewerTeamAdmin && (!isSelf || !isViewerLead) && (
         <MenuItem
           key='promote'
           onClick={togglePromote}
-          label={<StyledLabel>Promote {preferredName} to Team Lead</StyledLabel>}
+          label={<StyledLabel>Promote to Team Lead</StyledLabel>}
         />
       )}
-      {isViewerLead && !isSelf && (
+      {isViewerTeamAdmin && !isSelf && (
         <MenuItem
           key='remove'
           onClick={toggleRemove}
-          label={<StyledLabel>Remove {preferredName} from Team</StyledLabel>}
+          label={<StyledLabel>Remove from Team</StyledLabel>}
         />
       )}
       {!isViewerLead && isSelf && (
@@ -54,13 +73,4 @@ const TeamMemberAvatarMenu = (props: Props) => {
   )
 }
 
-export default createFragmentContainer(TeamMemberAvatarMenu, {
-  teamMember: graphql`
-    fragment TeamMemberAvatarMenu_teamMember on TeamMember {
-      isSelf
-      preferredName
-      userId
-      isLead
-    }
-  `
-})
+export default TeamMemberAvatarMenu

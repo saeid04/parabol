@@ -1,8 +1,9 @@
-import sendToSentry, {SentryOptions} from './sendToSentry'
+import {Logger} from './Logger'
+import {type ErrorOptions} from './logError'
 
-const standardError = (error: Error, options: SentryOptions = {}) => {
+const standardError = (error: Error, options: ErrorOptions = {}) => {
   const {message} = error
-  sendToSentry(error, options)
+  Logger.info(error || JSON.stringify(error), options)
   return {error: {message}}
 }
 

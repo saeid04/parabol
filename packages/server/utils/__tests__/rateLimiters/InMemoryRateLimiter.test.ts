@@ -1,7 +1,7 @@
 import ms from 'ms'
 import {
   InMemoryRateLimiter,
-  InMemoryRateLimiterConfig
+  type InMemoryRateLimiterConfig
 } from '../../rateLimiters/InMemoryRateLimiter'
 
 describe('InMemoryRateLimiter', () => {
@@ -14,7 +14,7 @@ describe('InMemoryRateLimiter', () => {
   }
 
   beforeEach(() => {
-    jest.useFakeTimers('modern')
+    jest.useFakeTimers()
   })
 
   afterEach(() => {

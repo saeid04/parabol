@@ -1,5 +1,5 @@
 import {useEffect, useState} from 'react'
-import {SlackChannelDropdownChannels} from '../components/SlackChannelDropdown'
+import type {SlackChannelDropdownChannels} from '../components/SlackChannelDropdown'
 import SlackClientManager from '../utils/SlackClientManager'
 
 interface MinimalChannel {
@@ -8,7 +8,7 @@ interface MinimalChannel {
 }
 
 const useSlackChannels = (
-  slackAuth: {botAccessToken: string | null; slackUserId: string} | null
+  slackAuth: {botAccessToken: string | null | undefined; slackUserId: string} | null | undefined
 ) => {
   const [channels, setChannels] = useState<SlackChannelDropdownChannels>([])
   useEffect(() => {
@@ -41,7 +41,9 @@ const useSlackChannels = (
       availableChannels.unshift({...botChannel, name: '@Parabol'})
       setChannels(availableChannels)
     }
-    getChannels().catch()
+    getChannels().catch(() => {
+      /*ignore*/
+    })
     return () => {
       isMounted = false
     }

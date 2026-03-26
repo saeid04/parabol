@@ -1,6 +1,12 @@
 import styled from '@emotion/styled'
-import {Event, HelpOutline, PersonPinCircleOutlined, TimerOutlined} from '@mui/icons-material'
-import React, {forwardRef, ReactNode, Ref} from 'react'
+import {
+  Event,
+  Headphones,
+  HelpOutline,
+  PersonPinCircleOutlined,
+  TimerOutlined
+} from '@mui/icons-material'
+import {forwardRef, type ReactNode, type Ref} from 'react'
 import {PALETTE} from '../styles/paletteV3'
 
 const paletteColors = {
@@ -51,6 +57,7 @@ const BottomNavIconLabel = forwardRef((props: Props, ref: Ref<HTMLDivElement>) =
           {
             {
               help_outline: <HelpOutline />,
+              headphones: <Headphones />,
               timer: <TimerOutlined />,
               event: <Event />,
               person_pin_circle: <PersonPinCircleOutlined />

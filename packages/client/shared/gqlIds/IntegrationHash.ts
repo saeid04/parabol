@@ -1,12 +1,14 @@
-import {TaskIntegration, TaskServiceEnum} from '../../../server/database/types/Task'
+import type {TaskServiceEnum} from '../../__generated__/CreateTaskMutation.graphql'
+import type {AnyTaskIntegration} from '../types/TaskIntegration'
 import AzureDevOpsIssueId from './AzureDevOpsIssueId'
 import GitHubIssueId from './GitHubIssueId'
 import GitLabIssueId from './GitLabIssueId'
 import JiraIssueId from './JiraIssueId'
 import JiraServerIssueId from './JiraServerIssueId'
+import LinearIssueId from './LinearIssueId'
 
 const IntegrationHash = {
-  join: (integration: TaskIntegration) => {
+  join: (integration: AnyTaskIntegration) => {
     switch (integration.service) {
       case 'github':
         return GitHubIssueId.join(integration.nameWithOwner, integration.issueNumber)
@@ -26,6 +28,8 @@ const IntegrationHash = {
           integration.projectKey,
           integration.issueKey
         )
+      case 'linear':
+        return LinearIssueId.join(integration.repoId, integration.issueId)
       default:
         return ''
     }
@@ -72,6 +76,14 @@ const IntegrationHash = {
         instanceId,
         issueKey,
         projectKey
+      }
+    }
+    if (service === 'linear') {
+      const {repoId, issueId} = LinearIssueId.split(integrationHash)
+      return {
+        service,
+        repoId,
+        issueId
       }
     }
     return null

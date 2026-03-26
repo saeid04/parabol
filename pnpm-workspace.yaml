@@ -1,0 +1,30 @@
+packages:
+  - packages/*
+minimumReleaseAge: 2880
+minimumReleaseAgeExclude:
+  - nest-graphql-endpoint
+  - '@tiptap/*'
+  - fast-xml-parser
+  - fast-xml-builder
+  - path-expression-matcher
+  - strnum
+onlyBuiltDependencies:
+  - '@datadog/native-appsec'
+  - '@datadog/native-iast-taint-tracking'
+  - '@datadog/native-metrics'
+  - '@datadog/pprof'
+  - '@parcel/watcher'
+  - '@scarf/scarf'
+  - '@swc/core'
+  - core-js
+  - core-js-pure
+  - cpu-features
+  - dd-trace
+  - es5-ext
+  - esbuild
+  - msgpackr-extract
+  - nx
+  - protobufjs
+  - sharp
+  - ssh2
+  - styled-components

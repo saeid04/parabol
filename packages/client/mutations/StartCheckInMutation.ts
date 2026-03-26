@@ -1,7 +1,7 @@
 import graphql from 'babel-plugin-relay/macro'
 import {commitMutation} from 'react-relay'
-import {HistoryLocalHandler, StandardMutation} from '../types/relayMutations'
-import {StartCheckInMutation as TStartCheckInMutation} from '../__generated__/StartCheckInMutation.graphql'
+import type {StartCheckInMutation as TStartCheckInMutation} from '../__generated__/StartCheckInMutation.graphql'
+import type {NavigateLocalHandler, StandardMutation} from '../types/relayMutations'
 
 graphql`
   fragment StartCheckInMutation_team on StartCheckInSuccess {
@@ -11,12 +11,17 @@ graphql`
     team {
       ...MeetingsDashActiveMeetings @relay(mask: false)
     }
+    hasGcalError
   }
 `
 
 const mutation = graphql`
-  mutation StartCheckInMutation($teamId: ID!) {
-    startCheckIn(teamId: $teamId) {
+  mutation StartCheckInMutation(
+    $teamId: ID!
+    $gcalInput: CreateGcalEventInput
+    $ignoreSuggestedUpgrade: Boolean
+  ) {
+    startCheckIn(teamId: $teamId, gcalInput: $gcalInput, ignoreSuggestedUpgrade: $ignoreSuggestedUpgrade) {
       ... on ErrorPayload {
         error {
           message
@@ -27,10 +32,10 @@ const mutation = graphql`
   }
 `
 
-const StartCheckInMutation: StandardMutation<TStartCheckInMutation, HistoryLocalHandler> = (
+const StartCheckInMutation: StandardMutation<TStartCheckInMutation, NavigateLocalHandler> = (
   atmosphere,
   variables,
-  {history, onError, onCompleted}
+  {navigate, onError, onCompleted}
 ) => {
   return commitMutation<TStartCheckInMutation>(atmosphere, {
     mutation,
@@ -39,10 +44,18 @@ const StartCheckInMutation: StandardMutation<TStartCheckInMutation, HistoryLocal
     onCompleted: (res, errors) => {
       onCompleted(res, errors)
       const {startCheckIn} = res
-      const {meeting} = startCheckIn
+      const {meeting, hasGcalError} = startCheckIn
       if (!meeting) return
       const {id: meetingId} = meeting
-      history.push(`/meet/${meetingId}`)
+      if (hasGcalError) {
+        atmosphere.eventEmitter.emit('addSnackbar', {
+          key: `gcalError:${meetingId}`,
+          autoDismiss: 0,
+          showDismissButton: true,
+          message: `Sorry, we couldn't create your Google Calendar event`
+        })
+      }
+      navigate(`/meet/${meetingId}`)
     }
   })
 }

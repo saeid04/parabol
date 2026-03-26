@@ -1,0 +1,16 @@
+type OrganizationSubscriptionPayload {
+  fieldName: String!
+  AddIntegrationProviderSuccess: AddIntegrationProviderSuccess
+  ArchiveOrganizationPayload: ArchiveOrganizationPayload
+  DowngradeToStarterPayload: DowngradeToStarterPayload
+  RemoveIntegrationProviderSuccess: RemoveIntegrationProviderSuccess
+  RemoveOrgUsersSuccess: RemoveOrgUsersSuccess
+  ToggleAIFeaturesSuccess: ToggleAIFeaturesSuccess
+  SetOrgUserRoleSuccess: SetOrgUserRoleSuccess
+  UpdateCreditCardPayload: UpdateCreditCardPayload
+  UpdateIntegrationProviderSuccess: UpdateIntegrationProviderSuccess
+  UpdateOrgPayload: UpdateOrgPayload
+  UpdateTemplateScopeSuccess: UpdateTemplateScopeSuccess
+  UpgradeToTeamTierSuccess: UpgradeToTeamTierSuccess
+  UpdateOAuthAPIProviderPayload: UpdateOAuthAPIProviderPayload
+}

@@ -1,14 +1,15 @@
-import {GraphQLResolveInfo} from 'graphql'
+import type {JSONContent} from '@tiptap/core'
+import type {GraphQLResolveInfo} from 'graphql'
 import GitHubIssueId from '../../../client/shared/gqlIds/GitHubIssueId'
 import GitHubRepoId from '../../../client/shared/gqlIds/GitHubRepoId'
-import {GQLContext} from '../../graphql/graphql'
+import type {GQLContext} from '../../graphql/graphql'
 import createGitHubTask from '../../graphql/mutations/helpers/createGitHubTask'
-import {GitHubAuth} from '../../postgres/queries/getGitHubAuthByUserIdTeamId'
-import {AddCommentMutation, AddCommentMutationVariables} from '../../types/githubTypes'
+import type {GitHubAuth} from '../../postgres/types'
+import type {AddCommentMutation, AddCommentMutationVariables} from '../../types/githubTypes'
 import getGitHubRequest from '../../utils/getGitHubRequest'
 import addComment from '../../utils/githubQueries/addComment.graphql'
 import makeCreateGitHubTaskComment from '../../utils/makeCreateGitHubTaskComment'
-import {CreateTaskResponse, TaskIntegrationManager} from '../TaskIntegrationManagerFactory'
+import type {CreateTaskResponse, TaskIntegrationManager} from '../TaskIntegrationManagerFactory'
 
 export default class GitHubServerManager implements TaskIntegrationManager {
   public title = 'GitHub'
@@ -60,16 +61,16 @@ export default class GitHubServerManager implements TaskIntegrationManager {
   }
 
   async createTask({
-    rawContentStr,
+    rawContentJSON,
     integrationRepoId
   }: {
-    rawContentStr: string
+    rawContentJSON: JSONContent
     integrationRepoId: string
   }): Promise<CreateTaskResponse> {
     const {repoOwner, repoName} = GitHubRepoId.split(integrationRepoId)
 
     const res = await createGitHubTask(
-      rawContentStr,
+      rawContentJSON,
       repoOwner,
       repoName,
       this.auth,

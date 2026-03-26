@@ -1,15 +1,13 @@
 import DataLoader from 'dataloader'
 import JiraServerRestManager, {
-  JiraServerFieldType,
-  JiraServerRestProject
+  type JiraServerFieldType,
+  type JiraServerRestProject
 } from '../integrations/jiraServer/JiraServerRestManager'
-import {IntegrationProviderJiraServer} from '../postgres/queries/getIntegrationProvidersByIds'
-import getJiraServerDimensionFieldMap, {
-  GetJiraServerDimensionFieldMapParams,
-  JiraServerDimensionFieldMap
-} from '../postgres/queries/getJiraServerDimensionFieldMap'
-import sendToSentry from '../utils/sendToSentry'
-import RootDataLoader from './RootDataLoader'
+import {selectJiraServerDimensionFieldMap} from '../postgres/select'
+import type {JiraServerDimensionFieldMap} from '../postgres/types'
+import type {IntegrationProviderJiraServer} from '../postgres/types/IntegrationProvider'
+import logError from '../utils/logError'
+import type RootDataLoader from './RootDataLoader'
 
 export interface JiraServerIssueKey {
   teamId: string
@@ -55,6 +53,8 @@ type TeamUserKey = {
 export type JiraServerProject = JiraServerRestProject & {
   service: 'jiraServer'
   providerId: number
+  userId: string
+  teamId: string
 }
 
 export const jiraServerIssue = (parent: RootDataLoader) => {
@@ -63,7 +63,7 @@ export const jiraServerIssue = (parent: RootDataLoader) => {
       const results = await Promise.allSettled(
         keys.map(async ({teamId, userId, issueId}) => {
           const auth = await parent
-            .get('teamMemberIntegrationAuths')
+            .get('teamMemberIntegrationAuthsByServiceTeamAndUserId')
             .load({service: 'jiraServer', teamId, userId})
 
           if (!auth) {
@@ -76,7 +76,7 @@ export const jiraServerIssue = (parent: RootDataLoader) => {
           const issue = await manager.getIssue(issueId)
 
           if (issue instanceof Error) {
-            sendToSentry(issue, {userId, tags: {issueId, teamId}})
+            logError(issue, {userId, tags: {issueId, teamId}})
             return null
           }
           const {project, issuetype, summary, description} = issue.fields
@@ -108,7 +108,7 @@ export const allJiraServerProjects = (parent: RootDataLoader) => {
     return Promise.all(
       keys.map(async ({userId, teamId}) => {
         const auth = await parent
-          .get('teamMemberIntegrationAuths')
+          .get('teamMemberIntegrationAuthsByServiceTeamAndUserId')
           .load({service: 'jiraServer', teamId, userId})
         if (!auth) return []
         const provider = await parent.get('integrationProviders').loadNonNull(auth.providerId)
@@ -123,7 +123,9 @@ export const allJiraServerProjects = (parent: RootDataLoader) => {
           .map((project) => ({
             ...project,
             service: 'jiraServer' as const,
-            providerId: provider.id
+            providerId: provider.id,
+            userId,
+            teamId
           }))
       })
     )
@@ -136,7 +138,7 @@ export const jiraServerFieldTypes = (parent: RootDataLoader) =>
       return Promise.all(
         keys.map(async ({teamId, userId, projectId, issueType}) => {
           const auth = await parent
-            .get('teamMemberIntegrationAuths')
+            .get('teamMemberIntegrationAuthsByServiceTeamAndUserId')
             .load({service: 'jiraServer', teamId, userId})
 
           if (!auth) {
@@ -158,11 +160,29 @@ export const jiraServerFieldTypes = (parent: RootDataLoader) =>
   )
 
 export const jiraServerDimensionFieldMap = (parent: RootDataLoader) =>
-  new DataLoader<GetJiraServerDimensionFieldMapParams, JiraServerDimensionFieldMap | null, string>(
+  new DataLoader<
+    {
+      teamId: string
+      projectId: string
+      dimensionName: string
+      issueType: string
+      providerId: number
+    },
+    JiraServerDimensionFieldMap | null,
+    string
+  >(
     async (keys) => {
       return Promise.all(
         keys.map(async (params) => {
-          return getJiraServerDimensionFieldMap(params)
+          const {teamId, projectId, dimensionName, issueType, providerId} = params
+          const res = await selectJiraServerDimensionFieldMap()
+            .where('teamId', '=', teamId)
+            .where('providerId', '=', providerId)
+            .where('projectId', '=', projectId)
+            .where('issueType', '=', issueType)
+            .where('dimensionName', '=', dimensionName)
+            .executeTakeFirst()
+          return res || null
         })
       )
     },

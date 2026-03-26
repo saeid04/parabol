@@ -1,83 +1,28 @@
-import styled from '@emotion/styled'
 import graphql from 'babel-plugin-relay/macro'
-import React, {RefObject, useRef} from 'react'
-import {commitLocalUpdate, createFragmentContainer} from 'react-relay'
+import type * as React from 'react'
+import {type RefObject, useRef, useState} from 'react'
+import {commitLocalUpdate, useFragment} from 'react-relay'
+import type {ReflectionGroupTitleEditor_meeting$key} from '../../__generated__/ReflectionGroupTitleEditor_meeting.graphql'
+import type {ReflectionGroupTitleEditor_reflectionGroup$key} from '../../__generated__/ReflectionGroupTitleEditor_reflectionGroup.graphql'
 import useAtmosphere from '../../hooks/useAtmosphere'
 import useMutationProps from '../../hooks/useMutationProps'
 import UpdateReflectionGroupTitleMutation from '../../mutations/UpdateReflectionGroupTitleMutation'
-import {PALETTE} from '../../styles/paletteV3'
-import ui from '../../styles/ui'
-import {Card} from '../../types/constEnums'
+import {cn} from '../../ui/cn'
 import {RETRO_TOPIC_LABEL} from '../../utils/constants'
-import {ReflectionGroupTitleEditor_meeting} from '../../__generated__/ReflectionGroupTitleEditor_meeting.graphql'
-import {ReflectionGroupTitleEditor_reflectionGroup} from '../../__generated__/ReflectionGroupTitleEditor_reflectionGroup.graphql'
 import StyledError from '../StyledError'
+import MarqueeText from './MarqueeText'
 
 interface Props {
   isExpanded: boolean
-  reflectionGroup: ReflectionGroupTitleEditor_reflectionGroup
+  reflectionGroup: ReflectionGroupTitleEditor_reflectionGroup$key
   readOnly: boolean
-  meeting: ReflectionGroupTitleEditor_meeting
+  meeting: ReflectionGroupTitleEditor_meeting$key
   titleInputRef: RefObject<HTMLInputElement>
 }
 
-const fontSize = Card.FONT_SIZE
-const lineHeight = Card.LINE_HEIGHT
-
-const underlineStyles = {
-  backgroundColor: 'transparent',
-  borderLeftColor: 'transparent !important',
-  borderRightColor: 'transparent !important',
-  borderTopColor: 'transparent !important',
-  boxShadow: 'none !important'
-} as any
-
-const InputWithIconWrap = styled('div')({
-  alignItems: 'center',
-  display: 'flex'
-})
-
-const RootBlock = styled('div')({
-  display: 'flex',
-  flexDirection: 'column',
-  flexShrink: 1,
-  maxWidth: '100%'
-})
-
-const FormBlock = styled('form')({
-  display: 'flex',
-  flexShrink: 1,
-  maxWidth: '100%'
-})
-
-// This is gonna turn into slate, no use in spending time fixing it now
-const NameInput = styled('input')<{isExpanded: boolean; readOnly: boolean}>(
-  ({isExpanded, readOnly}) => ({
-    ...underlineStyles,
-    ':hover,:focus,:active': {
-      underlineStyles
-    },
-    ...ui.fieldBaseStyles,
-    ...ui.fieldSizeStyles.small,
-    border: 0,
-    boxShadow: 'none',
-    color: isExpanded ? '#FFFFFF' : PALETTE.SLATE_700,
-    cursor: readOnly ? 'default' : 'text',
-    fontSize,
-    fontWeight: 600,
-    lineHeight,
-    padding: 0,
-    // need to use a content editable if we wanna animate this since input el forces width
-    // card width is set at REFLECTION_WIDTH, so this can be a PX, too
-    textAlign: 'left',
-    width: 172,
-    transition: 'all 200ms'
-  })
-)
-
 const getValidationError = (
   title: string | null,
-  reflectionGroups: readonly {id: string; title: string | null}[],
+  reflectionGroups: readonly {id: string; title: string | null | undefined}[],
   reflectionGroupId: string
 ) => {
   if (!title || title.length < 1) {
@@ -95,11 +40,38 @@ const getValidationError = (
 const ReflectionGroupTitleEditor = (props: Props) => {
   const atmosphere = useAtmosphere()
   const {submitMutation, submitting, onCompleted, onError, error} = useMutationProps()
-  const {meeting, reflectionGroup, titleInputRef, isExpanded, readOnly} = props
+  const {
+    meeting: meetingRef,
+    reflectionGroup: reflectionGroupRef,
+    titleInputRef,
+    isExpanded,
+    readOnly
+  } = props
+  const reflectionGroup = useFragment(
+    graphql`
+      fragment ReflectionGroupTitleEditor_reflectionGroup on RetroReflectionGroup {
+        id
+        title
+      }
+    `,
+    reflectionGroupRef
+  )
+  const meeting = useFragment(
+    graphql`
+      fragment ReflectionGroupTitleEditor_meeting on RetrospectiveMeeting {
+        reflectionGroups {
+          id
+          title
+        }
+      }
+    `,
+    meetingRef
+  )
   const {reflectionGroups} = meeting
   const {id: reflectionGroupId, title} = reflectionGroup
   const dirtyRef = useRef(false)
   const initialTitleRef = useRef(title)
+  const [isEditing, setIsEditing] = useState(false)
 
   const onChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     const title = e.target.value
@@ -122,6 +94,7 @@ const ReflectionGroupTitleEditor = (props: Props) => {
 
   const onSubmit = (e: React.FormEvent<HTMLInputElement | HTMLFormElement>) => {
     e.preventDefault()
+    setIsEditing(false)
     if (submitting || title === initialTitleRef.current || !title) return
     initialTitleRef.current = title
     // validate
@@ -148,42 +121,48 @@ const ReflectionGroupTitleEditor = (props: Props) => {
   }
 
   return (
-    <InputWithIconWrap>
-      <RootBlock data-cy='group-title-editor'>
-        <FormBlock onSubmit={onSubmit}>
-          <NameInput
-            data-cy='group-title-editor-input'
-            isExpanded={isExpanded}
-            onBlur={onSubmit}
-            onChange={onChange}
-            onKeyPress={onKeyPress}
-            placeholder={RETRO_TOPIC_LABEL}
-            readOnly={readOnly}
-            ref={titleInputRef}
-            maxLength={200}
-            type='text'
-            value={title || ''}
-          />
-        </FormBlock>
+    <div className='flex items-center'>
+      <div className='flex max-w-full shrink flex-col' data-cy='group-title-editor'>
+        <form className='flex max-w-full shrink' onSubmit={onSubmit}>
+          <div className='relative w-[172px]'>
+            {!isEditing && (
+              <MarqueeText
+                title={title || ''}
+                isExpanded={isExpanded}
+                readOnly={readOnly}
+                onActivateEdit={() => {
+                  setIsEditing(true)
+                  titleInputRef.current?.select()
+                }}
+              />
+            )}
+            <input
+              data-cy='group-title-editor-input'
+              className={cn(
+                'm-0 block w-[172px] appearance-none rounded-sm border-0 font-sans outline-0',
+                'px-[.4375rem] py-[.3125rem] text-sm leading-5',
+                'bg-transparent text-left font-semibold shadow-none transition-all duration-200',
+                isExpanded ? 'text-white' : 'text-slate-700',
+                readOnly ? 'cursor-default' : 'cursor-text'
+              )}
+              onBlur={onSubmit}
+              onChange={onChange}
+              onFocus={() => setIsEditing(true)}
+              onKeyPress={onKeyPress}
+              placeholder={RETRO_TOPIC_LABEL}
+              readOnly={readOnly}
+              ref={titleInputRef}
+              maxLength={200}
+              type='text'
+              value={title || ''}
+              style={!isEditing ? {opacity: 0} : undefined}
+            />
+          </div>
+        </form>
         {error && <StyledError>{error.message}</StyledError>}
-      </RootBlock>
-    </InputWithIconWrap>
+      </div>
+    </div>
   )
 }
 
-export default createFragmentContainer(ReflectionGroupTitleEditor, {
-  reflectionGroup: graphql`
-    fragment ReflectionGroupTitleEditor_reflectionGroup on RetroReflectionGroup {
-      id
-      title
-    }
-  `,
-  meeting: graphql`
-    fragment ReflectionGroupTitleEditor_meeting on RetrospectiveMeeting {
-      reflectionGroups {
-        id
-        title
-      }
-    }
-  `
-})
+export default ReflectionGroupTitleEditor

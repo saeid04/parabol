@@ -1,10 +1,10 @@
 import graphql from 'babel-plugin-relay/macro'
 import {commitMutation} from 'react-relay'
-import {SharedUpdater, SimpleMutation} from '../types/relayMutations'
+import type {EditTaskMutation as TEditTaskMutation} from '../__generated__/EditTaskMutation.graphql'
+import type {EditTaskMutation_task$data} from '../__generated__/EditTaskMutation_task.graphql'
+import type {SharedUpdater, SimpleMutation} from '../types/relayMutations'
 import getOptimisticTaskEditor from '../utils/relay/getOptimisticTaskEditor'
 import isTempId from '../utils/relay/isTempId'
-import {EditTaskMutation as TEditTaskMutation} from '../__generated__/EditTaskMutation.graphql'
-import {EditTaskMutation_task} from '../__generated__/EditTaskMutation_task.graphql'
 import handleEditTask from './handlers/handleEditTask'
 
 graphql`
@@ -31,7 +31,10 @@ const mutation = graphql`
   }
 `
 
-export const editTaskTaskUpdater: SharedUpdater<EditTaskMutation_task> = (payload, {store}) => {
+export const editTaskTaskUpdater: SharedUpdater<EditTaskMutation_task$data> = (
+  payload,
+  {store}
+) => {
   handleEditTask(payload, store)
 }
 

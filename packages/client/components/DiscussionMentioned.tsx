@@ -1,25 +1,13 @@
-import styled from '@emotion/styled'
 import graphql from 'babel-plugin-relay/macro'
-import {Editor} from 'draft-js'
-import React from 'react'
 import {useFragment} from 'react-relay'
+import {useNavigate} from 'react-router'
 import NotificationAction from '~/components/NotificationAction'
-import useEditorState from '../hooks/useEditorState'
-import useRouter from '../hooks/useRouter'
-import {cardShadow} from '../styles/elevation'
+import type {DiscussionMentioned_notification$key} from '../__generated__/DiscussionMentioned_notification.graphql'
+import {useTipTapCommentEditor} from '../hooks/useTipTapCommentEditor'
+import anonymousAvatar from '../styles/theme/images/anonymous-avatar.svg'
 import fromStageIdToUrl from '../utils/meetings/fromStageIdToUrl'
-import {DiscussionMentioned_notification$key} from '../__generated__/DiscussionMentioned_notification.graphql'
 import NotificationTemplate from './NotificationTemplate'
-
-const EditorWrapper = styled('div')({
-  backgroundColor: '#fff',
-  borderRadius: 4,
-  boxShadow: cardShadow,
-  fontSize: 14,
-  lineHeight: '20px',
-  margin: '4px 0 0',
-  padding: 8
-})
+import {TipTapEditor} from './TipTapEditor/TipTapEditor'
 
 interface Props {
   notification: DiscussionMentioned_notification$key
@@ -58,9 +46,10 @@ const DiscussionMentioned = (props: Props) => {
     `,
     notificationRef
   )
-  const {history} = useRouter()
+  const navigate = useNavigate()
   const {meeting, author, comment, discussion} = notification
-  const {picture: authorPicture, preferredName: authorName} = author
+  const authorPicture = author ? author.picture : anonymousAvatar
+  const authorName = author ? author.preferredName : 'Anonymous'
   const {stage} = discussion
   const {id: stageId, response} = stage ?? {}
   const {id: meetingId, name: meetingName} = meeting
@@ -68,13 +57,13 @@ const DiscussionMentioned = (props: Props) => {
   const directUrl = stageId ? fromStageIdToUrl(stageId, meeting) : `/meet/${meetingId}`
 
   const goThere = () => {
-    history.push(
-      response ? `${directUrl}?responseId=${encodeURIComponent(response.id)}` : directUrl
-    )
+    navigate(response ? `${directUrl}?responseId=${encodeURIComponent(response.id)}` : directUrl)
   }
 
-  const [editorState] = useEditorState(comment.content)
-
+  const {editor} = useTipTapCommentEditor(comment.content, {
+    readOnly: true
+  })
+  if (!editor) return null
   return (
     <NotificationTemplate
       avatar={authorPicture}
@@ -82,15 +71,9 @@ const DiscussionMentioned = (props: Props) => {
       notification={notification}
       action={<NotificationAction label={'See the discussion'} onClick={goThere} />}
     >
-      <EditorWrapper>
-        <Editor
-          readOnly
-          editorState={editorState}
-          onChange={() => {
-            /*noop*/
-          }}
-        />
-      </EditorWrapper>
+      <div className='my-1 rounded-sm bg-white p-2 text-sm leading-5 shadow-card'>
+        <TipTapEditor editor={editor} />
+      </div>
     </NotificationTemplate>
   )
 }

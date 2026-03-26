@@ -1,20 +1,38 @@
 import styled from '@emotion/styled'
 import graphql from 'babel-plugin-relay/macro'
-import React, {ReactNode} from 'react'
-import {createFragmentContainer} from 'react-relay'
-import {Link} from 'react-router-dom'
+import type {ReactNode} from 'react'
+import {useFragment} from 'react-relay'
+import {Link} from 'react-router'
+import type {NewMeetingSidebar_meeting$key} from '~/__generated__/NewMeetingSidebar_meeting.graphql'
 import useAtmosphere from '~/hooks/useAtmosphere'
 import {useRenameMeeting} from '~/hooks/useRenameMeeting'
-import {NewMeetingSidebar_meeting} from '~/__generated__/NewMeetingSidebar_meeting.graphql'
+import useBreakpoint from '../hooks/useBreakpoint'
 import {PALETTE} from '../styles/paletteV3'
-import {NavSidebar} from '../types/constEnums'
+import {Breakpoint, GlobalBanner, NavSidebar} from '../types/constEnums'
 import isDemoRoute from '../utils/isDemoRoute'
 import EditableText from './EditableText'
 import Facilitator from './Facilitator'
 import LogoBlock from './LogoBlock/LogoBlock'
 import NewMeetingSidebarUpgradeBlock from './NewMeetingSidebarUpgradeBlock'
+import MeetingDateLabel from './Recurrence/MeetingDateLabel'
 import SidebarToggle from './SidebarToggle'
 import InactiveTag from './Tag/InactiveTag'
+
+const isGlobalBannerEnabled = window.__ACTION__.GLOBAL_BANNER_ENABLED
+const sidebarHeight = isGlobalBannerEnabled ? `calc(100vh - ${GlobalBanner.HEIGHT}px)` : '100vh'
+const sidebarPaddingTop = isGlobalBannerEnabled ? GlobalBanner.HEIGHT : 0
+
+const SidebarParent = styled('div')<{isDesktop: boolean}>(({isDesktop}) => ({
+  backgroundColor: '#FFFFFF',
+  display: 'flex',
+  flex: 1,
+  flexDirection: 'column',
+  height: isDesktop ? sidebarHeight : '100vh',
+  maxWidth: NavSidebar.WIDTH,
+  minWidth: NavSidebar.WIDTH,
+  paddingTop: isDesktop ? 0 : sidebarPaddingTop,
+  userSelect: 'none'
+}))
 
 const MeetingName = styled('div')({
   fontSize: 20,
@@ -37,17 +55,6 @@ const SidebarHeader = styled('div')({
 
 const StyledToggle = styled(SidebarToggle)({
   paddingRight: 16
-})
-
-const SidebarParent = styled('div')({
-  backgroundColor: '#FFFFFF',
-  display: 'flex',
-  flex: 1,
-  flexDirection: 'column',
-  height: '100vh',
-  maxWidth: NavSidebar.WIDTH,
-  minWidth: NavSidebar.WIDTH,
-  userSelect: 'none'
 })
 
 const TeamDashboardLink = styled(Link)({
@@ -73,11 +80,32 @@ interface Props {
   children: ReactNode
   handleMenuClick: () => void
   toggleSidebar: () => void
-  meeting: NewMeetingSidebar_meeting
+  meeting: NewMeetingSidebar_meeting$key
 }
 
 const NewMeetingSidebar = (props: Props) => {
-  const {children, handleMenuClick, toggleSidebar, meeting} = props
+  const {children, handleMenuClick, toggleSidebar, meeting: meetingRef} = props
+  const meeting = useFragment(
+    graphql`
+      fragment NewMeetingSidebar_meeting on NewMeeting {
+        ...Facilitator_meeting
+        ...MeetingDateLabel_meeting
+        id
+        endedAt
+        facilitatorUserId
+        name
+        team {
+          id
+          name
+          organization {
+            id
+            tierLimitExceededAt
+          }
+        }
+      }
+    `,
+    meetingRef
+  )
   const {id: meetingId, endedAt, team, name: meetingName, facilitatorUserId} = meeting
   const {id: teamId, name: teamName, organization} = team
   const {id: orgId, tierLimitExceededAt} = organization
@@ -86,17 +114,18 @@ const NewMeetingSidebar = (props: Props) => {
   const atmosphere = useAtmosphere()
   const {viewerId} = atmosphere
   const isFacilitator = viewerId === facilitatorUserId
+  const isDesktop = useBreakpoint(Breakpoint.SIDEBAR_LEFT)
 
   return (
-    <SidebarParent data-cy='sidebar'>
+    <SidebarParent isDesktop={isDesktop} data-cy='sidebar'>
       <SidebarHeader>
         <StyledToggle dataCy={`sidebar`} onClick={toggleSidebar} />
-        <div>
+        <div className='min-w-0 flex-1'>
           {isFacilitator ? (
             <EditableMeetingName
               error={error?.message}
               handleSubmit={handleSubmit}
-              initialValue={meetingName}
+              initialValue={meetingName || ''}
               isWrap
               maxLength={50}
               validate={validate}
@@ -105,6 +134,7 @@ const NewMeetingSidebar = (props: Props) => {
           ) : (
             <MeetingName>{meetingName}</MeetingName>
           )}
+          <MeetingDateLabel meetingRef={meeting} />
           <TeamDashboardLink to={teamLink}>
             {'Team: '}
             {teamName}
@@ -126,22 +156,4 @@ const NewMeetingSidebar = (props: Props) => {
   )
 }
 
-export default createFragmentContainer(NewMeetingSidebar, {
-  meeting: graphql`
-    fragment NewMeetingSidebar_meeting on NewMeeting {
-      ...Facilitator_meeting
-      id
-      endedAt
-      facilitatorUserId
-      name
-      team {
-        id
-        name
-        organization {
-          id
-          tierLimitExceededAt
-        }
-      }
-    }
-  `
-})
+export default NewMeetingSidebar

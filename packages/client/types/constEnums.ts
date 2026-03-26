@@ -9,17 +9,18 @@
   - Are the values easy to read? If so, a string union might be a better choice
   - Does the value live on the server? Then get it there (usually via a generated GraphQL type) instead of creating a second source of truth
 */
-export const enum AppBar {
+export enum AppBar {
   HEIGHT = 56
 }
 
-export const enum AuthIdentityTypeEnum {
+export enum AuthIdentityTypeEnum {
   LOCAL = 'LOCAL',
-  GOOGLE = 'GOOGLE'
+  GOOGLE = 'GOOGLE',
+  MICROSOFT = 'MICROSOFT'
 }
 
 // https://github.com/material-components/material-components-web/blob/4844330e7836d9dc97798b47594ff0dbaac51227/packages/mdc-animation/_variables.scss
-export const enum BezierCurve {
+export enum BezierCurve {
   DECELERATE = 'cubic-bezier(0, 0, .2, 1)',
 
   // Timing function to quickly accelerate and slowly decelerate
@@ -32,8 +33,7 @@ export const enum BezierCurve {
   SHARP_CURVE = 'cubic-bezier(.4, 0, .6, 1)'
 }
 
-export const enum Breakpoint {
-  INVOICE = 512,
+export enum Breakpoint {
   SIDEBAR_LEFT = 1024,
   NEW_MEETING_GRID = 1112,
   NEW_MEETING_SELECTOR = 500,
@@ -42,10 +42,10 @@ export const enum Breakpoint {
   DASH_BREAKPOINT_WIDEST = 1816, // (4*296) + (5*24) + (256*2) = 4 card cols, 4 col gutters, 2 sidebars
   VOTE_PHASE = 800,
   FUZZY_TABLET = 700,
-  BIG_DISPLAY = 1900
+  ORG_DRAWER = 1680
 }
 
-export const enum Card {
+export enum Card {
   BACKGROUND_COLOR = '#FFFFFF',
   BORDER_RADIUS = 4,
   BUTTON_HEIGHT = 24,
@@ -54,36 +54,36 @@ export const enum Card {
   PADDING = '16px'
 }
 
-export const enum ContactInfo {
-  TELEPHONE = '612-227-5673',
+export enum ContactInfo {
+  TELEPHONE = '+1 772-519-7250',
   EMAIL_BILLING = 'billing@parabol.co',
   EMAIL_LOVE = 'love@parabol.co'
 }
 
 // TODO refactor into ElementWidth
-export const enum DashTimeline {
+export enum DashTimeline {
   FEED_MAX_WIDTH = 600,
   FEED_MIN_WIDTH = 296,
   MIN_PADDING = 16,
   TIMELINE_DRAWER_WIDTH = 336
 }
 
-export const enum DiscussionThreadEnum {
+export enum DiscussionThreadEnum {
   WIDTH = 360
 }
 
-export const enum DragAttribute {
+export enum DragAttribute {
   CONTROL_BAR_COVERABLE = 'data-control-bar-coverable',
   DROPPABLE = 'data-droppable',
   DROPZONE = 'data-dropzone'
 }
 
-export const enum DroppableType {
+export enum DroppableType {
   TASK = 'task',
   REFLECTION = 'reflection'
 }
 
-export const enum Duration {
+export enum Duration {
   MENU_OPEN = 150,
   MENU_OPEN_MAX = 188,
   MODAL_OPEN = 200,
@@ -94,9 +94,10 @@ export const enum Duration {
   TOOLTIP_CLOSE = 75
 }
 
-export const enum ElementWidth {
-  CONTROL_BAR_BUTTON = 90,
+export enum ElementWidth {
+  CONTROL_BAR_BUTTON = 96,
   CONTROL_BAR_PADDING = 8,
+  BILLING_AVATAR = 44,
   DASHBOARD_AVATAR = 28,
   DASHBOARD_AVATAR_OVERLAPPED = 20,
   REFLECTION_CARD = 296,
@@ -107,10 +108,11 @@ export const enum ElementWidth {
   MEETING_CARD = 320,
   MEETING_CARD_MARGIN = 16,
   MEETING_CARD_LARGE_MARGIN = 40,
-  MEETING_CARD_WITH_MARGIN = 336
+  MEETING_CARD_WITH_MARGIN = 336,
+  PANEL_WIDTH = 976
 }
 
-export const enum ElementHeight {
+export enum ElementHeight {
   DASHBOARD_AVATAR = 28,
   MEETING_CARD_AVATARS = 32,
   REFLECTION_CARD = 44,
@@ -119,8 +121,9 @@ export const enum ElementHeight {
   MEETING_CARD_MARGIN = 16
 }
 
-export const enum ExternalLinks {
+export enum ExternalLinks {
   EMAIL_CDN = 'https://action-files.parabol.co/static/email/',
+  LOGO = 'https://action-files.parabol.co/static/favicon-with-more-padding.jpeg',
   PRICING_LINK = 'https://www.parabol.co/pricing/',
   GETTING_STARTED_RETROS = 'https://www.parabol.co/resources/retrospective-meetings',
   GETTING_STARTED_RETRO_VIDEO = 'https://www.parabol.co/resources/retrospective-meetings/#video',
@@ -132,10 +135,12 @@ export const enum ExternalLinks {
   INTEGRATIONS_GITHUB = 'https://www.parabol.co/integrations/github',
   INTEGRATIONS_MATTERMOST = 'https://www.parabol.co/integrations/mattermost',
   INTEGRATIONS_GITLAB = 'https://www.parabol.co/integrations/gitlab',
+  INTEGRATIONS_LINEAR = 'https://www.parabol.co/integrations/linear',
   INTEGRATIONS_JIRASERVER = 'https://www.parabol.co/integrations/jira-server',
   INTEGRATIONS_SLACK = 'https://www.parabol.co/integrations/slack',
   INTEGRATIONS_MSTEAMS = 'https://www.parabol.co/integrations/msteams',
   INTEGRATIONS_SUPPORT_JIRA = 'https://www.parabol.co/integrations/jira',
+  INTEGRATIONS_SUPPORT_JIRA_AUTHORIZATION = 'https://www.parabol.co/support/authorization-issues-jira-integration',
   INTEGRATIONS_SUPPORT_JIRA_MISSING_FIELD_TEAM_MANAGED = 'https://www.parabol.co/support/estimation-in-jira-team',
   INTEGRATIONS_SUPPORT_JIRA_MISSING_FIELD_COMPANY_MANAGED = 'https://www.parabol.co/support/estimation-in-jira-company',
   INTEGRATIONS_SUPPORT_GITHUB = 'https://www.parabol.co/integrations/github',
@@ -152,11 +157,15 @@ export const enum ExternalLinks {
   LANDING_PAGE = 'https://www.parabol.co/'
 }
 
-export const enum Filter {
+export enum Filter {
   BENEATH_DIALOG = 'blur(1.5px)'
 }
 
-export const enum Gutters {
+export enum GlobalBanner {
+  HEIGHT = 24
+}
+
+export enum Gutters {
   COLUMN_INNER_GUTTER = '12px',
   DASH_GUTTER = '20px',
   REFLECTION_INNER_GUTTER_HORIZONTAL = '16px',
@@ -164,12 +173,13 @@ export const enum Gutters {
   ROW_INNER_GUTTER = '12px'
 }
 
-export const enum InvitationTokenError {
+export enum InvitationTokenError {
   NOT_FOUND = 'notFound',
   EXPIRED = 'expired',
-  ALREADY_ACCEPTED = 'accepted'
+  ALREADY_ACCEPTED = 'accepted',
+  NOT_SIGNED_IN = 'notSignedIn'
 }
-export const enum InvoiceItemType {
+export enum InvoiceItemType {
   ADD_USER = 'addUser',
   PAUSE_USER = 'pauseUser',
   AUTO_PAUSE_USER = 'autoPauseUser',
@@ -179,34 +189,34 @@ export const enum InvoiceItemType {
 
 // https://material.io/design/layout/spacing-methods.html
 // NOTE: iterate on this pattern as we go (TA)
-export const enum Layout {
+export enum Layout {
   TYPE_GRID = 4, // .5x
   LAYOUT_GRID = 8, // 1x
   ROW_GUTTER = 16, // 2x
   SETTINGS_MAX_WIDTH = 768,
+  SETTINGS_NARROW_MAX_WIDTH = 644,
   TASK_COLUMNS_MAX_WIDTH = 1360
 }
 
-export const enum LoaderSize {
+export enum LoaderSize {
   MENU = 24,
   MAIN = 40,
   WHOLE_PAGE = 400,
   PANEL = 200
 }
 
-export const enum LocalStorageKey {
-  APP_TOKEN_KEY = 'Action:token',
+export enum LocalStorageKey {
   INVITATION_TOKEN = 'invitationToken',
   GRAPHIQL_SCHEMA = 'gqlSchema',
   EMAIL = 'email',
   ERROR_PRONE_AT = 'errorProneAt'
 }
 
-export const enum LOCKED_MESSAGE {
+export enum LOCKED_MESSAGE {
   TEAM_INVITE = `Sorry! You're unable to join this team because one of your teams has an overdue payment`
 }
 
-export const enum AuthenticationError {
+export enum AuthenticationError {
   FAILED_TO_SEND = 'failedToSend',
   MISSING_HASH = 'missingHash',
   INVALID_PASSWORD = 'invalidPassword',
@@ -214,23 +224,24 @@ export const enum AuthenticationError {
   EXCEEDED_RESET_THRESHOLD = 'exceededResetThreshold',
   USER_NOT_FOUND = 'userNotFound',
   USER_EXISTS_GOOGLE = 'userExistsGoogle',
+  USER_EXISTS_MICROSOFT = 'userExistsMicrosoft',
   USER_EXISTS_SAML = 'userExistsSaml'
 }
 
-export const enum MathEnum {
+export enum MathEnum {
   MAX_INT = 2147483647
 }
 
-export const enum MeetingControlBarEnum {
+export enum MeetingControlBarEnum {
   HEIGHT = 56
 }
 
-export const enum MeetingLabels {
+export enum MeetingLabels {
   TIME_LIMIT = 'Time Limit',
   TIMER = 'Timer'
 }
 
-export const enum PokerCards {
+export enum PokerCards {
   HEIGHT = 175,
   WIDTH = 125,
   OVERLAP = 96,
@@ -246,61 +257,67 @@ export const enum PokerCards {
   AVATAR_WIDTH = 46,
   AVATAR_BORDER = 3
 }
-export const enum UserTaskViewFilterLabels {
+export enum FilterLabels {
   ALL_TEAMS = 'All Teams',
-  ALL_TEAM_MEMBERS = 'All Team Members'
+  ALL_TEAM_MEMBERS = 'All Team Members',
+  ALL_EVENTS = 'All Events'
 }
 
-export const enum MeetingSettingsThreshold {
+export enum MeetingSettingsThreshold {
   RETROSPECTIVE_TOTAL_VOTES_DEFAULT = 5,
   RETROSPECTIVE_MAX_VOTES_PER_GROUP_DEFAULT = 3,
   RETROSPECTIVE_TOTAL_VOTES_MAX = 12
 }
 
 // equal to utils/constants
-export const enum MeetingTypes {
+export enum MeetingTypes {
   ACTION = 'action',
   RETROSPECTIVE = 'retrospective'
 }
 
-export const enum NavSidebar {
+export enum NavSidebar {
   FONT_SIZE = 14,
   LEFT_BORDER_WIDTH = '3px',
-  LINE_HEIGHT = '24px',
+  LINE_HEIGHT = '22px',
   SUB_FONT_SIZE = 14,
-  SUB_LINE_HEIGHT = '24px',
+  SUB_LINE_HEIGHT = '22px',
   WIDTH = 256
 }
 
-export const enum NewMeeting {
+export enum NewMeeting {
   ILLUSTRATION_WIDTH = 450,
   CONTROLS_WIDTH = 300
 }
-export const enum Pricing {
+export enum Pricing {
   PRO_SEAT_COST = 600
 }
 
-export const enum Providers {
+export enum Providers {
   ATLASSIAN_NAME = 'Atlassian',
-  ATLASSIAN_DESC = 'Use Jira Cloud Issues from within Parabol',
-  JIRA_SERVER_NAME = 'Jira Server',
-  JIRA_SERVER_DESC = 'Use Jira Server Issues from within Parabol',
+  ATLASSIAN_DESC = 'Use Jira Cloud Issues from within Parabol.',
+  JIRA_SERVER_NAME = 'Jira Data Center',
+  JIRA_SERVER_DESC = 'Use Jira Data Center Issues from within Parabol.',
   GITHUB_NAME = 'GitHub',
-  GITHUB_DESC = 'Use GitHub Issues from within Parabol',
-  GITHUB_SCOPE = 'admin:org_hook,read:org,repo,user,write:repo_hook',
+  GCAL_NAME = 'Google Calendar',
+  GCAL_DESC = 'Create Google Calendar events from within Parabol.',
+  GITHUB_DESC = 'Use GitHub Issues from within Parabol.',
+  GITHUB_SCOPE = 'read:org,repo',
+  GITLAB_NAME = 'GitLab',
   GITLAB_SCOPE = 'api',
   MATTERMOST_NAME = 'Mattermost',
-  MATTERMOST_DESC = 'Push notifications to Mattermost',
+  MATTERMOST_DESC = 'Push notifications to Mattermost.',
   SLACK_NAME = 'Slack',
-  SLACK_DESC = 'Push notifications to Slack',
+  SLACK_DESC = 'Push notifications to Slack.',
   AZUREDEVOPS_NAME = 'Azure DevOps',
-  AZUREDEVOPS_DESC = 'Use Azure DevOps Issues from within Parabol',
+  AZUREDEVOPS_DESC = 'Use Azure DevOps Issues from within Parabol.',
   MSTEAMS_NAME = 'Microsoft Teams',
-  MSTEAMS_DESC = 'Push notifications to Microsoft Teams'
+  MSTEAMS_DESC = 'Push notifications to Microsoft Teams',
+  LINEAR_NAME = 'Linear',
+  LINEAR_DESC = 'Use Linear Issues from within Parabol.'
 }
 
 // Use power of 2 for cheap sense of scale (e.g. 2, 4, 8)
-export const enum Radius {
+export enum Radius {
   BUTTON_PILL = '10em',
   FIELD = 4,
   DIALOG = 8,
@@ -309,12 +326,12 @@ export const enum Radius {
   TOOLTIP = 2
 }
 
-export const enum ReflectionStackPerspective {
+export enum ReflectionStackPerspective {
   X = 8,
   Y = 6
 }
 
-export const enum RetroDemo {
+export enum RetroDemo {
   MEETING_ID = 'demoMeetingId',
   TEAM_ID = 'demoTeamId',
   REFLECT_STAGE_ID = 'reflectStage',
@@ -322,21 +339,17 @@ export const enum RetroDemo {
   VOTE_STAGE_ID = 'voteStage'
 }
 
-export const enum RightSidebar {
+export enum RightSidebar {
   WIDTH = 256
 }
 
-export const enum Security {
+export enum Security {
   SALT_ROUNDS = 12,
-  MASS_INVITATION_TOKEN_LENGTH = 12
+  MASS_INVITATION_TOKEN_LENGTH = 12,
+  MIN_PASSWORD_LENGTH = 12
 }
 
-export const enum ServerChannel {
-  GQL_EXECUTOR_STREAM = 'gqlStream',
-  GQL_EXECUTOR_CONSUMER_GROUP = 'gqlConsumerGroup'
-}
-
-export const enum SubscriptionChannel {
+export enum SubscriptionChannel {
   TASK = 'task',
   TEAM = 'team',
   MEETING = 'meeting',
@@ -344,7 +357,7 @@ export const enum SubscriptionChannel {
   ORGANIZATION = 'organization'
 }
 
-export const enum TaskStatus {
+export enum TaskStatus {
   DONE = 'done',
   ACTIVE = 'active',
   STUCK = 'stuck',
@@ -353,7 +366,7 @@ export const enum TaskStatus {
   PRIVATE = 'private'
 }
 
-export const enum TaskStatusLabel {
+export enum TaskStatusLabel {
   DONE = 'Done',
   ACTIVE = 'Active',
   STUCK = 'Stuck',
@@ -362,13 +375,13 @@ export const enum TaskStatusLabel {
   PRIVATE = 'Private'
 }
 
-export const enum TierLabel {
+export enum TierLabel {
   STARTER = 'Starter',
   TEAM = 'Team',
   ENTERPRISE = 'Enterprise'
 }
 
-export const enum Threshold {
+export enum Threshold {
   MAX_NUMBER_OF_TASKS_TO_LOAD = 1000,
   AUTO_PAUSE = 2592000000, // 30 days
   EMAIL_VERIFICATION_LIFESPAN = 86400000, // 1 day
@@ -376,7 +389,7 @@ export const enum Threshold {
   MASS_INVITATION_TOKEN_LIFESPAN = 2592000000, // 30 days
   TEAM_INVITATION_LIFESPAN = 2592000000, // 30 days
   FINAL_WARNING_DAYS_BEFORE_LOCK = 7,
-  MAX_FREE_TEAMS = 10,
+  MAX_FREE_TEAMS = 100,
   MAX_ACCOUNT_PASSWORD_ATTEMPTS = 10,
   MAX_ACCOUNT_DAILY_PASSWORD_RESETS = 3,
   MAX_AVATAR_FILE_SIZE = 1024 * 1024,
@@ -386,25 +399,33 @@ export const enum Threshold {
   MAX_POKER_TEMPLATE_DIMENSIONS = 12,
   MAX_POKER_TEMPLATE_SCALES = 12,
   MAX_POKER_SCALE_VALUES = 30,
-  MAX_RETRO_TEAM_TEMPLATES = 20,
-  MAX_POKER_TEAM_TEMPLATES = 20,
+  POKER_SCALE_VALUE_MAX_LENGTH = 3,
   MAX_POKER_DIMENSION_NAME = 50,
   MAX_QUAL_AI_MEETINGS = 3,
   MAX_REACTJIS = 12,
   MAX_STARTER_TIER_TEAMS = 2,
   MAX_POKER_STORIES = 50,
   MAX_INTEGRATION_FETCH_TIME = 10000,
-  MIN_STICKY_TEAM_MEETING_ATTENDEES = 2,
-  MIN_STICKY_TEAM_MEETINGS = 3,
+  MIN_ACTIVE_TEAM_MEETING_ATTENDEES = 1,
+  ACTIVE_TEAM_LAST_MEETING_TIMEFRAME = 2592000, // 30 days
   STARTER_TIER_LOCK_AFTER_DAYS = 30,
   REFRESH_JWT_AFTER = 1296000000, // 15 days
   RESET_PASSWORD_LIFESPAN = 86400000, // 1 day
-  VERIFY_TOKEN_LIFESPAN = 2592000000, // 30 days
   UPCOMING_INVOICE_EMAIL_WARNING = 345600000, // 4 days
-  UPCOMING_INVOICE_TIME_VALID = 120000 // 2 minutes
+  UPCOMING_INVOICE_TIME_VALID = 120000, // 2 minutes
+  REAUTH_WINDOW_SECONDS = 300 // 5 minutes, in seconds to match JWT iat
 }
 
-export const enum Times { // ms
+// Use these values for easier testing of team limits and usage stats
+export enum ThresholdTest {
+  MIN_STICKY_TEAM_MEETING_ATTENDEES = 0,
+  MAX_STARTER_TIER_TEAMS = 0,
+  STARTER_TIER_LOCK_AFTER_DAYS = 0,
+  STICKY_TEAM_LAST_MEETING_TIMEFRAME = 2592000
+}
+
+export enum Times {
+  // ms
   HUMAN_ADDICTION_THRESH = 300,
   MAX_WAIT_TIME = 5000,
   MEETING_CONFIRM_TOOLTIP_DELAY = 0,
@@ -426,12 +447,12 @@ export const enum Times { // ms
   SHOW_REACTJI_USERS_DELAY = 100
 }
 
-export const enum TrebuchetCloseReason {
+export enum TrebuchetCloseReason {
   SESSION_INVALIDATED = 'sessionInvalidated',
   EXPIRED_SESSION = 'expiredSession'
 }
 /* https://material.io/design/environment/elevation.html#default-elevations */
-export const enum ZIndex {
+export enum ZIndex {
   BOTTOM_BAR = 8,
   DIALOG = 24,
   FAB = 6,
@@ -445,11 +466,11 @@ export const enum ZIndex {
   TOOLTIP = 24 /* portal needs to float above other components, especially sidebars */
 }
 
-export const enum AuthTokenRole {
+export enum AuthTokenRole {
   SUPER_USER = 'su'
 }
 
-export const enum SprintPokerDefaults {
+export enum SprintPokerDefaults {
   DEFAULT_TEMPLATE_ID = 'estimatedEffortTemplate',
   DEFAULT_SCALE_ID = 'fibonacciScale',
   JIRA_FIELD_DEFAULT = 'Story point estimate',
@@ -467,17 +488,26 @@ export const enum SprintPokerDefaults {
   SERVICE_FIELD_NULL = '',
   SERVICE_FIELD_NULL_LABEL = 'Do Not Update',
   GITHUB_DEFAULT_QUERY = 'is:issue is:open sort:updated involves:@me',
-  JIRA_FIELD_UPDATE_ERROR = 'Couldn’t fix the missing field! In Jira, use "Find my field" to determine the error',
+  LINEAR_FIELD_ESTIMATE = '__estimate',
+  LINEAR_FIELD_ESTIMATE_LABEL = 'Estimate',
+  LINEAR_FIELD_PRIORITY = '__priority',
+  LINEAR_FIELD_PRIORITY_LABEL = 'Priority',
+  LINEAR_DEFAULT_QUERY = '',
+  JIRA_FIELD_UPDATE_ERROR = 'Couldn\'t fix the missing field! In Jira, use "Find my field" to determine the error',
   JIRA_FIELD_UPDATE_ERROR_ESTIMATION = 'Please enable estimation feature in your Jira project settings',
-  JIRA_FIELD_UPDATE_ERROR_ESTIMATION_TIMETRACKING = 'Please enable estimation feature in your Jira project settings and add Time tracking field to the issue type'
+  JIRA_FIELD_UPDATE_ERROR_ESTIMATION_TIMETRACKING = 'Please enable estimation feature in your Jira project settings and add Time tracking field to the issue type',
+  GITLAB_FIELD_TIME_ESTIMATE = '__timeEstimate',
+  GITLAB_FIELD_TIME_ESTIMATE_LABEL = 'Time Estimate',
+  GITLAB_FIELD_WEIGHT = '__weight',
+  GITLAB_FIELD_WEIGHT_LABEL = 'Weight'
 }
 
-export const enum AriaLabels {
+export enum AriaLabels {
   COMMENT_EDITOR = 'Comment Editor',
   TASK_EDITOR = 'Task Editor'
 }
 
-export const enum Polls {
+export enum Polls {
   MAX_OPTIONS = 4,
   MIN_OPTIONS = 2,
   MAX_TITLE_LENGTH = 100,
@@ -486,7 +516,7 @@ export const enum Polls {
   MAX_OPTION_TITLE_LENGTH = 30
 }
 
-export const enum PollsAriaLabels {
+export enum PollsAriaLabels {
   POLL_TITLE_EDITOR = 'Poll Editor',
   POLL_OPTION_EDITOR = 'Poll Option Editor',
   POLL_SUBMIT_VOTE = 'Submit poll vote',
@@ -494,13 +524,15 @@ export const enum PollsAriaLabels {
   POLL_ADD_OPTION = 'Add a poll option'
 }
 
-export const enum AIExplainer {
-  STARTER = `AI generated summaries 🤖 are a premium feature. We'll share them with you for a few retros so you can see what they're like.`,
+export enum AIExplainer {
+  STARTER = `AI generated summaries 🤖 are a premium feature, but we'll share a few summaries with you so you can see what they're like.`,
   PREMIUM_MEETING = `Our friendly AI 🤖 is here to save you time by summarizing your meeting`,
   PREMIUM_REFLECTIONS = `Our friendly AI 🤖 is here to save you time by summarizing your reflections`
 }
 
-export const enum EmptyMeetingViewMessage {
+export enum EmptyMeetingViewMessage {
   NO_ACTIVE_MEETINGS = `Looks like you have no upcoming meetings 😎 Start one now or check out these tips and tricks.`,
-  NO_SEARCH_RESULTS = `Sorry we could not find any meetings matched with your query. Would you like to checkout these tips and tricks?`
+  NO_SEARCH_RESULTS = `Sorry, we could not find any meetings that matched with your query. Would you like to checkout these tips and tricks?`,
+  NO_ACTIVE_MEETINGS_ON_THE_TEAM = `Looks like you have no upcoming meetings on this team.`,
+  NO_SEARCH_RESULTS_ON_THE_TEAM = `Sorry, we could not find any meetings that matched with your query on this team.`
 }

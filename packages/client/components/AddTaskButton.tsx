@@ -1,6 +1,5 @@
 import styled from '@emotion/styled'
 import {TaskAltOutlined} from '@mui/icons-material'
-import React from 'react'
 import {PALETTE} from '~/styles/paletteV3'
 import PlainButton from './PlainButton/PlainButton'
 
@@ -30,15 +29,14 @@ const AddTaskLabel = styled('div')({
 
 interface Props {
   onClick: () => void
-  dataCy: string
   disabled?: boolean
 }
 
 const AddTaskButton = (props: Props) => {
-  const {onClick, dataCy, disabled} = props
+  const {onClick, disabled} = props
 
   return (
-    <StyledPlainButton data-cy={`${dataCy}-add`} onClick={onClick} disabled={disabled}>
+    <StyledPlainButton onClick={onClick} disabled={disabled}>
       <AddTaskIcon />
       <AddTaskLabel>Add a task</AddTaskLabel>
     </StyledPlainButton>

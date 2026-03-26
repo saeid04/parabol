@@ -1,10 +1,10 @@
 import graphql from 'babel-plugin-relay/macro'
-import React, {useEffect} from 'react'
-import {createFragmentContainer} from 'react-relay'
-import {RouteComponentProps, withRouter} from 'react-router'
-import useAtmosphere from '~/hooks/useAtmosphere'
+import {useEffect} from 'react'
+import {useFragment} from 'react-relay'
+import {useParams} from 'react-router'
+import type {TeamInvitationDialog_verifiedInvitation$key} from '../__generated__/TeamInvitationDialog_verifiedInvitation.graphql'
 import {LocalStorageKey} from '../types/constEnums'
-import {TeamInvitationDialog_verifiedInvitation} from '../__generated__/TeamInvitationDialog_verifiedInvitation.graphql'
+import {useIsAuthenticated} from './IsAuthenticatedProvider'
 import TeamInvitationAccept from './TeamInvitationAccept'
 import TeamInvitationEmailCreateAccount from './TeamInvitationEmailCreateAccount'
 import TeamInvitationEmailSignin from './TeamInvitationEmailSignin'
@@ -15,16 +15,34 @@ import TeamInvitationGoogleCreateAccount from './TeamInvitationGoogleCreateAccou
 import TeamInvitationGoogleSignin from './TeamInvitationGoogleSignin'
 import TeamInvitationSSO from './TeamInvitationSSO'
 
-interface Props extends RouteComponentProps<{token: string}> {
-  verifiedInvitation: TeamInvitationDialog_verifiedInvitation
+interface Props {
+  verifiedInvitation: TeamInvitationDialog_verifiedInvitation$key
 }
 
 const TeamInvitationDialog = (props: Props) => {
-  const {verifiedInvitation, match} = props
-  const {params} = match
-  const {token: invitationToken} = params
-
-  const atmosphere = useAtmosphere()
+  const {verifiedInvitation: verifiedInvitationRef} = props
+  const {token} = useParams()
+  const invitationToken = token!
+  const verifiedInvitation = useFragment(
+    graphql`
+      fragment TeamInvitationDialog_verifiedInvitation on VerifiedInvitationPayload {
+        ...TeamInvitationErrorAccepted_verifiedInvitation
+        ...TeamInvitationErrorExpired_verifiedInvitation
+        ...TeamInvitationGoogleSignin_verifiedInvitation
+        ...TeamInvitationGoogleCreateAccount_verifiedInvitation
+        ...TeamInvitationEmailSignin_verifiedInvitation
+        ...TeamInvitationEmailCreateAccount_verifiedInvitation
+        errorType
+        isGoogle
+        ssoURL
+        user {
+          preferredName
+        }
+      }
+    `,
+    verifiedInvitationRef
+  )
+  const isLoggedIn = useIsAuthenticated()
   useEffect(() => {
     window.localStorage.setItem(LocalStorageKey.INVITATION_TOKEN, invitationToken)
   }, [invitationToken])
@@ -42,8 +60,7 @@ const TeamInvitationDialog = (props: Props) => {
     case 'expired':
       return <TeamInvitationErrorExpired verifiedInvitation={verifiedInvitation} />
   }
-  const {authToken} = atmosphere
-  if (authToken) {
+  if (isLoggedIn) {
     return <TeamInvitationAccept invitationToken={invitationToken} />
   }
   if (ssoURL) {
@@ -72,21 +89,4 @@ const TeamInvitationDialog = (props: Props) => {
   )
 }
 
-export default createFragmentContainer(withRouter(TeamInvitationDialog), {
-  verifiedInvitation: graphql`
-    fragment TeamInvitationDialog_verifiedInvitation on VerifiedInvitationPayload {
-      ...TeamInvitationErrorAccepted_verifiedInvitation
-      ...TeamInvitationErrorExpired_verifiedInvitation
-      ...TeamInvitationGoogleSignin_verifiedInvitation
-      ...TeamInvitationGoogleCreateAccount_verifiedInvitation
-      ...TeamInvitationEmailSignin_verifiedInvitation
-      ...TeamInvitationEmailCreateAccount_verifiedInvitation
-      errorType
-      isGoogle
-      ssoURL
-      user {
-        preferredName
-      }
-    }
-  `
-})
+export default TeamInvitationDialog

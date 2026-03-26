@@ -1,7 +1,7 @@
 import {isNotNull} from 'parabol-client/utils/predicates'
-import getAtlassianAuthsToUpdate from '../../../postgres/queries/getAtlassianAuthsToUpdate'
+import {selectAtlassianAuth} from '../../../postgres/select'
 import isNotError from '../../errorFilter'
-import {MutationResolvers} from '../resolverTypes'
+import type {MutationResolvers} from '../resolverTypes'
 
 const updateOAuthRefreshTokens: MutationResolvers['updateOAuthRefreshTokens'] = async (
   _source,
@@ -9,7 +9,9 @@ const updateOAuthRefreshTokens: MutationResolvers['updateOAuthRefreshTokens'] = 
   {dataLoader}
 ) => {
   // RESOLUTION
-  const atlassianAuthsToUpdate = await getAtlassianAuthsToUpdate(updatedBefore)
+  const atlassianAuthsToUpdate = await selectAtlassianAuth()
+    .where('updatedAt', '<=', updatedBefore)
+    .execute()
   const updatedAtlassianAuths = (
     await dataLoader.get('freshAtlassianAuth').loadMany(atlassianAuthsToUpdate)
   ).filter((auth) => isNotNull(auth) && isNotError(auth))

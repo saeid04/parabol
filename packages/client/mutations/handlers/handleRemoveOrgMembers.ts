@@ -1,11 +1,11 @@
-import {RecordSourceSelectorProxy} from 'relay-runtime'
+import type {RecordSourceSelectorProxy} from 'relay-runtime'
 import safeRemoveNodeFromConn from '../../utils/relay/safeRemoveNodeFromConn'
 import getOrgMembersConn from '../connections/getOrgMembersConn'
 import pluralizeHandler from './pluralizeHandler'
 
 const handleRemoveOrgMember = (
   orgId: string,
-  orgUserId: string | null,
+  orgUserId: string | null | undefined,
   store: RecordSourceSelectorProxy
 ) => {
   if (!orgUserId) return

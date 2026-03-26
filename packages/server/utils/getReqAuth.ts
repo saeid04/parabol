@@ -1,14 +1,17 @@
-import {HttpRequest} from 'uWebSockets.js'
+import type {HttpRequest} from 'uWebSockets.js'
+import {getAuthTokenFromCookie} from './authCookie'
 import getVerifiedAuthToken from './getVerifiedAuthToken'
 
-const getReqAuth = (req: HttpRequest) => {
-  // To lock down dev/staging servers, our reverse proxy requires basic auth via the "authorization" header
-  // For our app auth, we use "x-application-authorization"
-  // Our cloud offering has an nginx config that copies x-applicaitn-authorization to the authorization header
-  // However, local & private deployments may not do that
+const getReqAuth = (req: HttpRequest, logErrors = true) => {
+  // mattermost plugin cannot use the `authorization` header directly
   const authHeader = req.getHeader('x-application-authorization') || req.getHeader('authorization')
-  const token = authHeader.slice(7)
-  return getVerifiedAuthToken(token)
+  const headerToken = authHeader.slice(7)
+
+  const cookieToken = getAuthTokenFromCookie(req.getHeader('cookie'))
+
+  const token = cookieToken || headerToken
+
+  return getVerifiedAuthToken(token, logErrors)
 }
 
 export default getReqAuth

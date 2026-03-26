@@ -1,16 +1,17 @@
 import graphql from 'babel-plugin-relay/macro'
 import {commitMutation} from 'react-relay'
-import {RecordProxy} from 'relay-runtime'
+import type {RecordProxy} from 'relay-runtime'
+import type {EndTeamPromptMutation_team$data} from '~/__generated__/EndTeamPromptMutation_team.graphql'
 import onMeetingRoute from '~/utils/onMeetingRoute'
-import {EndTeamPromptMutation_team} from '~/__generated__/EndTeamPromptMutation_team.graphql'
-import {
-  HistoryMaybeLocalHandler,
+import type {EndTeamPromptMutation as TEndTeamPromptMutation} from '../__generated__/EndTeamPromptMutation.graphql'
+import type {
+  NavigateMaybeLocalHandler,
   OnNextHandler,
-  OnNextHistoryContext,
+  OnNextNavigateContext,
   SharedUpdater,
   StandardMutation
 } from '../types/relayMutations'
-import {EndTeamPromptMutation as TEndTeamPromptMutation} from '../__generated__/EndTeamPromptMutation.graphql'
+import {GQLID} from '../utils/GQLID'
 import handleAddTimelineEvent from './handlers/handleAddTimelineEvent'
 
 graphql`
@@ -18,6 +19,7 @@ graphql`
     meeting {
       id
       endedAt
+      summaryPageId
       ...TeamPromptMeetingStatus_meeting
       ...TeamPromptMeeting_meeting
     }
@@ -31,12 +33,15 @@ graphql`
       }
     }
     timelineEvent {
-      id
-      team {
-        id
-        name
-      }
-      type
+      ...TimelineEventTeamPromptComplete_timelineEvent @relay(mask: false)
+    }
+  }
+`
+
+graphql`
+  fragment EndTeamPromptMutation_meeting on EndTeamPromptSuccess {
+    meeting {
+      ...WholeMeetingSummary_meeting
     }
   }
 `
@@ -50,24 +55,28 @@ const mutation = graphql`
         }
       }
       ...EndTeamPromptMutation_team @relay(mask: false)
+      ...EndTeamPromptMutation_meeting @relay(mask: false)
     }
   }
 `
 
 export const endTeamPromptTeamOnNext: OnNextHandler<
-  EndTeamPromptMutation_team,
-  OnNextHistoryContext
+  EndTeamPromptMutation_team$data,
+  OnNextNavigateContext
 > = (payload, context) => {
   const {meeting} = payload
-  const {history} = context
+  const {navigate} = context
   if (!meeting) return
-  const {id: meetingId} = meeting
+  const {id: meetingId, summaryPageId} = meeting
   if (onMeetingRoute(window.location.pathname, [meetingId])) {
-    history.push(`/new-summary/${meetingId}`)
+    if (summaryPageId) {
+      const pageCode = GQLID.fromKey(summaryPageId)[0]
+      navigate(`/pages/${pageCode}`)
+    }
   }
 }
 
-export const endTeamPromptTeamUpdater: SharedUpdater<EndTeamPromptMutation_team> = (
+export const endTeamPromptTeamUpdater: SharedUpdater<EndTeamPromptMutation_team$data> = (
   payload,
   {store}
 ) => {
@@ -76,10 +85,10 @@ export const endTeamPromptTeamUpdater: SharedUpdater<EndTeamPromptMutation_team>
   handleAddTimelineEvent(meeting, timelineEvent, store)
 }
 
-const EndTeamPromptMutation: StandardMutation<TEndTeamPromptMutation, HistoryMaybeLocalHandler> = (
+const EndTeamPromptMutation: StandardMutation<TEndTeamPromptMutation, NavigateMaybeLocalHandler> = (
   atmosphere,
   variables,
-  {onError, onCompleted, history}
+  {onError, onCompleted, navigate}
 ) => {
   return commitMutation<TEndTeamPromptMutation>(atmosphere, {
     mutation,
@@ -94,7 +103,10 @@ const EndTeamPromptMutation: StandardMutation<TEndTeamPromptMutation, HistoryMay
       if (onCompleted) {
         onCompleted(res, errors)
       }
-      endTeamPromptTeamOnNext(res.endTeamPrompt as any, {atmosphere, history})
+      endTeamPromptTeamOnNext(res.endTeamPrompt as any, {
+        atmosphere,
+        navigate
+      })
     },
     onError
   })

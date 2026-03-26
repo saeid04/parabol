@@ -1,7 +1,7 @@
-import React, {Component, ReactNode} from 'react'
+import {type ReactNode, useEffect, useState} from 'react'
 import {RelayEnvironmentProvider} from 'react-relay'
 import Atmosphere from '../../Atmosphere'
-import TLocalAtmosphere from '../../modules/demo/LocalAtmosphere'
+import type TLocalAtmosphere from '../../modules/demo/LocalAtmosphere'
 
 interface Props {
   children: ReactNode
@@ -9,35 +9,37 @@ interface Props {
   getLocalAtmosphere?: () => Promise<{default: {new (): TLocalAtmosphere}}>
 }
 
-class AtmosphereProvider extends Component<Props> {
-  atmosphere?: Atmosphere | TLocalAtmosphere
-
-  constructor(props: Props) {
-    super(props)
-    if (props.getLocalAtmosphere) {
-      this.loadDemo().catch()
-    } else {
-      this.atmosphere = new Atmosphere()
-      this.atmosphere.getAuthToken(window)
+const AtmosphereProvider = (props: Props) => {
+  const {children, getLocalAtmosphere} = props
+  const [atmosphere, setAtmosphere] = useState<Atmosphere | TLocalAtmosphere | undefined>(() => {
+    if (!getLocalAtmosphere) {
+      return new Atmosphere()
     }
-  }
+    return undefined
+  })
 
-  async loadDemo() {
-    const LocalAtmosphere = await this.props.getLocalAtmosphere!()
-      .then((mod) => mod.default)
-      .catch()
-    this.atmosphere = new LocalAtmosphere()
-    this.forceUpdate()
-  }
+  useEffect(() => {
+    if (!getLocalAtmosphere && atmosphere instanceof Atmosphere) {
+      const cleanup = atmosphere.registerCookieListener(window)
+      return cleanup
+    }
+    return undefined
+  }, [atmosphere, getLocalAtmosphere])
 
-  render() {
-    if (!this.atmosphere) return null
-    return (
-      <RelayEnvironmentProvider environment={this.atmosphere}>
-        {this.props.children}
-      </RelayEnvironmentProvider>
-    )
-  }
+  useEffect(() => {
+    if (getLocalAtmosphere) {
+      getLocalAtmosphere()
+        .then((mod) => {
+          setAtmosphere(new mod.default())
+        })
+        .catch(() => {
+          /*ignore*/
+        })
+    }
+  }, [getLocalAtmosphere])
+
+  if (!atmosphere) return null
+  return <RelayEnvironmentProvider environment={atmosphere}>{children}</RelayEnvironmentProvider>
 }
 
 export default AtmosphereProvider

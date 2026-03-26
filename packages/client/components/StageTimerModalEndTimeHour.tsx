@@ -1,5 +1,4 @@
 import styled from '@emotion/styled'
-import React from 'react'
 import {MenuPosition} from '../hooks/useCoords'
 import useMenu from '../hooks/useMenu'
 import formatTime from '../utils/date/formatTime'
@@ -24,7 +23,6 @@ const StageTimerModalEndTimeHour = (props: Props) => {
     MenuPosition.LOWER_LEFT,
     {
       id: 'StageTimerEndTimePicker',
-      parentId: 'StageTimerModal',
       isDropdown: true
     }
   )

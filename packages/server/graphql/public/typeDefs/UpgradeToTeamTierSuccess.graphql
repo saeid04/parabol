@@ -1,0 +1,11 @@
+type UpgradeToTeamTierSuccess {
+  """
+  The new org on the team tier
+  """
+  organization: Organization!
+
+  """
+  The updated teams under the org
+  """
+  teams: [Team!]!
+}

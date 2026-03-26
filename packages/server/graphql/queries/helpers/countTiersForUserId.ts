@@ -1,32 +1,25 @@
-import getRethink from '../../../database/rethinkDriver'
-import {RValue} from '../../../database/stricterR'
-import OrganizationUser from '../../../database/types/OrganizationUser'
+import type {DataLoaderInstance} from '../../../dataloader/RootDataLoader'
+import isValid from '../../isValid'
 
 // breaking this out into its own helper so it can be used directly to
 // populate segment traits
 
-const countTiersForUserId = async (userId: string) => {
-  const r = await getRethink()
-  const organizationUsers = (await r
-    .table('OrganizationUser')
-    .getAll(userId, {index: 'userId'})
-    .filter({inactive: false, removedAt: null})
-    .merge((organizationUser: RValue) => ({
-      tier: r.table('Organization').get(organizationUser('orgId'))('tier').default('starter')
-    }))
-    .run()) as OrganizationUser[]
-  const tierStarterCount = organizationUsers.filter(
-    (organizationUser) => organizationUser.tier === 'starter'
-  ).length
-  const tierTeamCount = organizationUsers.filter(
-    (organizationUser) => organizationUser.tier === 'team'
-  ).length
-  const tierEnterpriseCount = organizationUsers.filter(
-    (organizationUser) => organizationUser.tier === 'enterprise'
-  ).length
+const countTiersForUserId = async (userId: string, dataLoader: DataLoaderInstance) => {
+  const [allOrgUsers, user] = await Promise.all([
+    dataLoader.get('organizationUsersByUserId').load(userId),
+    dataLoader.get('users').load(userId)
+  ])
+  const organizationUsers = user && !user.inactive ? allOrgUsers : []
+  const activeOrgs = (
+    await dataLoader.get('organizations').loadMany(organizationUsers.map(({orgId}) => orgId))
+  ).filter(isValid)
+  const tierStarterCount = activeOrgs.filter(({tier}) => tier === 'starter').length
+  const tierTeamCount = activeOrgs.filter(({tier}) => tier === 'team').length
+  const tierEnterpriseCount = activeOrgs.filter(({tier}) => tier === 'enterprise').length
   const tierTeamBillingLeaderCount = organizationUsers.filter(
     (organizationUser) =>
-      organizationUser.tier === 'team' && organizationUser.role === 'BILLING_LEADER'
+      activeOrgs.find(({id}) => id === organizationUser.orgId)?.tier === 'team' &&
+      organizationUser.role === 'BILLING_LEADER'
   ).length
   return {
     tierStarterCount,

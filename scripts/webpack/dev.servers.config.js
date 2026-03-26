@@ -7,8 +7,9 @@ const webpack = require('webpack')
 const PROJECT_ROOT = getProjectRoot()
 const CLIENT_ROOT = path.join(PROJECT_ROOT, 'packages', 'client')
 const SERVER_ROOT = path.join(PROJECT_ROOT, 'packages', 'server')
-const GQL_ROOT = path.join(PROJECT_ROOT, 'packages', 'gql-executor')
+const EMBEDDER_ROOT = path.join(PROJECT_ROOT, 'packages', 'embedder')
 const DOTENV = path.join(PROJECT_ROOT, 'scripts', 'webpack', 'utils', 'dotenv.js')
+const INIT_PUBLIC_PATH = path.join(SERVER_ROOT, 'initPublicPath.ts')
 // const CircularDependencyPlugin = require('circular-dependency-plugin')
 
 module.exports = {
@@ -25,37 +26,69 @@ module.exports = {
     __dirname: false
   },
   entry: {
-    web: [DOTENV, path.join(SERVER_ROOT, 'server.ts')],
-    gqlExecutor: [DOTENV, path.join(GQL_ROOT, 'gqlExecutor.ts')]
+    web: [DOTENV, INIT_PUBLIC_PATH, path.join(SERVER_ROOT, 'server.ts')],
+    embedder: [
+      DOTENV,
+      INIT_PUBLIC_PATH,
+      // make sure all the extensions (pgvector) exist & are updated
+      path.join(PROJECT_ROOT, 'scripts/toolboxSrc/pgEnsureExtensions.ts'),
+      path.join(EMBEDDER_ROOT, 'embedder.ts')
+    ]
   },
   output: {
     filename: '[name].js',
-    path: path.join(PROJECT_ROOT, 'dev'),
-    libraryTarget: 'commonjs'
+    path: path.join(PROJECT_ROOT, 'dev')
   },
   resolve: {
     alias: {
       '~': path.join(CLIENT_ROOT),
       'parabol-server': SERVER_ROOT,
-      'parabol-client': CLIENT_ROOT
+      'parabol-client': CLIENT_ROOT,
+      // this is for radix-ui, we import & transform ESM packages, but they can't find react/jsx-runtime
+      'react/jsx-runtime': require.resolve('react/jsx-runtime')
     },
-    extensions: ['.mjs', '.js', '.json', '.ts', '.tsx', '.graphql'],
-    unsafeCache: true,
+    extensions: ['.mjs', '.js', '.json', '.ts', '.tsx', '.graphql']
     // this is run outside the server dir, but we want to favor using modules from the server dir
-    modules: [path.resolve(SERVER_ROOT, 'node_modules'), path.resolve(PROJECT_ROOT, 'node_modules')]
-  },
-  resolveLoader: {
-    modules: [path.resolve(SERVER_ROOT, 'node_modules'), path.resolve(PROJECT_ROOT, 'node_modules')]
   },
   target: 'node',
   externals: [
-    nodeExternals({
-      allowlist: [/parabol-client/, /parabol-server/]
-    })
+    {
+      ...nodeExternals({
+        allowlist: [/parabol-client/, /parabol-server/, /@dicebear/, 'node:crypto']
+      }),
+      sharp: 'commonjs sharp',
+      'string-score': 'commonjs string-score'
+    }
   ],
   plugins: [
     new webpack.DefinePlugin({
-      __PROJECT_ROOT__: JSON.stringify(PROJECT_ROOT)
+      __PRODUCTION__: false,
+      __APP_VERSION__: JSON.stringify(process.env.npm_package_version)
+    }),
+    // native bindings might be faster, but abandonware & not currently used
+    new webpack.IgnorePlugin({
+      resourceRegExp: /^pg-native$/,
+      contextRegExp: /pg\/lib/
+    }),
+    new webpack.IgnorePlugin({
+      resourceRegExp: /^pg-cloudflare$/,
+      contextRegExp: /pg\/lib/
+    }),
+    new webpack.IgnorePlugin({
+      resourceRegExp: /^exiftool-vendored$/,
+      contextRegExp: /@dicebear/
+    }),
+    new webpack.IgnorePlugin({
+      resourceRegExp: /^@resvg\/resvg-js$/,
+      contextRegExp: /@dicebear/
+    }),
+    new webpack.IgnorePlugin({
+      resourceRegExp: /inter-regular.otf$/,
+      contextRegExp: /@dicebear/
+    }),
+    new webpack.IgnorePlugin({
+      resourceRegExp: /inter-bold.otf$/,
+      contextRegExp: /@dicebear/
     })
   ],
   module: {
@@ -68,19 +101,26 @@ module.exports = {
           {
             loader: '@sucrase/webpack-loader',
             options: {
-              transforms: ['jsx']
+              transforms: ['jsx'],
+              jsxRuntime: 'automatic'
             }
           }
         ]
       },
       {
         test: /\.(png|jpg|jpeg|gif|svg)$/,
+        type: 'asset/resource',
+        generator: {
+          filename: '[name][ext]'
+        }
+      },
+      {
+        include: [/node_modules/],
+        test: /\.node$/,
         use: [
           {
-            loader: 'file-loader',
-            options: {
-              publicPath: `http://localhost:${process.env.PORT}/static/`
-            }
+            // use our fork of node-loader to exclude the public path from the script
+            loader: path.resolve(__dirname, './utils/node-loader-private/cjs.js')
           }
         ]
       }

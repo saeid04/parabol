@@ -1,5 +1,4 @@
 import styled from '@emotion/styled'
-import React from 'react'
 import {BezierCurve} from '~/types/constEnums'
 
 const SVG = styled('svg')<{radius: number}>(({radius}) => ({
@@ -7,17 +6,19 @@ const SVG = styled('svg')<{radius: number}>(({radius}) => ({
   width: radius * 2
 }))
 
-const Circle = styled('circle')<{circumference: number; stroke: string; strokeWidth: number}>(
-  ({circumference, stroke, strokeWidth}) => ({
-    fill: 'transparent',
-    stroke,
-    strokeDasharray: circumference.toFixed(3),
-    strokeWidth,
-    transform: 'rotate(-90deg)',
-    transformOrigin: '50% 50%',
-    transition: `stroke-dashoffset 300ms ${BezierCurve.DECELERATE}`
-  })
-)
+const Circle = styled('circle')<{
+  circumference: number
+  stroke: string
+  strokeWidth: number
+}>(({circumference, stroke, strokeWidth}) => ({
+  fill: 'transparent',
+  stroke,
+  strokeDasharray: circumference.toFixed(3),
+  strokeWidth,
+  transform: 'rotate(-90deg)',
+  transformOrigin: '50% 50%',
+  transition: `stroke-dashoffset 300ms ${BezierCurve.DECELERATE}`
+}))
 
 interface Props {
   className?: string

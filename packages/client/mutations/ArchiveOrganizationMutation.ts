@@ -1,17 +1,17 @@
 import graphql from 'babel-plugin-relay/macro'
 import {commitMutation} from 'react-relay'
-import {
-  HistoryLocalHandler,
+import type {ArchiveOrganizationMutation as TArchiveOrganizationMutation} from '../__generated__/ArchiveOrganizationMutation.graphql'
+import type {ArchiveOrganizationMutation_organization$data} from '../__generated__/ArchiveOrganizationMutation_organization.graphql'
+import type {
+  NavigateLocalHandler,
   OnNextHandler,
-  OnNextHistoryContext,
+  OnNextNavigateContext,
   SharedUpdater,
   StandardMutation
 } from '../types/relayMutations'
 import onMeetingRoute from '../utils/onMeetingRoute'
 import onTeamRoute from '../utils/onTeamRoute'
 import safeRemoveNodeFromArray from '../utils/relay/safeRemoveNodeFromArray'
-import {ArchiveOrganizationMutation as TArchiveOrganizationMutation} from '../__generated__/ArchiveOrganizationMutation.graphql'
-import {ArchiveOrganizationMutation_organization} from '../__generated__/ArchiveOrganizationMutation_organization.graphql'
 import handleRemoveSuggestedActions from './handlers/handleRemoveSuggestedActions'
 
 graphql`
@@ -40,9 +40,9 @@ const mutation = graphql`
 `
 
 const popOrgArchivedToast: OnNextHandler<
-  ArchiveOrganizationMutation_organization,
-  OnNextHistoryContext
-> = (payload, {history, atmosphere}) => {
+  ArchiveOrganizationMutation_organization$data,
+  OnNextNavigateContext
+> = (payload, {navigate, atmosphere}) => {
   if (!payload) return
   const {orgId, teams} = payload
   if (!teams) return
@@ -58,13 +58,13 @@ const popOrgArchivedToast: OnNextHandler<
         autoDismiss: 5,
         message: `${teamName} has been archived.`
       })
-      history && history.push('/meetings')
+      navigate?.('/meetings')
     }
   })
 }
 
 export const archiveOrganizationOrganizationUpdater: SharedUpdater<
-  ArchiveOrganizationMutation_organization
+  ArchiveOrganizationMutation_organization$data
 > = (payload, {store}) => {
   const viewer = store.getRoot().getLinkedRecord('viewer')!
   const teams = payload.getLinkedRecords('teams')
@@ -82,16 +82,16 @@ export const archiveOrganizationOrganizationUpdater: SharedUpdater<
 }
 
 export const archiveOrganizationOrganizationOnNext: OnNextHandler<
-  ArchiveOrganizationMutation_organization,
-  OnNextHistoryContext
-> = (payload, {atmosphere, history}) => {
-  popOrgArchivedToast(payload, {atmosphere, history})
+  ArchiveOrganizationMutation_organization$data,
+  OnNextNavigateContext
+> = (payload, {atmosphere, navigate}) => {
+  popOrgArchivedToast(payload, {atmosphere, navigate})
 }
 
 const ArchiveOrganizationMutation: StandardMutation<
   TArchiveOrganizationMutation,
-  HistoryLocalHandler
-> = (atmosphere, variables, {onError, onCompleted, history}) => {
+  NavigateLocalHandler
+> = (atmosphere, variables, {onError, onCompleted, navigate}) => {
   return commitMutation<TArchiveOrganizationMutation>(atmosphere, {
     mutation,
     variables,
@@ -107,9 +107,9 @@ const ArchiveOrganizationMutation: StandardMutation<
       }
       const payload = res.archiveOrganization
       if (payload) {
-        popOrgArchivedToast(payload, {atmosphere, history})
+        popOrgArchivedToast(payload, {atmosphere, navigate})
       }
-      history.replace('/meetings')
+      navigate('/meetings', {replace: true})
     },
     onError
   })

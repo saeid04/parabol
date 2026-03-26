@@ -1,11 +1,17 @@
-import {HttpRequest, HttpResponse} from 'uWebSockets.js'
+import type {HttpRequest, HttpResponse} from 'uWebSockets.js'
 import uWSAsyncHandler from '../graphql/uWSAsyncHandler'
 import parseBody from '../parseBody'
-import publishWebhookGQL from '../utils/publishWebhookGQL'
+import {callGQL} from '../utils/callGQL'
 import {getStripeManager} from '../utils/stripe'
 
 interface InvoiceEventCallBackArg {
   id: string
+  subscription_details?: {
+    metadata?: {
+      orgId: string
+      userId?: string
+    }
+  }
 }
 
 const eventLookup = {
@@ -30,6 +36,23 @@ const eventLookup = {
         }
       `
     },
+    payment_succeeded: {
+      getVars: ({id: invoiceId, subscription_details}: InvoiceEventCallBackArg) => ({
+        invoiceId,
+        userId: subscription_details?.metadata?.userId
+      }),
+      query: `
+        mutation UpgradeToTeamTier($invoiceId: ID!, $userId: ID) {
+          upgradeToTeamTier(invoiceId: $invoiceId, userId: $userId) {
+            ... on UpgradeToTeamTierSuccess {
+              organization {
+                id
+              }
+            }
+          }
+        }
+      `
+    },
     paid: {
       getVars: ({id: invoiceId}: InvoiceEventCallBackArg) => ({invoiceId}),
       query: `
@@ -37,32 +60,41 @@ const eventLookup = {
           stripeInvoicePaid(invoiceId: $invoiceId)
         }
       `
-    },
-    finalized: {
-      getVars: ({id: invoiceId}: InvoiceEventCallBackArg) => ({invoiceId}),
-      query: `
-      mutation StripeInvoiceFinalized($invoiceId: ID!) {
-        stripeInvoiceFinalized(invoiceId: $invoiceId)
-      }`
-    }
-  },
-  invoiceitem: {
-    created: {
-      getVars: ({id: invoiceItemId}: {id: string}) => ({invoiceItemId}),
-      query: `
-        mutation StripeUpdateInvoiceItem($invoiceItemId: ID!) {
-          stripeUpdateInvoiceItem(invoiceItemId: $invoiceItemId)
-        }
-      `
     }
   },
   customer: {
     source: {
       updated: {
-        getVars: ({customer: customerId}: {customer: string}) => ({customerId}),
+        getVars: ({customer: customerId}: {customer: string}) => ({
+          customerId
+        }),
         query: `
         mutation StripeUpdateCreditCard($customerId: ID!) {
           stripeUpdateCreditCard(customerId: $customerId)
+        }
+      `
+      }
+    },
+    subscription: {
+      created: {
+        getVars: ({customer, id}: {customer: string; id: string}) => ({
+          customerId: customer,
+          subscriptionId: id
+        }),
+        query: `
+        mutation StripeCreateSubscription($customerId: ID!, $subscriptionId: ID!) {
+          stripeCreateSubscription(customerId: $customerId, subscriptionId: $subscriptionId)
+        }
+      `
+      },
+      deleted: {
+        getVars: ({customer, id}: {customer: string; id: string}) => ({
+          customerId: customer,
+          subscriptionId: id
+        }),
+        query: `
+        mutation StripeDeleteSubscription($customerId: ID!, $subscriptionId: ID!) {
+          stripeDeleteSubscription(customerId: $customerId, subscriptionId: $subscriptionId)
         }
       `
       }
@@ -120,7 +152,7 @@ const stripeWebhookHandler = uWSAsyncHandler(async (res: HttpResponse, req: Http
 
   const {getVars, query} = actionHandler
   const variables = getVars(payload)
-  const result = await publishWebhookGQL(query, variables)
+  const result = await callGQL(query, variables)
   if (result?.data) {
     res.writeStatus('200').end()
   } else {

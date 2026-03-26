@@ -1,8 +1,8 @@
 import graphql from 'babel-plugin-relay/macro'
 import {commitMutation} from 'react-relay'
-import {OnNextHandler, SimpleMutation} from '../types/relayMutations'
-import {PromoteNewMeetingFacilitatorMutation as TPromoteNewMeetingFacilitatorMutation} from '../__generated__/PromoteNewMeetingFacilitatorMutation.graphql'
-import {PromoteNewMeetingFacilitatorMutation_meeting} from '../__generated__/PromoteNewMeetingFacilitatorMutation_meeting.graphql'
+import type {PromoteNewMeetingFacilitatorMutation as TPromoteNewMeetingFacilitatorMutation} from '../__generated__/PromoteNewMeetingFacilitatorMutation.graphql'
+import type {PromoteNewMeetingFacilitatorMutation_meeting$data} from '../__generated__/PromoteNewMeetingFacilitatorMutation_meeting.graphql'
+import type {OnNextHandler, SimpleMutation} from '../types/relayMutations'
 
 graphql`
   fragment PromoteNewMeetingFacilitatorMutation_meeting on PromoteNewMeetingFacilitatorPayload {
@@ -11,8 +11,10 @@ graphql`
       facilitator {
         # https://github.com/ParabolInc/parabol/issues/2984
         ...StageTimerModalEndTimeSlackToggle_facilitator
-        userId
-        preferredName
+        user {
+          id
+          preferredName
+        }
       }
     }
     oldFacilitator {
@@ -20,7 +22,7 @@ graphql`
       preferredName
     }
     facilitatorStage {
-      readyCount
+      readyUserIds
       isViewerReady
     }
   }
@@ -38,15 +40,16 @@ const mutation = graphql`
 `
 
 export const promoteNewMeetingFacilitatorMeetingOnNext: OnNextHandler<
-  PromoteNewMeetingFacilitatorMutation_meeting
+  PromoteNewMeetingFacilitatorMutation_meeting$data
 > = (payload, {atmosphere}) => {
   const {viewerId} = atmosphere
   const {oldFacilitator, meeting} = payload
   if (!oldFacilitator || !meeting) return
   const {isConnected, preferredName: oldFacilitatorName} = oldFacilitator
   const {
-    facilitator: {preferredName: newFacilitatorName, userId: newFacilitatorUserId}
+    facilitator: {user: facilitatorUser}
   } = meeting
+  const {preferredName: newFacilitatorName, id: newFacilitatorUserId} = facilitatorUser
   const isSelf = newFacilitatorUserId === viewerId
   const prefix = isConnected ? '' : `${oldFacilitatorName} disconnected! `
   const intro = isSelf ? 'You are' : `${newFacilitatorName} is`

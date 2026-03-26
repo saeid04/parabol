@@ -1,3 +1,6 @@
+const {DEV_RUN_ONLY} = process.env
+// const DEV_RUN_ONLY = 'Webpack Servers,Socket Server,Dev Server'
+const runOnly = DEV_RUN_ONLY ? DEV_RUN_ONLY.split(',') : []
 module.exports = {
   apps: [
     {
@@ -5,21 +8,12 @@ module.exports = {
       script: 'scripts/buildServers.js'
     },
     {
-      name: 'GraphQL Executor',
-      script: 'scripts/runExecutor.js',
-      // increase this to test scaling
-      instances: 1,
-      increment_var: 'SERVER_ID',
-      env: {
-        SERVER_ID: 3
-      },
-      watch: ['dev/gqlExecutor.js'],
-      // if the watched file doeesn't exist, wait for it instead of restarting
-      autorestart: false
-    },
-    {
       name: 'Socket Server',
-      script: 'scripts/runSocketServer.js',
+      script: 'node',
+      args: [
+        //'--inspect',
+        'scripts/runSocketServer.js'
+      ],
       // increase this to test scaling
       instances: 1,
       increment_var: 'SERVER_ID',
@@ -31,26 +25,39 @@ module.exports = {
       autorestart: false
     },
     {
+      name: 'Embedder',
+      script: 'scripts/runEmbedder.js',
+      // increase this to test scaling
+      instances: 1,
+      increment_var: 'SERVER_ID',
+      env: {
+        SERVER_ID: 6
+      },
+      watch: ['dev/embedder.js'],
+      // if the watched file doeesn't exist, wait for it instead of restarting
+      autorestart: false
+    },
+    {
       name: 'Dev Server',
       script: 'scripts/hmrServer.js'
     },
     {
-      name: 'DB Migrations',
-      script: 'scripts/runMigrations.js',
-      // once this completes, it will exit
+      name: 'Flush Valkey',
+      script: 'scripts/flushValkey.js',
       autorestart: false
     },
     {
-      name: 'GraphQL Schema Updater',
-      script: 'scripts/runSchemaUpdater.js',
-      watch: ['packages/server/graphql/public/typeDefs', 'packages/server/graphql/private/typeDefs']
+      name: 'PG Migrations',
+      script: 'pnpm kysely migrate:latest',
+      autorestart: false
     },
     {
       name: 'Relay Compiler',
-      script: 'scripts/compileRelay.js',
-      args: '--watch',
+      script: 'scripts/relayWatch.js',
       watch: [
         'packages/server/graphql/public/schema.graphql',
+        'packages/server/graphql/public/typeDefs',
+        'packages/server/graphql/private/typeDefs',
         'packages/client/clientSchema.graphql'
       ]
     },
@@ -64,13 +71,28 @@ module.exports = {
       instances: 1
     },
     {
-      name: 'PG Typed',
-      script: 'yarn pg:build -w'
-    }
-  ].map((app) => ({
-    env_production: {
-      NODE_ENV: 'development'
+      name: 'Kysely Codegen',
+      script: 'pnpm pg:generate',
+      autorestart: false
     },
-    ...app
-  }))
+    {
+      name: 'Mattermost Relay Compiler',
+      script: 'pnpm --filter parabol-mattermost-plugin exec relay-compiler',
+      watch: ['packages/mattermost-plugin/**/*.[ts*,js*,css]'],
+      autorestart: false,
+      instances: 1
+    },
+    {
+      name: 'Mattermost Plugin Dev Server',
+      script: './scripts/hmrServer.js',
+      cwd: 'packages/mattermost-plugin'
+    }
+  ]
+    .map((app) => ({
+      env_production: {
+        NODE_ENV: 'development'
+      },
+      ...app
+    }))
+    .filter((app) => (runOnly.length === 0 ? true : runOnly.includes(app.name)))
 }

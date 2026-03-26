@@ -1,10 +1,10 @@
 import graphql from 'babel-plugin-relay/macro'
 import {useCallback} from 'react'
 import {readInlineData} from 'relay-runtime'
-import {NavigateMeetingMutationVariables} from '~/__generated__/NavigateMeetingMutation.graphql'
-import {useGotoStageId_meeting$key} from '~/__generated__/useGotoStageId_meeting.graphql'
+import type {NavigateMeetingMutation as TNavigateMeetingMutation} from '~/__generated__/NavigateMeetingMutation.graphql'
+import type {useGotoStageId_meeting$key} from '~/__generated__/useGotoStageId_meeting.graphql'
 import {demoTeamId} from '../modules/demo/initDB'
-import LocalAtmosphere from '../modules/demo/LocalAtmosphere'
+import type LocalAtmosphere from '../modules/demo/LocalAtmosphere'
 import NavigateMeetingMutation from '../mutations/NavigateMeetingMutation'
 import findStageById from '../utils/meetings/findStageById'
 import isForwardProgress from '../utils/meetings/isForwardProgress'
@@ -31,6 +31,9 @@ const useGotoStageId = (meetingRef: useGotoStageId_meeting$key) => {
             isNavigableByFacilitator
           }
         }
+        localStage {
+          id
+        }
       }
     `,
     meetingRef
@@ -43,14 +46,16 @@ const useGotoStageId = (meetingRef: useGotoStageId_meeting$key) => {
         facilitatorStageId,
         facilitatorUserId,
         id: meetingId,
-        phases
+        phases,
+        localStage
       } = meeting
       const {viewerId} = atmosphere
+      if (localStage?.id === stageId) return
       const isViewerFacilitator = viewerId === facilitatorUserId
       const res = findStageById(phases, stageId)
       if (!res) return
-      const {stage} = res
-      const {isNavigable, isNavigableByFacilitator} = stage
+      const {stage: newStage} = res
+      const {isNavigable, isNavigableByFacilitator} = newStage
 
       const canNavigate = isViewerFacilitator ? isNavigableByFacilitator : isNavigable
       if (!canNavigate) return
@@ -59,16 +64,36 @@ const useGotoStageId = (meetingRef: useGotoStageId_meeting$key) => {
       }
       updateLocalStage(atmosphere, meeting, stageId)
       if (isViewerFacilitator && isNavigableByFacilitator && !endedAt) {
+        // this shouldn't be necessary, but we're getting a lot of "already at stage" errors
+        if (facilitatorStageId === stageId) return
         const res = findStageById(phases, facilitatorStageId)
         if (!res) return
-        const {stage} = res
-        const {isComplete} = stage
+        const {stage: oldStage} = res
+        const {isComplete} = oldStage
         const variables = {
           meetingId,
           facilitatorStageId: stageId
-        } as NavigateMeetingMutationVariables
-        if (!isComplete && isForwardProgress(phases, facilitatorStageId, stageId)) {
-          variables.completedStageId = facilitatorStageId
+        } as TNavigateMeetingMutation['variables']
+        if (isForwardProgress(phases, facilitatorStageId, stageId)) {
+          if (!isComplete) {
+            variables.completedStageId = facilitatorStageId
+          } else {
+            // Check if we're skipping a phase, and mark it as completed if we are.
+            // Note: Only one uncompleted phase should be skippable at a time (the one right before
+            // the unlocked stage).
+            const oldStagePhaseIndex = phases.findIndex((phase) =>
+              phase.stages.find((stage) => stage.id === facilitatorStageId)
+            )
+            const newStagePhaseIndex = phases.findIndex((phase) =>
+              phase.stages.find((stage) => stage.id === stageId)
+            )
+            if (newStagePhaseIndex - oldStagePhaseIndex > 1) {
+              const maybeCompletedStage = phases[newStagePhaseIndex - 1]!.stages[0]
+              if (!maybeCompletedStage!.isComplete) {
+                variables.completedStageId = maybeCompletedStage!.id
+              }
+            }
+          }
         }
         NavigateMeetingMutation(atmosphere, variables)
       }

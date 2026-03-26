@@ -1,53 +1,47 @@
-version: '3.7'
-
 services:
-  db:
-    image: rethinkdb:latest
-    ports:
-      - '8080:8080'
-      - '29015:29015'
-      - '28015:28015'
-    volumes:
-      - rethink-data:/data
-    networks:
-      - parabol-network
   postgres:
-    image: postgres:12.10
+    image: pgvector/pgvector:0.8.0-pg16
     restart: always
     env_file: .env
-    ports:
-      - '5432:5432'
+    # ports:
+    #   - '5432:5432'
     volumes:
-      - './packages/server/postgres/postgres.conf:/usr/local/etc/postgres/postgres.conf'
-      - 'postgres-data:/data'
-    command: 'postgres -c config_file=/usr/local/etc/postgres/postgres.conf'
+      - postgres-data:/var/lib/postgresql/data
     networks:
       - parabol-network
-  redis:
-    image: redis
-    ports:
-      - '6379:6379'
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U $$POSTGRES_USER -d $$POSTGRES_DB"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+      start_period: 10s
+  valkey:
+    image: valkey/valkey:9.0-alpine
+    command: valkey-server --save ""
+    restart: unless-stopped
+    # ports:
+    #   - '6379:6379'
     volumes:
-      - redis-data:/data
+      - valkey-data:/data
     networks:
       - parabol-network
   app:
     build:
       context: .
       dockerfile: ./docker/Dockerfile.prod
-      target: prod
     env_file: .env
-    ports:
-      - '3000:3000'
+    # ports:
+      # - '3000:3000'
     depends_on:
-      - db
-      - redis
-      - postgres
+      postgres:
+        condition: service_healthy
+      valkey:
+        condition: service_started
+    restart: unless-stopped
     networks:
       - parabol-network
 networks:
   parabol-network:
 volumes:
-  redis-data: {}
-  rethink-data: {}
+  valkey-data: {}
   postgres-data: {}

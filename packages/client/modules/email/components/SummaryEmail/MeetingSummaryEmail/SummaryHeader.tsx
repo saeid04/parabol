@@ -1,14 +1,14 @@
 import graphql from 'babel-plugin-relay/macro'
+import type {SummaryHeader_meeting$key} from 'parabol-client/__generated__/SummaryHeader_meeting.graphql'
 import {PALETTE} from 'parabol-client/styles/paletteV3'
 import {FONT_FAMILY} from 'parabol-client/styles/typographyV2'
 import makeDateString from 'parabol-client/utils/makeDateString'
-import {SummaryHeader_meeting} from 'parabol-client/__generated__/SummaryHeader_meeting.graphql'
-import React from 'react'
-import {createFragmentContainer} from 'react-relay'
+import type * as React from 'react'
+import {useFragment} from 'react-relay'
 import {ExternalLinks} from '../../../../../types/constEnums'
-import {CorsOptions} from '../../../../../types/cors'
+import type {CorsOptions} from '../../../../../types/cors'
 
-const meetingSummaryLabel = {
+const meetingSummaryLabel: React.CSSProperties = {
   color: PALETTE.SLATE_600,
   fontFamily: FONT_FAMILY.SANS_SERIF,
   textTransform: 'uppercase',
@@ -16,32 +16,59 @@ const meetingSummaryLabel = {
   fontWeight: 600,
   paddingTop: 8,
   textAlign: 'center'
-} as React.CSSProperties
+}
 
-const teamNameLabel = {
+const teamNameLabel: React.CSSProperties = {
   color: PALETTE.SLATE_700,
   fontFamily: FONT_FAMILY.SANS_SERIF,
   fontSize: 36,
   fontWeight: 600,
   paddingTop: 16
-} as React.CSSProperties
+}
 
-const dateLabel = {
+const dateLabel: React.CSSProperties = {
   color: PALETTE.SLATE_600,
   fontFamily: FONT_FAMILY.SANS_SERIF,
   fontSize: '15px',
   fontWeight: 400,
   paddingTop: 8
-} as React.CSSProperties
+}
+
+const teamLink: React.CSSProperties = {
+  color: PALETTE.SKY_500,
+  fontFamily: FONT_FAMILY.SANS_SERIF,
+  fontWeight: 600,
+  fontSize: '15px',
+  paddingTop: 8
+}
+
+const meetingLink: React.CSSProperties = {
+  textDecoration: 'underline',
+  color: 'inherit'
+}
 
 interface Props {
-  meeting: SummaryHeader_meeting
+  meeting: SummaryHeader_meeting$key
   isDemo?: boolean
   corsOptions: CorsOptions
+  teamDashUrl: string
+  meetingUrl: string
 }
 
 const SummaryHeader = (props: Props) => {
-  const {meeting, isDemo, corsOptions} = props
+  const {meeting: meetingRef, isDemo, corsOptions, teamDashUrl, meetingUrl} = props
+  const meeting = useFragment(
+    graphql`
+      fragment SummaryHeader_meeting on NewMeeting {
+        createdAt
+        name
+        team {
+          name
+        }
+      }
+    `,
+    meetingRef
+  )
   const {createdAt, name: meetingName, team} = meeting
   const {name: teamName} = team
   const meetingDate = makeDateString(createdAt, {showDay: true})
@@ -66,12 +93,24 @@ const SummaryHeader = (props: Props) => {
         </tr>
         <tr>
           <td align='center' style={teamNameLabel}>
-            {meetingName}
+            <a href={meetingUrl} style={meetingLink} rel='noopener noreferrer'>
+              {meetingName}
+            </a>
           </td>
         </tr>
         <tr>
           <td align='center' style={dateLabel}>
-            {isDemo ? meetingDate : `${teamName} • ${meetingDate}`}
+            {isDemo ? (
+              meetingDate
+            ) : (
+              <>
+                <a style={teamLink} href={teamDashUrl} rel='noopener noreferrer'>
+                  {teamName}
+                </a>
+                {' • '}
+                {meetingDate}
+              </>
+            )}
           </td>
         </tr>
       </tbody>
@@ -79,14 +118,4 @@ const SummaryHeader = (props: Props) => {
   )
 }
 
-export default createFragmentContainer(SummaryHeader, {
-  meeting: graphql`
-    fragment SummaryHeader_meeting on NewMeeting {
-      createdAt
-      name
-      team {
-        name
-      }
-    }
-  `
-})
+export default SummaryHeader

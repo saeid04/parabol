@@ -1,9 +1,9 @@
 import styled from '@emotion/styled'
 import graphql from 'babel-plugin-relay/macro'
-import React from 'react'
-import {createFragmentContainer} from 'react-relay'
+import {useFragment} from 'react-relay'
+import type {TeamInvitationEmailSignin_verifiedInvitation$key} from '../__generated__/TeamInvitationEmailSignin_verifiedInvitation.graphql'
 import useDocumentTitle from '../hooks/useDocumentTitle'
-import {TeamInvitationEmailSignin_verifiedInvitation} from '../__generated__/TeamInvitationEmailSignin_verifiedInvitation.graphql'
+import {AUTH_DIALOG_WIDTH} from './AuthenticationDialog'
 import DialogContent from './DialogContent'
 import DialogTitle from './DialogTitle'
 import EmailPasswordAuthForm from './EmailPasswordAuthForm'
@@ -14,11 +14,11 @@ import InviteDialog from './InviteDialog'
 
 interface Props {
   invitationToken: string
-  verifiedInvitation: TeamInvitationEmailSignin_verifiedInvitation
+  verifiedInvitation: TeamInvitationEmailSignin_verifiedInvitation$key
 }
 
 const StyledDialog = styled(InviteDialog)({
-  maxWidth: 356
+  maxWidth: AUTH_DIALOG_WIDTH
 })
 
 const TeamName = styled('span')({
@@ -27,7 +27,22 @@ const TeamName = styled('span')({
 })
 
 const TeamInvitationEmailSignin = (props: Props) => {
-  const {invitationToken, verifiedInvitation} = props
+  const {invitationToken, verifiedInvitation: verifiedInvitationRef} = props
+  const verifiedInvitation = useFragment(
+    graphql`
+      fragment TeamInvitationEmailSignin_verifiedInvitation on VerifiedInvitationPayload {
+        meetingName
+        user {
+          preferredName
+        }
+        teamInvitation {
+          email
+        }
+        teamName
+      }
+    `,
+    verifiedInvitationRef
+  )
   const {meetingName, user, teamInvitation, teamName} = verifiedInvitation
   useDocumentTitle(`Sign in | Team Invitation`, 'Sign in')
   if (!user || !teamInvitation) return null
@@ -56,17 +71,4 @@ const TeamInvitationEmailSignin = (props: Props) => {
   )
 }
 
-export default createFragmentContainer(TeamInvitationEmailSignin, {
-  verifiedInvitation: graphql`
-    fragment TeamInvitationEmailSignin_verifiedInvitation on VerifiedInvitationPayload {
-      meetingName
-      user {
-        preferredName
-      }
-      teamInvitation {
-        email
-      }
-      teamName
-    }
-  `
-})
+export default TeamInvitationEmailSignin

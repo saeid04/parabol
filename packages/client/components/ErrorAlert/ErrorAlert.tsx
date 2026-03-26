@@ -6,7 +6,6 @@
  */
 import styled from '@emotion/styled'
 import {Warning} from '@mui/icons-material'
-import React from 'react'
 import {PALETTE} from '../../styles/paletteV3'
 import {Radius} from '../../types/constEnums'
 
@@ -21,7 +20,8 @@ const ErrorAlertWrapper = styled('div')({
   alignItems: 'center',
   fontSize: 14,
   marginBottom: 16,
-  padding: '8px 16px'
+  padding: '8px 16px',
+  overflowX: 'auto'
 })
 
 const SpacedIcon = styled(Warning)({

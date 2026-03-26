@@ -1,10 +1,9 @@
 import graphql from 'babel-plugin-relay/macro'
-import React from 'react'
 import {useFragment} from 'react-relay'
-import {MenuProps} from '~/hooks/useMenu'
+import type {MenuProps} from '~/hooks/useMenu'
 import useSearchFilter from '~/hooks/useSearchFilter'
-import {
-  NewJiraIssueMenu_JiraRemoteProjects,
+import type {
+  NewJiraIssueMenu_JiraRemoteProjects$data,
   NewJiraIssueMenu_JiraRemoteProjects$key
 } from '../__generated__/NewJiraIssueMenu_JiraRemoteProjects.graphql'
 import {EmptyDropdownMenuItemLabel} from './EmptyDropdownMenuItemLabel'
@@ -18,7 +17,7 @@ interface Props {
   projectsRef: NewJiraIssueMenu_JiraRemoteProjects$key
 }
 
-const getValue = (project: NewJiraIssueMenu_JiraRemoteProjects[0]) => project.name
+const getValue = (project: NewJiraIssueMenu_JiraRemoteProjects$data[0]) => project.name
 
 const NewJiraIssueMenu = (props: Props) => {
   const {handleSelectProjectKey, menuProps, projectsRef} = props

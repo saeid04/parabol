@@ -1,18 +1,17 @@
-import getRethink from '../../../../database/rethinkDriver'
-import {RValue} from '../../../../database/stricterR'
+import {sql} from 'kysely'
+import getKysely from '../../../../postgres/getKysely'
 
-const updateSmartGroupTitle = async (reflectionGroupId: string, smartTitle: string) => {
-  const r = await getRethink()
-  const now = new Date()
-  return r
-    .table('RetroReflectionGroup')
-    .get(reflectionGroupId)
-    .update((g: RValue) => ({
+const updateSmartGroupTitle = async (reflectionGroupId: string, longSmartTitle: string) => {
+  const pg = getKysely()
+  const smartTitle = longSmartTitle.slice(0, 255)
+  await pg
+    .updateTable('RetroReflectionGroup')
+    .set({
       smartTitle,
-      title: r.branch(g('smartTitle').eq(g('title')), smartTitle, g('title')),
-      updatedAt: now
-    }))
-    .run()
+      title: sql`CASE WHEN "smartTitle" = "title" OR "title" IS NULL THEN ${smartTitle} ELSE "title" END`
+    })
+    .where('id', '=', reflectionGroupId)
+    .execute()
 }
 
 export default updateSmartGroupTitle

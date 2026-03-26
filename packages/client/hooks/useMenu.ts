@@ -1,9 +1,9 @@
-import {RefObject, useMemo} from 'react'
-import getBBox, {RectElement} from '../components/RetroReflectPhase/getBBox'
-import useCoords, {MenuPosition, UseCoordsOptions} from './useCoords'
+import {type RefObject, useMemo} from 'react'
+import getBBox, {type RectElement} from '../components/RetroReflectPhase/getBBox'
+import useCoords, {type MenuPosition, type UseCoordsOptions} from './useCoords'
 import useLoadingDelay from './useLoadingDelay'
 import useMenuPortal from './useMenuPortal'
-import usePortal, {PortalStatus, UsePortalOptions} from './usePortal'
+import usePortal, {type PortalStatus, type UsePortalOptions} from './usePortal'
 
 interface Options extends UsePortalOptions, UseCoordsOptions {
   loadingWidth?: number
@@ -31,7 +31,9 @@ const useMenu = <T extends HTMLElement = HTMLButtonElement>(
     originCoords
   })
   if (originCoords) {
-    ;(originRef as any).current = {getBoundingClientRect: () => originCoords} as RectElement
+    ;(originRef as any).current = {
+      getBoundingClientRect: () => originCoords
+    } as RectElement
   }
   const {
     portal,
@@ -51,7 +53,7 @@ const useMenu = <T extends HTMLElement = HTMLButtonElement>(
     if (options.loadingWidth) return options.loadingWidth
     const bbox = getBBox(originRef.current)
     return Math.max(40, bbox ? bbox.width : 40)
-  }, [originRef.current /* eslint-disable-line react-hooks/exhaustive-deps */])
+  }, [originRef.current])
   const {loadingDelay, loadingDelayRef} = useLoadingDelay()
   const menuPortal = useMenuPortal(
     portal,

@@ -1,6 +1,5 @@
 import graphql from 'babel-plugin-relay/macro'
-import {EmailResponseMentioned_notification$key} from 'parabol-client/__generated__/EmailResponseMentioned_notification.graphql'
-import React from 'react'
+import type {EmailResponseMentioned_notification$key} from 'parabol-client/__generated__/EmailResponseMentioned_notification.graphql'
 import {useFragment} from 'react-relay'
 import makeAppURL from '../../../../utils/makeAppURL'
 import {notificationSummaryUrlParams} from '../NotificationSummaryEmail'
@@ -46,11 +45,13 @@ const EmailResponseMentioned = (props: Props) => {
     }
   })
 
+  const message = `${authorName} mentioned you in their response in ${meetingName}.`
+
   // :TODO: (jmtaber129): Show mention preview.
   return (
     <EmailNotificationTemplate
       avatar={authorPicture}
-      message={`${authorName} mentioned you in their response in ${meetingName}.`}
+      message={message}
       notificationRef={notification}
       linkLabel={'See their response'}
       linkUrl={linkUrl}

@@ -1,9 +1,9 @@
 import base64url from 'base64url'
 import crypto from 'crypto'
-import getRethink from '../database/rethinkDriver'
-import AuthIdentityLocal from '../database/types/AuthIdentityLocal'
-import EmailVerification from '../database/types/EmailVerification'
-import {DataLoaderWorker} from '../graphql/graphql'
+import {Threshold} from 'parabol-client/types/constEnums'
+import type AuthIdentityLocal from '../database/types/AuthIdentityLocal'
+import type {DataLoaderWorker} from '../graphql/graphql'
+import getKysely from '../postgres/getKysely'
 import emailVerificationEmailCreator from './emailVerificationEmailCreator'
 import getMailManager from './getMailManager'
 
@@ -13,7 +13,7 @@ const createEmailVerficationForExistingUser = async (
   dataLoader: DataLoaderWorker
 ) => {
   const user = await dataLoader.get('users').loadNonNull(userId)
-  const {email, segmentId, identities} = user
+  const {email, pseudoId, identities} = user
   // Typescript isn't discriminating on the type, manually casted
   const localIdentity = identities.find(
     (identity) => identity.type === 'LOCAL'
@@ -23,7 +23,10 @@ const createEmailVerficationForExistingUser = async (
   const {hashedPassword} = localIdentity
   const tokenBuffer = crypto.randomBytes(48)
   const verifiedEmailToken = base64url.encode(tokenBuffer)
-  const {subject, body, html} = emailVerificationEmailCreator({verifiedEmailToken, invitationToken})
+  const {subject, body, html} = emailVerificationEmailCreator({
+    verifiedEmailToken,
+    invitationToken
+  })
   const success = await getMailManager().sendEmail({
     to: email,
     subject,
@@ -34,15 +37,18 @@ const createEmailVerficationForExistingUser = async (
   if (!success) {
     return new Error('Unable to send verification email')
   }
-  const r = await getRethink()
-  const emailVerification = new EmailVerification({
-    email,
-    token: verifiedEmailToken,
-    hashedPassword,
-    segmentId,
-    invitationToken
-  })
-  await r.table('EmailVerification').insert(emailVerification).run()
+  const pg = getKysely()
+  await pg
+    .insertInto('EmailVerification')
+    .values({
+      email,
+      token: verifiedEmailToken,
+      hashedPassword,
+      pseudoId,
+      invitationToken,
+      expiration: new Date(Date.now() + Threshold.EMAIL_VERIFICATION_LIFESPAN)
+    })
+    .execute()
   return undefined
 }
 

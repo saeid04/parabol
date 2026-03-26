@@ -1,19 +1,19 @@
 import styled from '@emotion/styled'
 import graphql from 'babel-plugin-relay/macro'
-import React from 'react'
-import {createFragmentContainer} from 'react-relay'
+import {useFragment} from 'react-relay'
+import type {TimelineEventPokerComplete_timelineEvent$key} from '../__generated__/TimelineEventPokerComplete_timelineEvent.graphql'
 import useAtmosphere from '../hooks/useAtmosphere'
-import SendClientSegmentEventMutation from '../mutations/SendClientSegmentEventMutation'
+import {GQLID} from '../utils/GQLID'
 import plural from '../utils/plural'
-import {TimelineEventPokerComplete_timelineEvent} from '../__generated__/TimelineEventPokerComplete_timelineEvent.graphql'
+import SendClientSideEvent from '../utils/SendClientSideEvent'
 import CardsSVG from './CardsSVG'
 import StyledLink from './StyledLink'
+import TimelineEventTitle from './TImelineEventTitle'
 import TimelineEventBody from './TimelineEventBody'
 import TimelineEventCard from './TimelineEventCard'
-import TimelineEventTitle from './TImelineEventTitle'
 
 interface Props {
-  timelineEvent: TimelineEventPokerComplete_timelineEvent
+  timelineEvent: TimelineEventPokerComplete_timelineEvent$key
 }
 
 const CountItem = styled('span')({
@@ -25,22 +25,68 @@ const Link = styled(StyledLink)({
 })
 
 const TimelineEventPokerComplete = (props: Props) => {
-  const {timelineEvent} = props
+  const {timelineEvent: timelineEventRef} = props
+  const timelineEvent = useFragment(
+    graphql`
+      fragment TimelineEventPokerComplete_timelineEvent on TimelineEventPokerComplete {
+        ...TimelineEventCard_timelineEvent
+        id
+        meeting {
+          id
+          commentCount
+          storyCount
+          name
+          phases {
+            phaseType
+            ... on EstimatePhase {
+              stages {
+                id
+              }
+            }
+          }
+          locked
+          organization {
+            id
+            viewerOrganizationUser {
+              id
+            }
+          }
+          summaryPageId
+        }
+        team {
+          id
+          name
+          orgId
+        }
+      }
+    `,
+    timelineEventRef
+  )
   const {meeting, team} = timelineEvent
-  const {id: meetingId, name: meetingName, commentCount, storyCount, locked, organization} = meeting
+  const {
+    id: meetingId,
+    name: meetingName,
+    commentCount,
+    storyCount,
+    locked,
+    organization,
+    summaryPageId
+  } = meeting
   const {name: teamName} = team
   const {id: orgId, viewerOrganizationUser} = organization
   const canUpgrade = !!viewerOrganizationUser
 
   const atmosphere = useAtmosphere()
   const onUpgrade = () => {
-    SendClientSegmentEventMutation(atmosphere, 'Upgrade CTA Clicked', {
+    SendClientSideEvent(atmosphere, 'Upgrade CTA Clicked', {
       upgradeCTALocation: 'timelineHistoryLock',
       upgradeTier: 'team',
       meetingId
     })
   }
-
+  const summaryURL = summaryPageId
+    ? `/pages/${GQLID.fromKey(summaryPageId)[0]}`
+    : `/new-summary/${meetingId}`
   return (
     <TimelineEventCard
       IconSVG={locked && canUpgrade ? undefined : <CardsSVG />}
@@ -72,7 +118,7 @@ const TimelineEventPokerComplete = (props: Props) => {
           <>
             <Link to={`/meet/${meetingId}/estimate/1`}>See the estimates</Link>
             {' in your meeting or '}
-            <Link to={`/new-summary/${meetingId}`}>review a summary</Link>
+            <Link to={summaryURL}>review a summary</Link>
           </>
         )}
       </TimelineEventBody>
@@ -80,37 +126,4 @@ const TimelineEventPokerComplete = (props: Props) => {
   )
 }
 
-export default createFragmentContainer(TimelineEventPokerComplete, {
-  timelineEvent: graphql`
-    fragment TimelineEventPokerComplete_timelineEvent on TimelineEventPokerComplete {
-      ...TimelineEventCard_timelineEvent
-      id
-      meeting {
-        id
-        commentCount
-        storyCount
-        name
-        phases {
-          phaseType
-          ... on EstimatePhase {
-            stages {
-              id
-            }
-          }
-        }
-        locked
-        organization {
-          id
-          viewerOrganizationUser {
-            id
-          }
-        }
-      }
-      team {
-        id
-        name
-        orgId
-      }
-    }
-  `
-})
+export default TimelineEventPokerComplete

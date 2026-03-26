@@ -1,9 +1,9 @@
-import * as Sentry from '@sentry/browser'
-import React, {Component, ErrorInfo, ReactNode} from 'react'
-import Atmosphere from '~/Atmosphere'
+import {datadogRum} from '@datadog/browser-rum'
+import {Component, type ErrorInfo, type ReactNode} from 'react'
+import type Atmosphere from '~/Atmosphere'
 import useAtmosphere from '~/hooks/useAtmosphere'
-import SendClientSegmentEventMutation from '~/mutations/SendClientSegmentEventMutation'
-import {isOldBrowserError} from '../utils/isOldBrowserError'
+import SendClientSideEvent from '~/utils/SendClientSideEvent'
+import {isIgnoredError, isNotSignedInError} from '../utils/errorFilters'
 import ErrorComponent from './ErrorComponent/ErrorComponent'
 
 interface Props {
@@ -15,7 +15,7 @@ interface State {
   error?: Error
   errorInfo?: ErrorInfo
   eventId?: string
-  isOldBrowserErr: boolean
+  isIgnoredError: boolean
 }
 
 class ErrorBoundary extends Component<Props & {atmosphere: Atmosphere}, State> {
@@ -23,39 +23,35 @@ class ErrorBoundary extends Component<Props & {atmosphere: Atmosphere}, State> {
     error: undefined,
     errorInfo: undefined,
     eventId: undefined,
-    isOldBrowserErr: false
+    isIgnoredError: false
   }
 
   componentDidUpdate() {
-    const {error, isOldBrowserErr} = this.state
-    if (!error || isOldBrowserErr) return
+    const {error, isIgnoredError} = this.state
+    if (!error || isIgnoredError) return
     const {atmosphere} = this.props
-    SendClientSegmentEventMutation(atmosphere, 'Fatal Error')
+    SendClientSideEvent(atmosphere, 'Fatal Error')
   }
 
   componentDidCatch(error: Error, errorInfo: ErrorInfo) {
     const {atmosphere} = this.props
+    if (isNotSignedInError(error)) {
+      atmosphere.invalidateSession('Not signed in')
+    }
     const {viewerId} = atmosphere
     const store = atmosphere.getStore()
     const email = (store?.getSource?.().get?.(viewerId) as any)?.email ?? ''
-    const isOldBrowserErr = isOldBrowserError(error.message)
-    if (viewerId) {
-      Sentry.configureScope((scope) => {
-        scope.setUser({email, id: viewerId})
-      })
-    }
-    // Catch errors in any components below and re-render with error message
-    Sentry.withScope((scope) => {
-      scope.setExtras(errorInfo as any)
-      scope.setLevel('fatal')
-      const eventId = Sentry.captureException(error)
-      this.setState({
-        error,
-        errorInfo,
-        eventId,
-        isOldBrowserErr
-      })
+    const ignoredError = isIgnoredError(error)
+    const eventId = crypto.randomUUID()
+    this.setState({
+      error,
+      errorInfo,
+      eventId,
+      isIgnoredError: ignoredError
     })
+
+    const {componentStack} = errorInfo
+    datadogRum.addError(error, {viewerId, email, componentStack, eventId})
   }
 
   render() {

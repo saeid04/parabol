@@ -1,11 +1,10 @@
 import styled from '@emotion/styled'
 import graphql from 'babel-plugin-relay/macro'
-import React from 'react'
-import {createFragmentContainer} from 'react-relay'
+import {useFragment} from 'react-relay'
+import {useNavigate} from 'react-router'
+import type {InvitationLinkErrorExpired_massInvitation$key} from '../__generated__/InvitationLinkErrorExpired_massInvitation.graphql'
 import useDocumentTitle from '../hooks/useDocumentTitle'
-import useRouter from '../hooks/useRouter'
 import hasToken from '../utils/hasToken'
-import {InvitationLinkErrorExpired_massInvitation} from '../__generated__/InvitationLinkErrorExpired_massInvitation.graphql'
 import DialogContent from './DialogContent'
 import DialogTitle from './DialogTitle'
 import FlatPrimaryButton from './FlatPrimaryButton'
@@ -13,7 +12,7 @@ import InvitationDialogCopy from './InvitationDialogCopy'
 import InviteDialog from './InviteDialog'
 
 interface Props {
-  massInvitation: InvitationLinkErrorExpired_massInvitation
+  massInvitation: InvitationLinkErrorExpired_massInvitation$key
 }
 
 const TeamName = styled('span')({
@@ -28,11 +27,20 @@ const DialogActions = styled('div')({
 })
 
 const InvitationLinkErrorExpired = (props: Props) => {
-  const {massInvitation} = props
+  const {massInvitation: massInvitationRef} = props
+  const massInvitation = useFragment(
+    graphql`
+      fragment InvitationLinkErrorExpired_massInvitation on MassInvitationPayload {
+        teamName
+        teamId
+      }
+    `,
+    massInvitationRef
+  )
   const {teamName} = massInvitation
   useDocumentTitle(`Token Expired | Invitation Link`, 'Invitation Link')
 
-  const {history} = useRouter()
+  const navigate = useNavigate()
 
   return (
     <InviteDialog>
@@ -47,12 +55,12 @@ const InvitationLinkErrorExpired = (props: Props) => {
         <DialogActions>
           {hasToken() ? (
             <>
-              <FlatPrimaryButton onClick={() => history.push('/meetings')} size='medium'>
+              <FlatPrimaryButton onClick={() => navigate('/meetings')} size='medium'>
                 Go to Dashboard
               </FlatPrimaryButton>
             </>
           ) : (
-            <FlatPrimaryButton onClick={() => history.push('/')} size='medium'>
+            <FlatPrimaryButton onClick={() => navigate('/')} size='medium'>
               Sign In
             </FlatPrimaryButton>
           )}
@@ -62,11 +70,4 @@ const InvitationLinkErrorExpired = (props: Props) => {
   )
 }
 
-export default createFragmentContainer(InvitationLinkErrorExpired, {
-  massInvitation: graphql`
-    fragment InvitationLinkErrorExpired_massInvitation on MassInvitationPayload {
-      teamName
-      teamId
-    }
-  `
-})
+export default InvitationLinkErrorExpired

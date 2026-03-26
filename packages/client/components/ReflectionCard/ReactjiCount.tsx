@@ -1,21 +1,16 @@
 import styled from '@emotion/styled'
 import graphql from 'babel-plugin-relay/macro'
-import data from 'emoji-mart/data/apple.json'
-import {uncompress} from 'emoji-mart/dist-modern/utils/data.js'
-import {unifiedToNative} from 'emoji-mart/dist-modern/utils/index.js'
-import React from 'react'
 import {useFragment} from 'react-relay'
+import type {ReactjiCount_reactji$key} from '~/__generated__/ReactjiCount_reactji.graphql'
 import PlainButton from '~/components/PlainButton/PlainButton'
 import {TransitionStatus} from '~/hooks/useTransition'
 import {PALETTE} from '~/styles/paletteV3'
 import {BezierCurve, Times} from '~/types/constEnums'
-import {ReactjiCount_reactji$key} from '~/__generated__/ReactjiCount_reactji.graphql'
 import {MenuPosition} from '../../hooks/useCoords'
 import useTooltip from '../../hooks/useTooltip'
 import ReactjiId from '../../shared/gqlIds/ReactjiId'
+import getReactji from '../../utils/getReactji'
 import EmojiUsersReaction from './EmojiUsersReaction'
-
-uncompress(data)
 
 const Parent = styled('div')<{status: TransitionStatus}>(({status}) => ({
   height: status === TransitionStatus.MOUNTED || status === TransitionStatus.EXITING ? 0 : 24,
@@ -65,7 +60,9 @@ const ReactjiCount = (props: Props) => {
   const {onToggle, reactjiRef, status, onTransitionEnd} = props
   const {tooltipPortal, openTooltip, closeTooltip, originRef} = useTooltip<HTMLButtonElement>(
     MenuPosition.UPPER_CENTER,
-    {delay: Times.SHOW_REACTJI_USERS_DELAY}
+    {
+      delay: Times.SHOW_REACTJI_USERS_DELAY
+    }
   )
   const reactji = useFragment(
     graphql`
@@ -82,11 +79,9 @@ const ReactjiCount = (props: Props) => {
   if (!reactji) return null
   const {count, id, isViewerReactji} = reactji
   const reactjiObj = ReactjiId.split(id)
-  const name = reactjiObj.name as keyof typeof emojis
-  const {emojis} = data
-  const emojiData = emojis[name] as any
-  const unified = emojiData?.unified ?? ''
-  const unicode = unifiedToNative(unified) || ''
+  const name = reactjiObj.name
+
+  const {native, reactjiName} = getReactji(name)
   const onClick = () => {
     onToggle(name)
   }
@@ -100,11 +95,9 @@ const ReactjiCount = (props: Props) => {
         onMouseLeave={closeTooltip}
         ref={originRef}
       >
-        <Emoji>{unicode}</Emoji>
+        <Emoji>{native}</Emoji>
         <Count>{count}</Count>
-        {tooltipPortal(
-          <EmojiUsersReaction reactjiRef={reactji} reactjiShortName={emojiData?.short_names[0]} />
-        )}
+        {tooltipPortal(<EmojiUsersReaction reactjiRef={reactji} reactjiName={reactjiName} />)}
       </Inner>
     </Parent>
   )

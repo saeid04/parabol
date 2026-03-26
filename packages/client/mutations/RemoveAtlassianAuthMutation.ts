@@ -1,7 +1,7 @@
 import graphql from 'babel-plugin-relay/macro'
 import {commitMutation} from 'react-relay'
-import {StandardMutation} from '../types/relayMutations'
-import {RemoveAtlassianAuthMutation as TRemoveAtlassianAuthMutation} from '../__generated__/RemoveAtlassianAuthMutation.graphql'
+import type {RemoveAtlassianAuthMutation as TRemoveAtlassianAuthMutation} from '../__generated__/RemoveAtlassianAuthMutation.graphql'
+import type {StandardMutation} from '../types/relayMutations'
 
 graphql`
   fragment RemoveAtlassianAuthMutation_team on RemoveAtlassianAuthPayload {

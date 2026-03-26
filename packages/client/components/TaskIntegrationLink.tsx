@@ -1,41 +1,40 @@
-import styled from '@emotion/styled'
 import graphql from 'babel-plugin-relay/macro'
-import React, {ReactNode} from 'react'
-import {createFragmentContainer} from 'react-relay'
+import type {ReactNode} from 'react'
+import {useFragment} from 'react-relay'
+import {twMerge} from 'tailwind-merge'
+import {getLinearRepoName} from '~/utils/getLinearRepoName'
 import {parseWebPath} from '~/utils/parseWebPath'
-import {PALETTE} from '../styles/paletteV3'
-import {Card} from '../types/constEnums'
-import {TaskIntegrationLink_integration} from '../__generated__/TaskIntegrationLink_integration.graphql'
+import type {TaskIntegrationLink_integration$key} from '../__generated__/TaskIntegrationLink_integration.graphql'
 import JiraIssueLink from './JiraIssueLink'
 
-const StyledLink = styled('a')({
-  color: PALETTE.SLATE_700,
-  display: 'block',
-  fontSize: Card.FONT_SIZE,
-  lineHeight: '1.25rem',
-  padding: `0 ${Card.PADDING}`,
-  textDecoration: 'underline',
-  '&:hover,:focus': {
-    textDecoration: 'underline'
-  }
-})
-
 interface Props {
-  integration: TaskIntegrationLink_integration | null
-  dataCy: string
+  integration: TaskIntegrationLink_integration$key | null
   className?: string
   children?: ReactNode
   showJiraLabelPrefix?: boolean
 }
 
 const TaskIntegrationLink = (props: Props) => {
-  const {integration, dataCy, className, children, showJiraLabelPrefix} = props
+  const {integration: integrationRef, className, children, showJiraLabelPrefix} = props
+  const integration = useFragment(
+    graphql`
+      fragment TaskIntegrationLink_integration on TaskIntegration {
+        __typename
+        ...TaskIntegrationLinkIntegrationGitHub @relay(mask: false)
+        ...TaskIntegrationLinkIntegrationJira @relay(mask: false)
+        ...TaskIntegrationLinkIntegrationJiraServer @relay(mask: false)
+        ...TaskIntegrationLinkIntegrationGitLab @relay(mask: false)
+        ...TaskIntegrationLinkIntegrationAzure @relay(mask: false)
+        ...TaskIntegrationLinkIntegrationLinear @relay(mask: false)
+      }
+    `,
+    integrationRef
+  )
   if (!integration) return null
   if (integration.__typename === 'JiraIssue') {
     const {issueKey, projectKey, cloudName} = integration
     return (
       <JiraIssueLink
-        dataCy={`${dataCy}-jira-issue-link`}
         issueKey={issueKey}
         projectKey={projectKey}
         cloudName={cloudName}
@@ -48,16 +47,19 @@ const TaskIntegrationLink = (props: Props) => {
   } else if (integration.__typename === 'JiraServerIssue') {
     const {url, issueKey, projectKey} = integration
     return (
-      <StyledLink
+      <a
         href={url}
         rel='noopener noreferrer'
         target='_blank'
-        title={`Jira Server Issue #${issueKey} on ${projectKey}`}
-        className={className}
+        title={`Jira Data Center Issue #${issueKey} on ${projectKey}`}
+        className={twMerge(
+          'block px-4 text-[14px] text-slate-700 leading-5 underline hover:underline focus:underline',
+          className
+        )}
       >
         {`Issue #${issueKey}`}
         {children}
-      </StyledLink>
+      </a>
     )
   } else if (integration.__typename === '_xGitHubIssue') {
     const {repository, number} = integration
@@ -67,46 +69,78 @@ const TaskIntegrationLink = (props: Props) => {
         ? 'https://github.com/ParabolInc/parabol'
         : `https://www.github.com/${nameWithOwner}/issues/${number}`
     return (
-      <StyledLink
+      <a
         href={href}
         rel='noopener noreferrer'
         target='_blank'
         title={`GitHub Issue #${number} on ${nameWithOwner}`}
-        className={className}
+        className={twMerge(
+          'block px-4 text-[14px] text-slate-700 leading-5 underline hover:underline focus:underline',
+          className
+        )}
       >
         {`Issue #${number}`}
         {children}
-      </StyledLink>
+      </a>
     )
   } else if (integration.__typename === '_xGitLabIssue') {
     const {webPath, iid, webUrl} = integration
     const {fullPath} = parseWebPath(webPath)
     return (
-      <StyledLink
+      <a
         href={webUrl}
         rel='noopener noreferrer'
         target='_blank'
         title={`GitLab Issue #${iid} on ${fullPath}`}
-        className={className}
+        className={twMerge(
+          'focus:underline, block px-4 text-[14px] text-slate-700 leading-5 underline hover:underline',
+          className
+        )}
       >
         {`Issue #${iid}`}
         {children}
-      </StyledLink>
+      </a>
     )
   } else if (integration.__typename === 'AzureDevOpsWorkItem') {
     const {id, teamProject, url, type} = integration
     const integrationType = type.includes('Issue') ? 'Issue' : type
     return (
-      <StyledLink
+      <a
         href={url}
         rel='noopener noreferrer'
         target='_blank'
         title={`Azure Item #${id} on ${teamProject}`}
-        className={className}
+        className={twMerge(
+          'block px-4 text-[14px] text-slate-700 leading-5 underline hover:underline focus:underline',
+          className
+        )}
       >
         {`${integrationType} #${id}`}
         {children}
-      </StyledLink>
+      </a>
+    )
+  } else if (integration.__typename === '_xLinearIssue') {
+    const {
+      identifier,
+      team: {name: teamName},
+      linearProject,
+      url
+    } = integration
+    const nameWithTeam = getLinearRepoName(linearProject, teamName)
+    return (
+      <a
+        href={url}
+        rel='noopener noreferrer'
+        target='_blank'
+        title={`Linear Issue #${identifier} on ${nameWithTeam}`}
+        className={twMerge(
+          'block px-4 text-[14px] text-slate-700 leading-5 underline hover:underline focus:underline',
+          className
+        )}
+      >
+        {`Issue #${identifier}`}
+        {children}
+      </a>
     )
   }
   return null
@@ -155,15 +189,18 @@ graphql`
   }
 `
 
-export default createFragmentContainer(TaskIntegrationLink, {
-  integration: graphql`
-    fragment TaskIntegrationLink_integration on TaskIntegration {
-      __typename
-      ...TaskIntegrationLinkIntegrationGitHub @relay(mask: false)
-      ...TaskIntegrationLinkIntegrationJira @relay(mask: false)
-      ...TaskIntegrationLinkIntegrationJiraServer @relay(mask: false)
-      ...TaskIntegrationLinkIntegrationGitLab @relay(mask: false)
-      ...TaskIntegrationLinkIntegrationAzure @relay(mask: false)
+graphql`
+  fragment TaskIntegrationLinkIntegrationLinear on _xLinearIssue {
+    id
+    identifier
+    linearProject: project {
+      name
     }
-  `
-})
+    team {
+      name
+    }
+    url
+  }
+`
+
+export default TaskIntegrationLink

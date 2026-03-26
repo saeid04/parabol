@@ -1,54 +1,55 @@
-import getRethink from '../../../database/rethinkDriver'
-import Organization from '../../../database/types/Organization'
-import User from '../../../database/types/User'
-import updateTeamByOrgId from '../../../postgres/queries/updateTeamByOrgId'
+import type {DataLoaderInstance} from '../../../dataloader/RootDataLoader'
+import getKysely from '../../../postgres/getKysely'
 import {analytics} from '../../../utils/analytics/analytics'
-import setTierForOrgUsers from '../../../utils/setTierForOrgUsers'
-import setUserTierForOrgId from '../../../utils/setUserTierForOrgId'
+import {identifyHighestUserTierForOrgId} from '../../../utils/identifyHighestUserTierForOrgId'
+import {Logger} from '../../../utils/Logger'
 import {getStripeManager} from '../../../utils/stripe'
+import type {ReasonToDowngradeEnum} from '../../public/resolverTypes'
 
 const resolveDowngradeToStarter = async (
   orgId: string,
   stripeSubscriptionId: string,
-  userId: string
+  user: {id: string; email: string},
+  dataLoader: DataLoaderInstance,
+  reasonsForLeaving?: ReasonToDowngradeEnum[],
+  otherTool?: string
 ) => {
   const now = new Date()
   const manager = getStripeManager()
-  const r = await getRethink()
+  const pg = getKysely()
   try {
     await manager.deleteSubscription(stripeSubscriptionId)
   } catch (e) {
-    console.log(e)
+    Logger.log(e)
   }
 
-  const [org, user] = await Promise.all([
-    r.table('Organization').get(orgId).run() as unknown as Organization,
-    r.table('User').get(userId).run() as unknown as User,
-    r({
-      orgUpdate: r.table('Organization').get(orgId).update({
+  const [org] = await Promise.all([
+    dataLoader.get('organizations').loadNonNull(orgId),
+    pg
+      .updateTable('Organization')
+      .set({
         tier: 'starter',
         periodEnd: now,
-        stripeSubscriptionId: null,
-        updatedAt: now
+        stripeSubscriptionId: null
       })
-    }).run(),
-    updateTeamByOrgId(
-      {
-        tier: 'starter',
-        isPaid: true
-      },
-      orgId
-    )
+      .where('id', '=', orgId)
+      .execute(),
+    pg
+      .updateTable('SAML')
+      .set({metadata: null, metadataURL: null, lastUpdatedBy: user.id})
+      .where('orgId', '=', orgId)
+      .execute()
   ])
-
-  await Promise.all([setUserTierForOrgId(orgId), setTierForOrgUsers(orgId)])
-  analytics.organizationDowngraded(userId, {
+  dataLoader.get('organizations').clear(orgId)
+  await identifyHighestUserTierForOrgId(orgId, dataLoader)
+  analytics.organizationDowngraded(user, {
     orgId,
-    domain: org.activeDomain,
+    domain: org.activeDomain || undefined,
     orgName: org.name,
     oldTier: 'team',
     newTier: 'starter',
-    billingLeaderEmail: user.email
+    reasonsForLeaving,
+    otherTool
   })
 }
 

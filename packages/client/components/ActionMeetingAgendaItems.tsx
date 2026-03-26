@@ -1,17 +1,17 @@
 import styled from '@emotion/styled'
 import graphql from 'babel-plugin-relay/macro'
-import React, {useRef} from 'react'
-import {createFragmentContainer} from 'react-relay'
+import {useRef} from 'react'
+import {useFragment} from 'react-relay'
+import type {ActionMeetingAgendaItems_meeting$key} from '~/__generated__/ActionMeetingAgendaItems_meeting.graphql'
 import useBreakpoint from '~/hooks/useBreakpoint'
-import {ActionMeetingAgendaItems_meeting} from '~/__generated__/ActionMeetingAgendaItems_meeting.graphql'
 import EditorHelpModalContainer from '../containers/EditorHelpModalContainer/EditorHelpModalContainer'
 import MeetingCopy from '../modules/meeting/components/MeetingCopy/MeetingCopy'
 import MeetingPhaseHeading from '../modules/meeting/components/MeetingPhaseHeading/MeetingPhaseHeading'
 import {Breakpoint} from '../types/constEnums'
 import {phaseLabelLookup} from '../utils/meetings/lookups'
-import {ActionMeetingPhaseProps} from './ActionMeeting'
+import type {ActionMeetingPhaseProps} from './ActionMeeting'
 import Avatar from './Avatar/Avatar'
-import {DiscussionThreadables, Header as DiscussionThreadHeader} from './DiscussionThreadList'
+import {type DiscussionThreadables, Header as DiscussionThreadHeader} from './DiscussionThreadList'
 import DiscussionThreadListEmptyState from './DiscussionThreadListEmptyState'
 import DiscussionThreadRoot from './DiscussionThreadRoot'
 import MeetingContent from './MeetingContent'
@@ -19,9 +19,10 @@ import MeetingHeaderAndPhase from './MeetingHeaderAndPhase'
 import MeetingTopBar from './MeetingTopBar'
 import PhaseHeaderTitle from './PhaseHeaderTitle'
 import PhaseWrapper from './PhaseWrapper'
+import StageTimerDisplay from './StageTimerDisplay'
 
 interface Props extends ActionMeetingPhaseProps {
-  meeting: ActionMeetingAgendaItems_meeting
+  meeting: ActionMeetingAgendaItems_meeting$key
 }
 
 const AgendaVerbatim = styled('div')({
@@ -53,7 +54,27 @@ const ThreadColumn = styled('div')<{isDesktop: boolean}>(({isDesktop}) => ({
 }))
 
 const ActionMeetingAgendaItems = (props: Props) => {
-  const {avatarGroup, toggleSidebar, meeting} = props
+  const {avatarGroup, toggleSidebar, meeting: meetingRef} = props
+  const meeting = useFragment(
+    graphql`
+      fragment ActionMeetingAgendaItems_meeting on ActionMeeting {
+        ...StageTimerDisplay_meeting
+        ...StageTimerControl_meeting
+        showSidebar
+        endedAt
+        facilitatorUserId
+        phases {
+          stages {
+            ...ActionMeetingAgendaItemsStage @relay(mask: false)
+          }
+        }
+        localStage {
+          ...ActionMeetingAgendaItemsStage @relay(mask: false)
+        }
+      }
+    `,
+    meetingRef
+  )
   const {showSidebar, endedAt, localStage} = meeting
   const {agendaItem, discussionId} = localStage
   const isDesktop = useBreakpoint(Breakpoint.SINGLE_REFLECTION_COLUMN)
@@ -61,7 +82,8 @@ const ActionMeetingAgendaItems = (props: Props) => {
   // optimistic updater could remove the agenda item
   if (!agendaItem) return null
   const {content, teamMember} = agendaItem
-  const {picture, preferredName} = teamMember
+  const {user} = teamMember
+  const {picture, preferredName} = user
   const allowedThreadables: DiscussionThreadables[] = endedAt ? [] : ['comment', 'task', 'poll']
   return (
     <MeetingContent ref={meetingContentRef}>
@@ -75,10 +97,11 @@ const ActionMeetingAgendaItems = (props: Props) => {
         </MeetingTopBar>
         <PhaseWrapper>
           <AgendaVerbatim>
-            <Avatar picture={picture} size={64} />
+            <Avatar picture={picture} className={'h-16 w-16'} />
             <StyledHeading>{content}</StyledHeading>
           </AgendaVerbatim>
           <StyledCopy>{`${preferredName}, what do you need?`}</StyledCopy>
+          <StageTimerDisplay meeting={meeting} />
           <ThreadColumn isDesktop={isDesktop}>
             <DiscussionThreadRoot
               meetingContentRef={meetingContentRef}
@@ -108,27 +131,13 @@ graphql`
     agendaItem {
       content
       teamMember {
-        picture
-        preferredName
+        user {
+          picture
+          preferredName
+        }
       }
     }
   }
 `
 
-export default createFragmentContainer(ActionMeetingAgendaItems, {
-  meeting: graphql`
-    fragment ActionMeetingAgendaItems_meeting on ActionMeeting {
-      showSidebar
-      endedAt
-      facilitatorUserId
-      phases {
-        stages {
-          ...ActionMeetingAgendaItemsStage @relay(mask: false)
-        }
-      }
-      localStage {
-        ...ActionMeetingAgendaItemsStage @relay(mask: false)
-      }
-    }
-  `
-})
+export default ActionMeetingAgendaItems

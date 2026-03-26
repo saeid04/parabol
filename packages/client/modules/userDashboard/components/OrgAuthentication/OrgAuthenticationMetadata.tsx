@@ -1,72 +1,205 @@
-import styled from '@emotion/styled'
-import React, {useState} from 'react'
-import DialogTitle from '../../../../components/DialogTitle'
-import BasicTextArea from '../../../../components/InputField/BasicTextArea'
+import UploadFileIcon from '@mui/icons-material/UploadFile'
+import graphql from 'babel-plugin-relay/macro'
+import type * as React from 'react'
+import {useRef, useState} from 'react'
+import {commitLocalUpdate, useFragment} from 'react-relay'
+import {Link} from 'react-router'
+import type {OrgAuthenticationMetadata_saml$key} from '../../../../__generated__/OrgAuthenticationMetadata_saml.graphql'
+import orgAuthenticationMetadataQuery, {
+  type OrgAuthenticationMetadataQuery
+} from '../../../../__generated__/OrgAuthenticationMetadataQuery.graphql'
+import BasicInput from '../../../../components/InputField/BasicInput'
 import SecondaryButton from '../../../../components/SecondaryButton'
-import {PALETTE} from '../../../../styles/paletteV3'
+import useAtmosphere from '../../../../hooks/useAtmosphere'
+import useMutationProps from '../../../../hooks/useMutationProps'
+import {useUploadIdPMetadata} from '../../../../mutations/useUploadIdPMetadataMutation'
+import {Button} from '../../../../ui/Button/Button'
+import getOAuthPopupFeatures from '../../../../utils/getOAuthPopupFeatures'
+import loginSSO from '../../../../utils/loginSSO'
 
-const Section = styled('div')({
-  padding: '24px 16px 8px 28px'
-})
-
-const InputSection = styled('div')({
-  display: 'flex',
-  padding: '0 16px 8px 16px'
-})
-
-const SubTitle = styled(DialogTitle)<{disabled: boolean}>(({disabled}) => ({
-  color: disabled ? PALETTE.SLATE_600 : PALETTE.SLATE_700,
-  fontSize: '16px',
-  padding: 0
-}))
-
-const Label = styled('div')<{disabled: boolean}>(({disabled}) => ({
-  color: disabled ? PALETTE.SLATE_600 : PALETTE.SLATE_700,
-  fontSize: '14px',
-  display: 'flex',
-  alignItems: 'center'
-}))
-
-const Container = styled('div')({
-  marginBottom: '16px'
-})
-
-const ButtonSection = styled('div')({
-  display: 'flex',
-  justifyContent: 'flex-end',
-  padding: '0px 16px 0px 16px',
-  backgroundColor: PALETTE.WHITE
-})
+graphql`
+  query OrgAuthenticationMetadataQuery($metadataURL: String!, $domain: String!) {
+    viewer {
+      parseSAMLMetadata(metadataURL: $metadataURL, domain: $domain) {
+        ... on ErrorPayload {
+          error {
+            message
+          }
+        }
+        ... on ParseSAMLMetadataSuccess {
+          url
+        }
+      }
+    }
+  }
+`
 
 interface Props {
-  disabled: boolean
+  samlRef: OrgAuthenticationMetadata_saml$key | null
+  isOrgAdmin: boolean
 }
 
 const OrgAuthenticationMetadata = (props: Props) => {
-  const [metadata, setMetadata] = useState('')
-  const {disabled} = props
+  const {samlRef, isOrgAdmin} = props
+  const saml = useFragment(
+    graphql`
+      fragment OrgAuthenticationMetadata_saml on SAML {
+        id
+        metadataURL
+        orgId
+      }
+    `,
+    samlRef
+  )
+  const atmosphere = useAtmosphere()
+  const [metadataURL, setMetadataURL] = useState(saml?.metadataURL ?? '')
+  const isMetadataURLSaved = saml ? saml.metadataURL === metadataURL : false
+  const {error, onCompleted, onError, submitMutation, submitting} = useMutationProps()
+  const submitMetadataURL = async () => {
+    if (submitting || !metadataURL) return
+    submitMutation()
+    const domain = saml?.id
+    if (!domain) {
+      onError(new Error('Domain not provided. Please contact customer support'))
+    }
+
+    // Open popup before the first async call to prevent popup blockers
+    const optimisticPopup = window.open(
+      '',
+      'SSO',
+      getOAuthPopupFeatures({width: 385, height: 576, top: 64})
+    )
+
+    // Get the Sign-on URL, which includes metadataURL in the RelayState
+    const res = await atmosphere.fetchQuery<OrgAuthenticationMetadataQuery>(
+      orgAuthenticationMetadataQuery,
+      {metadataURL, domain}
+    )
+    if (!res || res instanceof Error) {
+      onError(new Error('Could not reach server. Please try again'))
+      optimisticPopup?.close()
+      return
+    }
+    const {viewer} = res
+    const {parseSAMLMetadata} = viewer
+    const {error} = parseSAMLMetadata
+    if (error) {
+      onError(new Error(error.message))
+      optimisticPopup?.close()
+      return
+    }
+    const url = parseSAMLMetadata.url!
+
+    // Attempt logging in to test for errors
+    const response = await loginSSO(url)
+    if ('error' in response) {
+      onError(new Error(response.error || 'Error logging in'))
+      return
+    }
+    onCompleted()
+    commitLocalUpdate(atmosphere, (store) => {
+      store.get(saml!.id)?.setValue(metadataURL, 'metadataURL')
+    })
+    atmosphere.eventEmitter.emit('addSnackbar', {
+      message: 'SSO Configured Successfully',
+      autoDismiss: 5,
+      key: 'submitMetadata'
+    })
+  }
+
+  const uploadInputRef = useRef<HTMLInputElement>(null)
+  const onUploadClick = () => {
+    uploadInputRef.current?.click()
+  }
+  const [commit] = useUploadIdPMetadata()
+  const uploadXML = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const {files} = e.currentTarget
+    const file = files?.[0]
+    if (!file || !saml?.orgId) return
+    commit({
+      variables: {orgId: saml.orgId},
+      uploadables: {file: file},
+      onCompleted: (res) => {
+        const {uploadIdPMetadata} = res
+        const {error, url} = uploadIdPMetadata
+        const message = error?.message
+        if (message) {
+          atmosphere.eventEmitter.emit('addSnackbar', {
+            key: 'errorUploadIdPtMetadata',
+            message,
+            autoDismiss: 5
+          })
+          return
+        }
+        setMetadataURL(url!)
+      }
+    })
+  }
+
+  const orgId = saml?.orgId
 
   return (
-    <Container>
-      <Section>
-        <SubTitle disabled={disabled}>Metadata</SubTitle>
-        <Label disabled={disabled}>Paste metadata from your identity provider</Label>
-      </Section>
-      <InputSection>
-        <BasicTextArea
-          disabled={disabled}
-          name='metadata'
-          placeholder='Paste your metadata here'
-          value={metadata}
-          onChange={(e) => setMetadata(e.target.value)}
-        />
-      </InputSection>
-      <ButtonSection>
-        <SecondaryButton disabled={disabled} size='medium'>
-          Update Metadata
-        </SecondaryButton>
-      </ButtonSection>
-    </Container>
+    <>
+      {!isOrgAdmin && (
+        <div className='px-6 pb-3 text-slate-700 text-sm'>
+          {orgId ? (
+            <Link
+              className='font-semibold text-sky-500 hover:text-sky-600'
+              to={`/me/organizations/${orgId}/members`}
+            >
+              Contact an Org Admin
+            </Link>
+          ) : (
+            'Contact an Admin'
+          )}
+          {' to update the metadata'}
+        </div>
+      )}
+      <div className={!isOrgAdmin ? 'pointer-events-none select-none opacity-50' : ''}>
+        <div className='px-6 pb-3'>
+          <div className='font-semibold text-base text-slate-700 leading-6'>Metadata URL</div>
+          <div className='text-slate-700 text-sm'>
+            Paste the metadata URL from your identity provider
+          </div>
+          <BasicInput
+            name='metadataURL'
+            placeholder={`https://idp.example.com/app/sso/saml/metadata`}
+            value={metadataURL}
+            onChange={(e) => setMetadataURL(e.target.value)}
+            disabled={!isOrgAdmin}
+            error={undefined}
+          />
+          <Button
+            className='px-0'
+            variant='ghost'
+            shape='pill'
+            size='sm'
+            onClick={onUploadClick}
+            disabled={!isOrgAdmin}
+          >
+            <UploadFileIcon className={'text-xl'} />
+            Click to upload XML File
+          </Button>
+          <input
+            className='hidden'
+            accept='.xml'
+            onChange={uploadXML}
+            type='file'
+            ref={uploadInputRef}
+          />
+        </div>
+        <div className={'px-6 text-tomato-500 empty:hidden'}>{error?.message}</div>
+        <div className='flex justify-end px-6 pb-8'>
+          <SecondaryButton
+            size='medium'
+            onClick={submitMetadataURL}
+            disabled={!isOrgAdmin || submitting || isMetadataURLSaved}
+          >
+            Update Metadata
+          </SecondaryButton>
+        </div>
+      </div>
+    </>
   )
 }
 

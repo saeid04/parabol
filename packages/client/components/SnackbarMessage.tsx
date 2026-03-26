@@ -1,12 +1,12 @@
 import styled from '@emotion/styled'
 import {Close} from '@mui/icons-material'
-import React, {useEffect} from 'react'
+import {useEffect} from 'react'
 import {TransitionStatus} from '../hooks/useTransition'
 import {DECELERATE} from '../styles/animation'
 import {snackbarShadow} from '../styles/elevation'
 import {PALETTE} from '../styles/paletteV3'
 import {Radius, ZIndex} from '../types/constEnums'
-import {SnackAction} from './Snackbar'
+import type {SnackAction} from './Snackbar'
 import SnackbarMessageAction from './SnackbarMessageAction'
 
 interface Props {
@@ -20,10 +20,6 @@ interface Props {
   onMouseLeave: () => void
   showDismissButton?: boolean
 }
-
-const Space = styled('div')({
-  paddingBottom: 8
-})
 
 const Text = styled('div')({
   color: '#FFFFFF',
@@ -91,7 +87,7 @@ const SnackbarMessage = (props: Props) => {
   } = props
   useTransitionEnd(300, status, onTransitionEnd)
   return (
-    <Space>
+    <div className='pb-2 print:hidden'>
       <MessageStyles
         status={status}
         onMouseEnter={onMouseEnter}
@@ -107,7 +103,7 @@ const SnackbarMessage = (props: Props) => {
           </DismissButton>
         )}
       </MessageStyles>
-    </Space>
+    </div>
   )
 }
 

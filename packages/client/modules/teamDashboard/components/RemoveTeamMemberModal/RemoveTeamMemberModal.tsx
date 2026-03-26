@@ -1,56 +1,55 @@
-import styled from '@emotion/styled'
 import graphql from 'babel-plugin-relay/macro'
-import React from 'react'
-import {createFragmentContainer} from 'react-relay'
+import {useFragment} from 'react-relay'
 import useAtmosphere from '~/hooks/useAtmosphere'
+import type {RemoveTeamMemberModal_teamMember$key} from '../../../../__generated__/RemoveTeamMemberModal_teamMember.graphql'
 import DialogContainer from '../../../../components/DialogContainer'
 import DialogContent from '../../../../components/DialogContent'
 import DialogTitle from '../../../../components/DialogTitle'
 import IconLabel from '../../../../components/IconLabel'
 import PrimaryButton from '../../../../components/PrimaryButton'
 import RemoveTeamMemberMutation from '../../../../mutations/RemoveTeamMemberMutation'
-import {RemoveTeamMemberModal_teamMember} from '../../../../__generated__/RemoveTeamMemberModal_teamMember.graphql'
-
-const StyledDialogContainer = styled(DialogContainer)({
-  width: 320
-})
-
-const StyledButton = styled(PrimaryButton)({
-  margin: '1.5rem auto 0'
-})
 
 interface Props {
   closePortal: () => void
-  teamMember: RemoveTeamMemberModal_teamMember
+  teamMember: RemoveTeamMemberModal_teamMember$key
 }
 
 const RemoveTeamMemberModal = (props: Props) => {
   const atmosphere = useAtmosphere()
-  const {closePortal, teamMember} = props
-  const {teamMemberId, preferredName} = teamMember
+  const {closePortal, teamMember: teamMemberRef} = props
+  const teamMember = useFragment(
+    graphql`
+      fragment RemoveTeamMemberModal_teamMember on TeamMember {
+        teamMemberId: id
+        user {
+          preferredName
+        }
+      }
+    `,
+    teamMemberRef
+  )
+  const {teamMemberId, user} = teamMember
+  const {preferredName} = user
   const handleClick = () => {
     closePortal()
     RemoveTeamMemberMutation(atmosphere, {teamMemberId})
   }
   return (
-    <StyledDialogContainer>
+    <DialogContainer>
       <DialogTitle>Are you sure?</DialogTitle>
       <DialogContent>
         This will remove {preferredName} from the team.
         <br />
-        <StyledButton size='medium' onClick={handleClick}>
-          <IconLabel icon='arrow_forward' iconAfter label={`Remove ${preferredName}`} />
-        </StyledButton>
+        <PrimaryButton size='medium' className='mx-auto mt-6 mb-0' onClick={handleClick}>
+          <IconLabel
+            icon='arrow_forward'
+            iconAfter
+            label={<div className='break-word whitespace-normal'>Remove {preferredName}</div>}
+          />
+        </PrimaryButton>
       </DialogContent>
-    </StyledDialogContainer>
+    </DialogContainer>
   )
 }
 
-export default createFragmentContainer(RemoveTeamMemberModal, {
-  teamMember: graphql`
-    fragment RemoveTeamMemberModal_teamMember on TeamMember {
-      teamMemberId: id
-      preferredName
-    }
-  `
-})
+export default RemoveTeamMemberModal

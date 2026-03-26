@@ -1,11 +1,8 @@
 import graphql from 'babel-plugin-relay/macro'
 import {commitMutation} from 'react-relay'
-import {StandardMutation} from '../types/relayMutations'
+import type {VoteForPokerStoryMutation as TVoteForPokerStoryMutation} from '../__generated__/VoteForPokerStoryMutation.graphql'
+import type {StandardMutation} from '../types/relayMutations'
 import createProxyRecord from '../utils/relay/createProxyRecord'
-import {
-  VoteForPokerStoryMutation as TVoteForPokerStoryMutation,
-  VoteForPokerStoryMutationResponse
-} from '../__generated__/VoteForPokerStoryMutation.graphql'
 
 graphql`
   fragment VoteForPokerStoryMutation_meeting on VoteForPokerStorySuccess {
@@ -33,7 +30,7 @@ const mutation = graphql`
 `
 
 type Stage = NonNullable<
-  NonNullable<VoteForPokerStoryMutationResponse>['voteForPokerStory']['stage']
+  NonNullable<TVoteForPokerStoryMutation['response']>['voteForPokerStory']['stage']
 >
 
 const VoteForPokerStoryMutation: StandardMutation<TVoteForPokerStoryMutation> = (

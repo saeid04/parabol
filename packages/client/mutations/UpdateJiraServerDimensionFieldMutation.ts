@@ -1,7 +1,7 @@
 import graphql from 'babel-plugin-relay/macro'
 import {commitMutation} from 'react-relay'
-import {StandardMutation} from '../types/relayMutations'
-import {UpdateJiraServerDimensionFieldMutation as TUpdateJiraServerDimensionFieldMutation} from '../__generated__/UpdateJiraServerDimensionFieldMutation.graphql'
+import type {UpdateJiraServerDimensionFieldMutation as TUpdateJiraServerDimensionFieldMutation} from '../__generated__/UpdateJiraServerDimensionFieldMutation.graphql'
+import type {StandardMutation} from '../types/relayMutations'
 
 graphql`
   fragment UpdateJiraServerDimensionFieldMutation_team on UpdateDimensionFieldSuccess {

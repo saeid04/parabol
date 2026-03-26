@@ -1,0 +1,149 @@
+name: Test
+on:
+  push:
+    branches-ignore:
+      - "release-please--**"
+      - "release/v**"
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+env:
+  PARABOL_BUILD_ENV_PATH: docker/images/parabol-ubi/environments/pipeline
+jobs:
+  test:
+    runs-on: ubuntu-8cores
+    timeout-minutes: 12
+    permissions:
+      contents: "read"
+      id-token: "write"
+    services:
+      postgres:
+        image: pgvector/pgvector:0.8.0-pg16
+        # This env variables must be the same in the file PARABOL_BUILD_ENV_PATH
+        env:
+          POSTGRES_PASSWORD: "temppassword"
+          POSTGRES_USER: "tempuser"
+          POSTGRES_DB: "tempdb"
+        ports:
+          - 5432:5432
+      valkey:
+        image: valkey/valkey:9.0-alpine
+        ports:
+          - 6379:6379
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v3
+      - name: Install pnpm
+        uses: pnpm/action-setup@v4
+      - name: Setup Node
+        uses: actions/setup-node@v3
+        with:
+          node-version-file: package.json
+          cache: "pnpm"
+
+      - name: Setup environment variables
+        run: |
+          ACTION_VERSION=$(grep '"version":' package.json | cut -d\" -f4)
+          echo ACTION_VERSION=$ACTION_VERSION >> $GITHUB_ENV
+          echo ACTION_VERSION=$ACTION_VERSION
+
+          NODE_VERSION=$(jq -r -j '.engines.node|ltrimstr("^")' package.json)
+          echo NODE_VERSION=$NODE_VERSION >> $GITHUB_ENV
+          echo NODE_VERSION=$NODE_VERSION
+
+      - name: Get cached node modules
+        id: cache
+        uses: actions/cache@v3
+        with:
+          path: |
+            **/node_modules
+          key: node_modules-${{ runner.arch }}-${{ env.NODE_VERSION }}-${{ hashFiles('pnpm-lock.yaml') }}
+
+      - name: Install node_modules
+        if: steps.cache.outputs.cache-hit != 'true'
+        # pnpm has a bug that resolves git+https to ssh
+        run: |
+          git config --global url."https://github.com/enahum/redux-offline.git".insteadOf git@github.com:enahum/redux-offline.git
+          pnpm install --frozen-lockfile
+
+      - name: Build the DBs
+        run: |
+          cp ${{ env.PARABOL_BUILD_ENV_PATH }} ./.env
+          pnpm kysely migrate:latest
+
+      - name: Build for testing
+        run: pnpm build
+
+      - name: Verify source is clean
+        run: git diff --quiet HEAD || (echo "Changes in generated files detected"; git diff; exit 1)
+
+      - name: Run Predeploy for Testing
+        run: pnpm predeploy
+
+      - name: Start testing server in background
+        uses: JarvusInnovations/background-action@v1
+        with:
+          run: |
+            pnpm start &
+          wait-on: |
+            http://localhost:3000/graphql
+
+      - name: Kysely Codegen
+        run: pnpm pg:generate
+
+      - name: Typecheck
+        run: pnpm typecheck
+
+      - name: Run server tests
+        run: pnpm test:server --reporters=default --reporters=jest-junit
+        env:
+          NODE_TLS_REJECT_UNAUTHORIZED: 0
+          JEST_JUNIT_OUTPUT_DIR: ./test-results/junit/server
+
+      - name: Run client tests
+        run: pnpm test:client --reporters=default --reporters=jest-junit
+        env:
+          JEST_JUNIT_OUTPUT_DIR: ./test-results/junit/client
+      # - name: Set Playwright Version
+      #   run: |
+      #     PLAYWRIGHT_VERSION=$(pnpm --filter integration-tests list @playwright/test | grep @playwright | sed -n 's/^[^ ]* //p' | tr -d '\n')
+      #     echo PLAYWRIGHT_VERSION=$PLAYWRIGHT_VERSION >> $GITHUB_ENV
+      #     echo PLAYWRIGHT_VERSION=$PLAYWRIGHT_VERSION
+      # - name: Cache Playwright Browsers
+      #   id: cache-playwright-browsers
+      #   uses: actions/cache@v3
+      #   with:
+      #     path: ~/.cache/ms-playwright
+      #     key: playwright-${{ runner.arch }}-${{ env.PLAYWRIGHT_VERSION }}
+
+      # - name: Setup Playwright
+      #   if: steps.cache-playwright-browsers.outputs.cache-hit != 'true'
+      #   run: pnpm --filter integration-tests exec playwright install --with-deps
+
+      # - name: Run Playwright Tests
+      #   run: pnpm --filter integration-tests test --reporter list,junit
+      #   env:
+      #     PLAYWRIGHT_JUNIT_OUTPUT_NAME: ./test-results/junit/junit.xml
+
+      - name: Store Artifacts from Failed Tests
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: test-results
+          path: packages/integration-tests/test-results/
+          retention-days: 7
+
+      - name: Run new down migrations
+        run: |
+          git fetch --depth=1 origin master
+          LAST_COMMON_MIGRATION=$(comm -12 <(git ls-tree --name-only origin/master -- packages/server/postgres/migrations/ | xargs basename -s.ts) <(ls packages/server/postgres/migrations/ | xargs basename -s.ts) | tail -n1)
+          pnpm kysely migrate:down $LAST_COMMON_MIGRATION
+
+      - name: Report Status
+        if: ${{ failure() && github.ref_name == 'master' }}
+        uses: ravsamhq/notify-slack-action@v2
+        with:
+          status: ${{ job.status }}
+          notify_when: "failure"
+        env:
+          SLACK_WEBHOOK_URL: ${{ secrets.SLACK_GH_ACTIONS_NOTIFICATIONS }}

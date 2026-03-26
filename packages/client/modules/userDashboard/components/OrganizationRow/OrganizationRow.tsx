@@ -1,9 +1,9 @@
 import styled from '@emotion/styled'
 import {Settings as SettingsIcon} from '@mui/icons-material'
 import graphql from 'babel-plugin-relay/macro'
-import React from 'react'
-import {createFragmentContainer} from 'react-relay'
-import {OrganizationRow_organization} from '~/__generated__/OrganizationRow_organization.graphql'
+import {useFragment} from 'react-relay'
+import {useNavigate} from 'react-router'
+import type {OrganizationRow_organization$key} from '~/__generated__/OrganizationRow_organization.graphql'
 import Avatar from '../../../../components/Avatar/Avatar'
 import FlatButton from '../../../../components/FlatButton'
 import Row from '../../../../components/Row/Row'
@@ -16,7 +16,6 @@ import SecondaryButton from '../../../../components/SecondaryButton'
 import TagBlock from '../../../../components/Tag/TagBlock'
 import TierTag from '../../../../components/Tag/TierTag'
 import {MenuPosition} from '../../../../hooks/useCoords'
-import useRouter from '../../../../hooks/useRouter'
 import useTooltip from '../../../../hooks/useTooltip'
 import {PALETTE} from '../../../../styles/paletteV3'
 import defaultOrgAvatar from '../../../../styles/theme/images/avatar-organization.svg'
@@ -84,33 +83,50 @@ const StyledRowInfoCopy = styled(RowInfoCopy)({
 })
 
 interface Props {
-  organization: OrganizationRow_organization
+  organization: OrganizationRow_organization$key
 }
 
 const OrganizationRow = (props: Props) => {
-  const {organization} = props
-  const {history} = useRouter()
+  const {organization: organizationRef} = props
+  const organization = useFragment(
+    graphql`
+      fragment OrganizationRow_organization on Organization {
+        id
+        name
+        orgUserCount {
+          activeUserCount
+          inactiveUserCount
+        }
+        picture
+        tier
+        billingTier
+      }
+    `,
+    organizationRef
+  )
+  const navigate = useNavigate()
   const {
     id: orgId,
     name,
     orgUserCount: {activeUserCount, inactiveUserCount},
     picture,
-    tier
+    tier,
+    billingTier
   } = organization
   const orgAvatar = picture || defaultOrgAvatar
   const onRowClick = () => {
     closeTooltip()
-    history.push(`/me/organizations/${orgId}`)
+    navigate(`/me/organizations/${orgId}`)
   }
   const totalUsers = activeUserCount + inactiveUserCount
-  const showUpgradeCTA = tier === 'starter'
+  const showUpgradeCTA = billingTier === 'starter'
   const {tooltipPortal, openTooltip, closeTooltip, originRef} = useTooltip<HTMLButtonElement>(
     MenuPosition.UPPER_CENTER
   )
   return (
     <Row>
       <OrgAvatar onClick={onRowClick}>
-        <Avatar size={44} picture={orgAvatar} />
+        <Avatar className='h-11 w-11' picture={orgAvatar} />
       </OrgAvatar>
       <RowInner>
         <StyledRowInfo>
@@ -118,12 +134,13 @@ const OrganizationRow = (props: Props) => {
             <Name onClick={onRowClick}>{name}</Name>
             {tier !== 'starter' && (
               <StyledTagBlock>
-                <TierTag tier={tier} />
+                <TierTag tier={tier} billingTier={billingTier} />
               </StyledTagBlock>
             )}
           </RowInfoHeader>
           <StyledRowInfoCopy>
-            {`${totalUsers} ${plural(totalUsers, 'User')} (${activeUserCount} Active)`}
+            {`${totalUsers} ${plural(totalUsers, 'User')}`}
+            {billingTier !== 'enterprise' && ` (${activeUserCount} Active)`}
           </StyledRowInfoCopy>
         </StyledRowInfo>
         <RowActions>
@@ -149,17 +166,4 @@ const OrganizationRow = (props: Props) => {
   )
 }
 
-export default createFragmentContainer(OrganizationRow, {
-  organization: graphql`
-    fragment OrganizationRow_organization on Organization {
-      id
-      name
-      orgUserCount {
-        activeUserCount
-        inactiveUserCount
-      }
-      picture
-      tier
-    }
-  `
-})
+export default OrganizationRow

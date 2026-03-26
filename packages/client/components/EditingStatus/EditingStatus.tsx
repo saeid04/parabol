@@ -1,12 +1,13 @@
 import styled from '@emotion/styled'
 import graphql from 'babel-plugin-relay/macro'
-import React, {ReactNode, useState} from 'react'
-import {createFragmentContainer} from 'react-relay'
+import type * as React from 'react'
+import {type ReactNode, useState} from 'react'
+import {useFragment} from 'react-relay'
+import type {EditingStatus_task$key} from '~/__generated__/EditingStatus_task.graphql'
 import {MenuPosition} from '~/hooks/useCoords'
 import useTooltip from '~/hooks/useTooltip'
-import {EditingStatus_task} from '~/__generated__/EditingStatus_task.graphql'
 import useAtmosphere from '../../hooks/useAtmosphere'
-import {UseTaskChild} from '../../hooks/useTaskChildFocus'
+import type {UseTaskChild} from '../../hooks/useTaskChildFocus'
 import {PALETTE} from '../../styles/paletteV3'
 import {Card} from '../../types/constEnums'
 import DueDateToggle from '../DueDateToggle'
@@ -21,7 +22,7 @@ const StatusHeader = styled('div')({
   justifyContent: 'space-between',
   lineHeight: '20px',
   minHeight: Card.BUTTON_HEIGHT,
-  padding: `0 ${Card.PADDING} 8px`,
+  padding: `0 ${Card.PADDING} 4px`,
   textAlign: 'left'
 })
 
@@ -38,13 +39,27 @@ export type TimestampType = 'createdAt' | 'updatedAt'
 interface Props {
   children: ReactNode
   isTaskHovered: boolean
-  task: EditingStatus_task
+  task: EditingStatus_task$key
   useTaskChild: UseTaskChild
   isArchived?: boolean
 }
 
 const EditingStatus = (props: Props) => {
-  const {children, isTaskHovered, task, useTaskChild, isArchived} = props
+  const {children, isTaskHovered, task: taskRef, useTaskChild, isArchived} = props
+  const task = useFragment(
+    graphql`
+      fragment EditingStatus_task on Task {
+        createdAt
+        updatedAt
+        editors {
+          userId
+          preferredName
+        }
+        ...DueDateToggle_task
+      }
+    `,
+    taskRef
+  )
   const {createdAt, updatedAt, editors} = task
   const atmosphere = useAtmosphere()
   const {viewerId} = atmosphere
@@ -61,7 +76,9 @@ const EditingStatus = (props: Props) => {
     openTooltip,
     closeTooltip,
     originRef: tipRef
-  } = useTooltip<HTMLDivElement>(MenuPosition.UPPER_CENTER, {disabled: isEditing})
+  } = useTooltip<HTMLDivElement>(MenuPosition.UPPER_CENTER, {
+    disabled: isEditing
+  })
   const timestamp = timestampType === 'createdAt' ? createdAt : updatedAt
   return (
     <StatusHeader>
@@ -94,16 +111,4 @@ const EditingStatus = (props: Props) => {
   )
 }
 
-export default createFragmentContainer(EditingStatus, {
-  task: graphql`
-    fragment EditingStatus_task on Task {
-      createdAt
-      updatedAt
-      editors {
-        userId
-        preferredName
-      }
-      ...DueDateToggle_task
-    }
-  `
-})
+export default EditingStatus

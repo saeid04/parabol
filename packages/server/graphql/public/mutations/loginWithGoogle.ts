@@ -6,18 +6,20 @@ import generateUID from '../../../generateUID'
 import {USER_PREFERRED_NAME_LIMIT} from '../../../postgres/constants'
 import {getUserByEmail} from '../../../postgres/queries/getUsersByEmails'
 import updateUser from '../../../postgres/queries/updateUser'
-import encodeAuthToken from '../../../utils/encodeAuthToken'
-import getSAMLURLFromEmail from '../../../utils/getSAMLURLFromEmail'
+import {setAuthCookie} from '../../../utils/authCookie'
 import GoogleServerManager from '../../../utils/GoogleServerManager'
+import getSAMLURLFromEmail from '../../../utils/getSAMLURLFromEmail'
 import standardError from '../../../utils/standardError'
 import bootstrapNewUser from '../../mutations/helpers/bootstrapNewUser'
-import {MutationResolvers} from '../resolverTypes'
+import {generateIdenticon} from '../../private/mutations/helpers/generateIdenticon'
+import type {MutationResolvers} from '../resolverTypes'
 
 const loginWithGoogle: MutationResolvers['loginWithGoogle'] = async (
   _source,
-  {code, invitationToken, segmentId},
+  {code, invitationToken, pseudoId},
   context
 ) => {
+  const {dataLoader} = context
   const manager = await GoogleServerManager.init(code)
   const {id} = manager
   if (!id) {
@@ -31,7 +33,7 @@ const loginWithGoogle: MutationResolvers['loginWithGoogle'] = async (
 
   const [existingUser, samlURL] = await Promise.all([
     getUserByEmail(email),
-    getSAMLURLFromEmail(email, false)
+    getSAMLURLFromEmail(email, dataLoader, false)
   ])
 
   if (samlURL) {
@@ -49,18 +51,21 @@ const loginWithGoogle: MutationResolvers['loginWithGoogle'] = async (
     ) as AuthIdentityGoogle
     if (!googleIdentity) {
       const [bestIdentity] = identities
-      if (!bestIdentity) {
-        return standardError(new Error('No identity found! Please contact support'))
-      }
-      const {type, isEmailVerified} = bestIdentity
-      // the existing account could belong to a squatter. If it's theirs, they need to verify the email
-      // if it's not, they need to reset the password
-      if (!isEmailVerified) {
-        if (type === AuthIdentityTypeEnum.LOCAL) {
-          return {error: {message: 'Try logging in with email and password'}}
+
+      if (bestIdentity) {
+        const {type, isEmailVerified} = bestIdentity
+        // the existing account could belong to a squatter. If it's theirs, they need to verify the email
+        // if it's not, they need to reset the password
+        if (!isEmailVerified) {
+          if (type === AuthIdentityTypeEnum.LOCAL) {
+            return {
+              error: {message: 'Try logging in with email and password'}
+            }
+          }
+          throw new Error(`Unknown identity type: ${type}`)
         }
-        throw new Error(`Unknown identity type: ${type}`)
       }
+      // they don't have any identity, so a former SSO user, now abandoned, let them have their OAuth identity and move on
 
       // add a google identity to the user if we're sure the local isn't a squatter
       googleIdentity = new AuthIdentityGoogle({
@@ -69,14 +74,17 @@ const loginWithGoogle: MutationResolvers['loginWithGoogle'] = async (
       })
       identities.push(googleIdentity) // mutative
 
-      await updateUser({identities}, viewerId)
+      await updateUser({identities: identities.map((id) => JSON.stringify(id))}, viewerId)
     }
     // MUTATIVE
-    context.authToken = new AuthToken({sub: viewerId, rol, tms: existingUser.tms})
+    context.authToken = new AuthToken({
+      sub: viewerId,
+      rol,
+      tms: existingUser.tms
+    })
+    setAuthCookie(context, context.authToken)
     return {
       userId: viewerId,
-      // create a brand new auth token using the tms in our DB
-      authToken: encodeAuthToken(context.authToken),
       isNewUser: false
     }
   }
@@ -92,15 +100,15 @@ const loginWithGoogle: MutationResolvers['loginWithGoogle'] = async (
   const newUser = new User({
     id: userId,
     preferredName,
-    picture,
+    picture: picture || (await generateIdenticon(userId, preferredName)),
     email,
     identities: [identity],
-    segmentId
+    pseudoId
   })
-  context.authToken = await bootstrapNewUser(newUser, !invitationToken)
+  context.authToken = await bootstrapNewUser(newUser, !invitationToken, dataLoader)
+  setAuthCookie(context, context.authToken)
   return {
     userId,
-    authToken: encodeAuthToken(context.authToken),
     isNewUser: true
   }
 }

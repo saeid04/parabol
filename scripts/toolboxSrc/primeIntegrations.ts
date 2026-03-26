@@ -1,5 +1,6 @@
-import getPg from '../../packages/server/postgres/getPg'
+import getKysely from '../../packages/server/postgres/getKysely'
 import upsertIntegrationProvider from '../../packages/server/postgres/queries/upsertIntegrationProvider'
+import {Logger} from '../../packages/server/utils/Logger'
 
 const upsertGlobalIntegrationProvidersFromEnv = async () => {
   const providers = [
@@ -7,8 +8,7 @@ const upsertGlobalIntegrationProvidersFromEnv = async () => {
       service: 'gitlab',
       authStrategy: 'oauth2',
       scope: 'global',
-      teamId: 'aGhostTeam',
-      serverBaseUrl: 'https://gitlab.com',
+      serverBaseUrl: process.env.GITLAB_SERVER_URL,
       clientId: process.env.GITLAB_CLIENT_ID,
       clientSecret: process.env.GITLAB_CLIENT_SECRET
     },
@@ -16,16 +16,54 @@ const upsertGlobalIntegrationProvidersFromEnv = async () => {
       service: 'azureDevOps',
       authStrategy: 'oauth2',
       scope: 'global',
-      teamId: 'aGhostTeam',
       serverBaseUrl: 'https://dev.azure.com',
       clientId: process.env.AZURE_DEVOPS_CLIENT_ID,
       clientSecret: process.env.AZURE_DEVOPS_CLIENT_SECRET,
       // tenantId needs to be 'common' for apps shared with multiple tenants
       tenantId: 'common'
+    },
+    {
+      service: 'gcal',
+      authStrategy: 'oauth2',
+      scope: 'global',
+      serverBaseUrl: 'https://www.googleapis.com/calendar/v3',
+      clientId: process.env.GOOGLE_OAUTH_CLIENT_ID,
+      clientSecret: process.env.GOOGLE_OAUTH_CLIENT_SECRET
+    },
+    {
+      service: 'mattermost',
+      authStrategy: 'sharedSecret',
+      scope: 'global',
+      serverBaseUrl: process.env.MATTERMOST_URL,
+      sharedSecret: process.env.MATTERMOST_SECRET
+    },
+    {
+      service: 'linear',
+      authStrategy: 'oauth2',
+      scope: 'global',
+      serverBaseUrl: 'https://linear.app/',
+      clientId: process.env.LINEAR_CLIENT_ID,
+      clientSecret: process.env.LINEAR_CLIENT_SECRET
     }
   ] as const
 
-  const validProviders = providers.filter(({clientId, clientSecret}) => clientId && clientSecret)
+  const validProviders = providers.filter(
+    ({authStrategy, clientId, clientSecret, serverBaseUrl, sharedSecret}) =>
+      (authStrategy === 'oauth2' && clientId && clientSecret && serverBaseUrl) ||
+      (authStrategy === 'sharedSecret' && sharedSecret && serverBaseUrl)
+  )
+
+  // it's a security risk to have a misconfigured mattermost provider
+  if (!process.env.MATTERMOST_URL || !process.env.MATTERMOST_SECRET) {
+    const pg = getKysely()
+    await pg
+      .deleteFrom('IntegrationProvider')
+      .where('service', '=', 'mattermost')
+      .where('authStrategy', '=', 'sharedSecret')
+      .where('scope', '=', 'global')
+      .execute()
+  }
+
   await Promise.all(
     validProviders.map((provider) => {
       return upsertIntegrationProvider(provider)
@@ -34,13 +72,9 @@ const upsertGlobalIntegrationProvidersFromEnv = async () => {
 }
 
 const primeIntegrations = async () => {
-  try {
-    const pg = getPg()
-    await upsertGlobalIntegrationProvidersFromEnv()
-    await pg.end()
-  } catch (e) {
-    console.log('Prime Integrations error', e)
-  }
+  Logger.log('⛓️ Prime Integrationgs Started')
+  await upsertGlobalIntegrationProvidersFromEnv()
+  Logger.log('⛓️ Prime Integrations Complete')
 }
 
 export default primeIntegrations

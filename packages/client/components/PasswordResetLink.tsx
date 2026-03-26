@@ -1,13 +1,13 @@
 import styled from '@emotion/styled'
 import graphql from 'babel-plugin-relay/macro'
-import React, {useState} from 'react'
+import {useState} from 'react'
 import {useFragment} from 'react-relay'
 import passwordIcon from '../../../static/images/icons/password_black_24dp.svg'
+import type {PasswordResetLink_viewer$key} from '../__generated__/PasswordResetLink_viewer.graphql'
 import useAtmosphere from '../hooks/useAtmosphere'
 import useMutationProps from '../hooks/useMutationProps'
 import EmailPasswordResetMutation from '../mutations/EmailPasswordResetMutation'
 import {PALETTE} from '../styles/paletteV3'
-import {PasswordResetLink_viewer$key} from '../__generated__/PasswordResetLink_viewer.graphql'
 import StyledError from './StyledError'
 
 const Wrapper = styled('div')({

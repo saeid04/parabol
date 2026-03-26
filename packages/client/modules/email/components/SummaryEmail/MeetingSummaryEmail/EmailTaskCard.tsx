@@ -1,17 +1,16 @@
 import graphql from 'babel-plugin-relay/macro'
-import {convertFromRaw, Editor, EditorState} from 'draft-js'
-import editorDecorators from 'parabol-client/components/TaskEditor/decorators'
+import type {EmailTaskCard_task$key} from 'parabol-client/__generated__/EmailTaskCard_task.graphql'
 import {PALETTE} from 'parabol-client/styles/paletteV3'
 import {FONT_FAMILY} from 'parabol-client/styles/typographyV2'
 import {taskStatusColors} from 'parabol-client/utils/taskStatus'
-import {EmailTaskCard_task} from 'parabol-client/__generated__/EmailTaskCard_task.graphql'
-import React, {useMemo, useRef} from 'react'
-import {createFragmentContainer} from 'react-relay'
-import convertToTaskContent from '../../../../../utils/draftjs/convertToTaskContent'
-import {TaskStatusEnum} from '../../../../../__generated__/EmailTaskCard_task.graphql'
+import type * as React from 'react'
+import {useFragment} from 'react-relay'
+import type {TaskStatusEnum} from '../../../../../__generated__/EmailTaskCard_task.graphql'
+import {useTipTapContext} from '../../../../../components/TipTapProvider'
+import {plaintextToTipTap} from '../../../../../shared/tiptap/plaintextToTipTap'
 
 interface Props {
-  task: EmailTaskCard_task | null
+  task: EmailTaskCard_task$key | null
   maxWidth?: number
 }
 
@@ -44,7 +43,7 @@ const statusStyle = (status: TaskStatusEnum) => ({
 })
 
 const deletedTask = {
-  content: convertToTaskContent('<<TASK DELETED>>'),
+  content: JSON.stringify(plaintextToTipTap('<<TASK DELETED>>')),
   status: 'done',
   tags: [] as string[],
   user: {
@@ -54,17 +53,19 @@ const deletedTask = {
 } as const
 
 const EmailTaskCard = (props: Props) => {
-  const {task, maxWidth} = props
-  const {content, status} = task || deletedTask
-  const contentState = useMemo(() => convertFromRaw(JSON.parse(content)), [content])
-  const editorStateRef = useRef<EditorState>()
-  const getEditorState = () => {
-    return editorStateRef.current
-  }
-  editorStateRef.current = EditorState.createWithContent(
-    contentState,
-    editorDecorators(getEditorState)
+  const {task: taskRef, maxWidth} = props
+  const task = useFragment(
+    graphql`
+      fragment EmailTaskCard_task on Task {
+        content
+        status
+      }
+    `,
+    taskRef
   )
+  const {content, status} = task || deletedTask
+  const {generateHTML} = useTipTapContext()
+  const htmlContent = generateHTML(JSON.parse(content))
   return (
     <tr>
       <td>
@@ -87,13 +88,7 @@ const EmailTaskCard = (props: Props) => {
                   <tbody>
                     <tr>
                       <td>
-                        <Editor
-                          readOnly
-                          editorState={editorStateRef.current}
-                          onChange={() => {
-                            /**/
-                          }}
-                        />
+                        <div dangerouslySetInnerHTML={{__html: htmlContent}}></div>
                       </td>
                     </tr>
                   </tbody>
@@ -107,11 +102,4 @@ const EmailTaskCard = (props: Props) => {
   )
 }
 
-export default createFragmentContainer(EmailTaskCard, {
-  task: graphql`
-    fragment EmailTaskCard_task on Task {
-      content
-      status
-    }
-  `
-})
+export default EmailTaskCard

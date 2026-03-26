@@ -3,25 +3,24 @@ const path = require('path')
 const webpack = require('webpack')
 const ReactRefreshWebpackPlugin = require('@pmmmwh/react-refresh-webpack-plugin')
 const HtmlWebpackPlugin = require('html-webpack-plugin')
-const vendors = require('../../dev/dll/vendors')
 const clientTransformRules = require('./utils/clientTransformRules')
 const getProjectRoot = require('./utils/getProjectRoot')
+const {makeOAuth2Redirect} = require('../../packages/server/utils/makeOAuth2Redirect')
 
 const PROJECT_ROOT = getProjectRoot()
 const CLIENT_ROOT = path.join(PROJECT_ROOT, 'packages', 'client')
 const STATIC_ROOT = path.join(PROJECT_ROOT, 'static')
-const {PORT, SOCKET_PORT} = process.env
+const {PORT, SOCKET_PORT, HOST} = process.env
+
+// When using ngrok, we want localhost to run with http
+const isProxiedDev = HOST !== 'localhost'
 
 const USE_REFRESH = false
 module.exports = {
-  cache: {
-    type: 'filesystem',
-    buildDependencies: {
-      config: [__filename]
-    }
-  },
   stats: 'errors-warnings',
   devServer: {
+    allowedHosts: ['localhost', 'host.docker.internal', HOST],
+    server: isProxiedDev ? 'http' : 'https',
     client: {
       logging: 'warn'
     },
@@ -33,12 +32,6 @@ module.exports = {
       {
         directory: path.join(PROJECT_ROOT, 'build'),
         publicPath: '/static/'
-      },
-      {
-        // ignore proxied servers in /dev
-        // They can restart independently
-        directory: path.join(PROJECT_ROOT, 'dev', 'dll'),
-        publicPath: '/static/'
       }
     ],
     devMiddleware: {
@@ -49,25 +42,40 @@ module.exports = {
     historyApiFallback: true,
     port: PORT,
     proxy: [
-      'sse',
-      'sse-ping',
-      'jira-attachments',
-      'stripe',
-      'webhooks',
-      'graphql',
-      'intranet-graphql',
-      // important terminating / so saml-redirect doesn't get targeted, too
-      'saml/'
-    ].reduce((obj, name) => {
-      obj[`/${name}`] = {
+      ...[
+        'jira-attachments',
+        'stripe',
+        'webhooks',
+        'graphql',
+        'health',
+        'ready',
+        'self-hosted',
+        'mattermost',
+        'assets',
+        // important terminating / so saml-redirect doesn't get targeted, too
+        'saml/',
+        'scim',
+        'oauth'
+      ].map((name) => ({
+        context: [`/${name}`],
         target: `http://localhost:${SOCKET_PORT}`
+      })),
+      {
+        context: '/components',
+        pathRewrite: {'^/components': ''},
+        target: `http://localhost:3002`
+      },
+      {
+        context: (path) => path === '/' || path === '/yjs',
+        target: `ws://localhost:${SOCKET_PORT}`,
+        ws: true,
+        logLevel: 'silent'
       }
-      return obj
-    }, {})
+    ]
   },
   infrastructureLogging: {level: 'warn'},
   watchOptions: {
-    ignored: /node_modules/
+    ignored: ['**/node_modules/**', path.join(PROJECT_ROOT, 'packages/integration-tests/**/*')]
     // aggregateTimeout: 200,
   },
   devtool: 'eval-source-map',
@@ -85,30 +93,24 @@ module.exports = {
     path: path.join(PROJECT_ROOT, 'build'),
     filename: '[name].js',
     chunkFilename: '[name].chunk.js',
-    publicPath: '/'
+    publicPath: '/',
+    assetModuleFilename: '[name]-[hash][query][ext]'
   },
   resolve: {
     alias: {
       '~': CLIENT_ROOT,
       'parabol-client': CLIENT_ROOT,
-      static: STATIC_ROOT
+      static: STATIC_ROOT,
+      // this is for radix-ui, we import & transform ESM packages, but they can't find react/jsx-runtime
+      'react/jsx-runtime': require.resolve('react/jsx-runtime')
     },
-    extensions: ['.js', '.json', '.ts', '.tsx'],
+    extensions: ['.js', '.cjs', '.json', '.ts', '.tsx'],
     fallback: {
       assert: false,
       os: false
-    },
-    unsafeCache: true,
-    modules: [path.resolve(CLIENT_ROOT, '../node_modules'), 'node_modules'],
-    symlinks: false
-  },
-  resolveLoader: {
-    modules: [path.resolve(CLIENT_ROOT, '../node_modules'), 'node_modules']
+    }
   },
   plugins: [
-    new webpack.DllReferencePlugin({
-      manifest: vendors
-    }),
     new HtmlWebpackPlugin({
       filename: 'index.html',
       template: path.join(PROJECT_ROOT, 'devTemplate.html'),
@@ -120,24 +122,40 @@ module.exports = {
         github: process.env.GITHUB_CLIENT_ID,
         google: process.env.GOOGLE_OAUTH_CLIENT_ID,
         googleAnalytics: process.env.GA_TRACKING_ID,
-        segment: process.env.SEGMENT_WRITE_KEY,
-        sentry: process.env.SENTRY_DSN,
+        mattermostWebhookIntegrationDisabled:
+          process.env.MATTERMOST_WEBHOOK_INTEGRATION_DISABLED === 'true',
+        msTeamsWebhookIntegrationDisabled:
+          process.env.MSTEAMS_WEBHOOK_INTEGRATION_DISABLED === 'true',
         slack: process.env.SLACK_CLIENT_ID,
         stripe: process.env.STRIPE_PUBLISHABLE_KEY,
-        oauth2Redirect: process.env.OAUTH2_REDIRECT,
+        oauth2Redirect: makeOAuth2Redirect(),
+        hasOpenAI: !!process.env.OPEN_AI_API_KEY,
         prblIn: process.env.INVITATION_SHORTLINK,
         AUTH_INTERNAL_ENABLED: process.env.AUTH_INTERNAL_DISABLED !== 'true',
         AUTH_GOOGLE_ENABLED: process.env.AUTH_GOOGLE_DISABLED !== 'true',
-        AUTH_SSO_ENABLED: process.env.AUTH_SSO_DISABLED !== 'true'
+        AUTH_MICROSOFT_ENABLED: process.env.AUTH_MICROSOFT_DISABLED !== 'true',
+        AUTH_SSO_ENABLED: process.env.AUTH_SSO_DISABLED !== 'true',
+        AMPLITUDE_WRITE_KEY: process.env.AMPLITUDE_WRITE_KEY,
+        microsoftTenantId: process.env.MICROSOFT_TENANT_ID,
+        microsoft: process.env.MICROSOFT_CLIENT_ID,
+        GLOBAL_BANNER_ENABLED: process.env.GLOBAL_BANNER_ENABLED === 'true',
+        GLOBAL_BANNER_TEXT: process.env.GLOBAL_BANNER_TEXT,
+        GLOBAL_BANNER_BG_COLOR: process.env.GLOBAL_BANNER_BG_COLOR,
+        GLOBAL_BANNER_COLOR: process.env.GLOBAL_BANNER_COLOR,
+        GIF_PROVIDER:
+          process.env.GIF_PROVIDER !== 'tenor'
+            ? process.env.GIF_PROVIDER
+            : process.env.TENOR_SECRET
+              ? 'tenor'
+              : '',
+        GOOGLE_ERROR_FORM_URL: process.env.GOOGLE_ERROR_FORM_URL
       })
     }),
     new ReactRefreshWebpackPlugin(),
     new webpack.DefinePlugin({
       __CLIENT__: true,
       __PRODUCTION__: false,
-      __APP_VERSION__: JSON.stringify(process.env.npm_package_version),
-      'process.env.DEBUG': JSON.stringify(process.env.DEBUG),
-      __SOCKET_PORT__: JSON.stringify(process.env.SOCKET_PORT)
+      __APP_VERSION__: JSON.stringify(process.env.npm_package_version)
       // Environment variables go in the __ACTION__ object above, not here
       // This build may be deployed to many different environments
     })
@@ -170,7 +188,8 @@ module.exports = {
           {
             loader: '@sucrase/webpack-loader',
             options: {
-              transforms: ['jsx']
+              transforms: ['jsx'],
+              jsxRuntime: 'automatic'
             }
           }
         ]
@@ -182,22 +201,20 @@ module.exports = {
       },
       {
         test: /\.css$/,
-        use: ['style-loader', 'css-loader']
+        use: ['style-loader', 'css-loader', 'postcss-loader']
       },
       {
         test: /\.(png|jpg|jpeg|gif|svg)$/,
-        use: [
-          {
-            loader: 'url-loader',
-            options: {
-              limit: 4096
-            }
+        type: 'asset',
+        parser: {
+          dataUrlCondition: {
+            maxSize: 4096
           }
-        ]
+        }
       },
       {
         test: /\.(eot|ttf|wav|mp3|woff|woff2|otf)$/,
-        use: ['file-loader']
+        type: 'asset/resource'
       },
       // https://github.com/graphql/graphiql/issues/1055#issuecomment-561353578
       {

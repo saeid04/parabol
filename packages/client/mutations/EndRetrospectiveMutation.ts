@@ -1,18 +1,19 @@
 import graphql from 'babel-plugin-relay/macro'
 import {commitMutation} from 'react-relay'
-import {RecordProxy} from 'relay-runtime'
+import type {RecordProxy} from 'relay-runtime'
+import type {EndRetrospectiveMutation_notification$data} from '~/__generated__/EndRetrospectiveMutation_notification.graphql'
+import type {EndRetrospectiveMutation_team$data} from '~/__generated__/EndRetrospectiveMutation_team.graphql'
 import onMeetingRoute from '~/utils/onMeetingRoute'
-import {EndRetrospectiveMutation_notification} from '~/__generated__/EndRetrospectiveMutation_notification.graphql'
-import {EndRetrospectiveMutation_team} from '~/__generated__/EndRetrospectiveMutation_team.graphql'
+import type {EndRetrospectiveMutation as TEndRetrospectiveMutation} from '../__generated__/EndRetrospectiveMutation.graphql'
 import {RetroDemo} from '../types/constEnums'
-import {
-  HistoryMaybeLocalHandler,
+import type {
+  NavigateMaybeLocalHandler,
   OnNextHandler,
-  OnNextHistoryContext,
+  OnNextNavigateContext,
   SharedUpdater,
   StandardMutation
 } from '../types/relayMutations'
-import {EndRetrospectiveMutation as TEndRetrospectiveMutation} from '../__generated__/EndRetrospectiveMutation.graphql'
+import {GQLID} from '../utils/GQLID'
 import handleAddTimelineEvent from './handlers/handleAddTimelineEvent'
 import handleRemoveSuggestedActions from './handlers/handleRemoveSuggestedActions'
 import popEndMeetingToast from './toasts/popEndMeetingToast'
@@ -28,33 +29,21 @@ graphql`
       reflectionCount
       taskCount
       topicCount
-      reflectionGroups(sortBy: voteCount) {
-        summary
+      transcription {
+        speaker
+        words
       }
-      phases {
-        phaseType
-        ... on DiscussPhase {
-          stages {
-            discussion {
-              summary
-            }
-          }
-        }
-      }
+      summaryPageId
     }
     team {
+      ...TeamInsights_team
       id
       activeMeetings {
         id
       }
     }
     timelineEvent {
-      id
-      team {
-        id
-        name
-      }
-      type
+      ...TimelineEventCompletedRetroMeeting_timelineEvent @relay(mask: false)
     }
   }
 `
@@ -69,6 +58,7 @@ graphql`
   fragment EndRetrospectiveMutation_meeting on EndRetrospectiveSuccess {
     meeting {
       ...WholeMeetingSummary_meeting
+      taskCount
     }
   }
 `
@@ -89,48 +79,39 @@ const mutation = graphql`
 `
 
 export const endRetrospectiveTeamOnNext: OnNextHandler<
-  EndRetrospectiveMutation_team,
-  OnNextHistoryContext
+  EndRetrospectiveMutation_team$data,
+  OnNextNavigateContext
 > = (payload, context) => {
   const {isKill, meeting} = payload
-  const {atmosphere, history} = context
+  const {atmosphere, navigate} = context
   if (!meeting) return
-  const {id: meetingId, teamId, reflectionGroups, phases} = meeting
+  const {id: meetingId, teamId, summaryPageId} = meeting
   if (meetingId === RetroDemo.MEETING_ID) {
     if (isKill) {
       window.localStorage.removeItem('retroDemo')
-      history.push('/create-account')
+      navigate('/create-account')
     } else {
-      history.push('/retrospective-demo-summary')
+      navigate('/retrospective-demo-summary')
     }
   } else if (onMeetingRoute(window.location.pathname, [meetingId])) {
     if (isKill) {
-      history.push(`/team/${teamId}`)
+      navigate(`/team/${teamId}`)
       popEndMeetingToast(atmosphere, meetingId)
-    } else {
-      const discussPhase = phases.find((phase) => phase.phaseType === 'discuss')
-      const {stages} = discussPhase ?? {}
-      const hasTopicSummary = reflectionGroups.some((group) => group.summary)
-      const hasDiscussionSummary = !!stages?.some((stage) => stage.discussion?.summary)
-      const hasOpenAISummary = hasTopicSummary || hasDiscussionSummary
-      const pathname = `/new-summary/${meetingId}`
-      const search = hasOpenAISummary ? '?ai=true' : ''
-      history.push({
-        pathname,
-        search
-      })
+    } else if (summaryPageId) {
+      const pageCode = GQLID.fromKey(summaryPageId)[0]
+      navigate(`/pages/${pageCode}`)
     }
   }
 }
 
 export const endRetrospectiveNotificationUpdater: SharedUpdater<
-  EndRetrospectiveMutation_notification
+  EndRetrospectiveMutation_notification$data
 > = (payload, {store}) => {
   const removedSuggestedActionId = payload.getValue('removedSuggestedActionId')
   handleRemoveSuggestedActions(removedSuggestedActionId, store)
 }
 
-export const endRetrospectiveTeamUpdater: SharedUpdater<EndRetrospectiveMutation_team> = (
+export const endRetrospectiveTeamUpdater: SharedUpdater<EndRetrospectiveMutation_team$data> = (
   payload,
   {store}
 ) => {
@@ -141,8 +122,8 @@ export const endRetrospectiveTeamUpdater: SharedUpdater<EndRetrospectiveMutation
 
 const EndRetrospectiveMutation: StandardMutation<
   TEndRetrospectiveMutation,
-  HistoryMaybeLocalHandler
-> = (atmosphere, variables, {onError, onCompleted, history}) => {
+  NavigateMaybeLocalHandler
+> = (atmosphere, variables, {onError, onCompleted, navigate}) => {
   return commitMutation<TEndRetrospectiveMutation>(atmosphere, {
     mutation,
     variables,
@@ -157,7 +138,10 @@ const EndRetrospectiveMutation: StandardMutation<
       if (onCompleted) {
         onCompleted(res, errors)
       }
-      endRetrospectiveTeamOnNext(res.endRetrospective as any, {atmosphere, history})
+      endRetrospectiveTeamOnNext(res.endRetrospective as any, {
+        atmosphere,
+        navigate
+      })
     },
     onError
   })

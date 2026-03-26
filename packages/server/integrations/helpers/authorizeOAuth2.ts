@@ -1,5 +1,5 @@
-import fetch from 'node-fetch'
-import {OAuth2Error, OAuth2Success} from '../../types/custom'
+import {fetch} from '@whatwg-node/fetch'
+import type {OAuth2Error, OAuth2Success} from '../../types/custom'
 
 type OAuth2Response = OAuth2Success | OAuth2Error
 
@@ -72,7 +72,10 @@ export const authorizeOAuth2 = async <
   }
   const tokenJson = (await oauth2Response.json()) as OAuth2Response
   if ('error' in tokenJson) {
-    return new Error(tokenJson.error)
+    // any logging should be performed by the caller
+    const errorMessage =
+      tokenJson.error_description || tokenJson.error || `Received OAuth2 Error from ${authUrl}`
+    return new Error(errorMessage)
   }
   const {
     access_token: accessToken,
@@ -80,10 +83,11 @@ export const authorizeOAuth2 = async <
     scope,
     expires_in: expiresIn
   } = tokenJson
-  return {
+  const result = {
     accessToken,
     expiresIn,
     refreshToken: oauthRefreshToken,
     scopes: scope
-  } as unknown as TSuccess
+  }
+  return result as TSuccess
 }

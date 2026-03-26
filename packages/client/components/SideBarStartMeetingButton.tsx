@@ -1,48 +1,46 @@
 import styled from '@emotion/styled'
 import {Add} from '@mui/icons-material'
-import React from 'react'
-import {useLocation} from 'react-router'
-import useRouter from '~/hooks/useRouter'
-import getTeamIdFromPathname from '~/utils/getTeamIdFromPathname'
+import {useNavigate} from 'react-router'
 import {BezierCurve} from '../types/constEnums'
 import FlatPrimaryButton from './FlatPrimaryButton'
 
 const Button = styled(FlatPrimaryButton)<{isOpen: boolean}>(({isOpen}) => ({
-  height: 48,
+  height: 40,
   overflow: 'hidden',
   padding: 0,
-  width: isOpen ? 160 : 48,
-  marginLeft: 7,
-  marginTop: 15,
-  marginBottom: 15,
+  width: isOpen ? 232 : 40,
+  marginTop: 16,
+  marginBottom: 14, // account for nav margin 2px
   transition: `all 300ms ${BezierCurve.DECELERATE}`,
-  justifyContent: 'flex-start'
+  justifyContent: isOpen ? 'center' : 'flex-start'
 }))
 
 const MeetingIcon = styled(Add)({
-  margin: '0px 11px'
+  margin: '0px 0px 0px 7px'
 })
 
 const MeetingLabel = styled('div')<{isOpen: boolean}>(({isOpen}) => ({
   fontSize: 16,
   fontWeight: 600,
+  paddingLeft: 4,
+  paddingRight: 7,
   transition: `all 300ms ${BezierCurve.DECELERATE}`,
   opacity: isOpen ? 1 : 0
 }))
 
 const SideBarStartMeetingButton = ({isOpen}: {isOpen: boolean}) => {
-  const location = useLocation()
-  const teamId = getTeamIdFromPathname()
-  const {history} = useRouter()
+  const navigate = useNavigate()
 
   const onClick = () => {
-    history.replace(`/new-meeting/${teamId}`, {backgroundLocation: location})
+    navigate('/activity-library')
   }
   return (
-    <Button isOpen={isOpen} onClick={onClick}>
-      <MeetingIcon />
-      <MeetingLabel isOpen={isOpen}>Add Meeting</MeetingLabel>
-    </Button>
+    <div className='px-3'>
+      <Button isOpen={isOpen} onClick={onClick}>
+        <MeetingIcon />
+        <MeetingLabel isOpen={isOpen}>Add Meeting</MeetingLabel>
+      </Button>
+    </div>
   )
 }
 

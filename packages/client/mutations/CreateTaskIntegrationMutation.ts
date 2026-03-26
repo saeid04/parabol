@@ -1,17 +1,15 @@
+import {generateHTML} from '@tiptap/core'
 import graphql from 'babel-plugin-relay/macro'
-import {stateToHTML} from 'draft-js-export-html'
 import {commitMutation} from 'react-relay'
-import {RecordSourceSelectorProxy} from 'relay-runtime'
+import type {RecordSourceSelectorProxy} from 'relay-runtime'
 import JiraProjectId from '~/shared/gqlIds/JiraProjectId'
-import {StandardMutation} from '../types/relayMutations'
-import splitDraftContent from '../utils/draftjs/splitDraftContent'
+import type {CreateTaskIntegrationMutation as TCreateTaskIntegrationMutation} from '../__generated__/CreateTaskIntegrationMutation.graphql'
+import {serverTipTapExtensions} from '../shared/tiptap/serverTipTapExtensions'
+import {splitTipTapContent} from '../shared/tiptap/splitTipTapContent'
+import type {StandardMutation} from '../types/relayMutations'
 import getMeetingPathParams from '../utils/meetings/getMeetingPathParams'
 import createProxyRecord from '../utils/relay/createProxyRecord'
-import {
-  CreateTaskIntegrationMutation as TCreateTaskIntegrationMutation,
-  CreateTaskIntegrationMutationVariables
-} from '../__generated__/CreateTaskIntegrationMutation.graphql'
-import SendClientSegmentEventMutation from './SendClientSegmentEventMutation'
+import SendClientSideEvent from '../utils/SendClientSideEvent'
 
 graphql`
   fragment CreateTaskIntegrationMutation_task on CreateTaskIntegrationPayload {
@@ -57,11 +55,26 @@ graphql`
           title
           url
         }
+        ... on _xLinearIssue {
+          __typename
+          id
+          description
+          identifier
+          title
+          linearProject: project {
+            name
+          }
+          team {
+            name
+          }
+          url
+        }
         ...TaskIntegrationLinkIntegrationGitHub
         ...TaskIntegrationLinkIntegrationJira
         ...TaskIntegrationLinkIntegrationJiraServer
         ...TaskIntegrationLinkIntegrationGitLab
         ...TaskIntegrationLinkIntegrationAzure
+        ...TaskIntegrationLinkIntegrationLinear
       }
       updatedAt
       teamId
@@ -93,7 +106,7 @@ const mutation = graphql`
 
 const jiraTaskIntegrationOptimisticUpdater = (
   store: RecordSourceSelectorProxy,
-  variables: CreateTaskIntegrationMutationVariables
+  variables: TCreateTaskIntegrationMutation['variables']
 ) => {
   const {integrationRepoId, taskId} = variables
   const {cloudId, projectKey} = JiraProjectId.split(integrationRepoId)
@@ -102,8 +115,8 @@ const jiraTaskIntegrationOptimisticUpdater = (
   if (!task) return
   const contentStr = task.getValue('content') as string
   if (!contentStr) return
-  const {title: summary, contentState} = splitDraftContent(contentStr)
-  const descriptionHTML = stateToHTML(contentState)
+  const {title: summary, bodyContent} = splitTipTapContent(JSON.parse(contentStr))
+  const descriptionHTML = generateHTML(bodyContent, serverTipTapExtensions)
   const optimisticIntegration = {
     summary,
     descriptionHTML,
@@ -117,9 +130,9 @@ const jiraTaskIntegrationOptimisticUpdater = (
   task.setLinkedRecord(integration, 'integration')
 }
 
-const githubTaskIntegrationOptimisitcUpdater = (
+const githubTaskIntegrationOptimisticUpdater = (
   store: RecordSourceSelectorProxy,
-  variables: CreateTaskIntegrationMutationVariables
+  variables: TCreateTaskIntegrationMutation['variables']
 ) => {
   const {integrationRepoId, taskId} = variables
   const now = new Date()
@@ -130,8 +143,8 @@ const githubTaskIntegrationOptimisitcUpdater = (
   })
   const contentStr = task.getValue('content') as string
   if (!contentStr) return
-  const {title, contentState} = splitDraftContent(contentStr)
-  const bodyHTML = stateToHTML(contentState)
+  const {title, bodyContent} = splitTipTapContent(JSON.parse(contentStr))
+  const bodyHTML = generateHTML(bodyContent, serverTipTapExtensions)
   const optimisticIntegration = {
     title,
     bodyHTML,
@@ -143,9 +156,9 @@ const githubTaskIntegrationOptimisitcUpdater = (
   task.setLinkedRecord(integration, 'integration')
 }
 
-const gitlabTaskIntegrationOptimisitcUpdater = (
+const gitlabTaskIntegrationOptimisticUpdater = (
   store: RecordSourceSelectorProxy,
-  variables: CreateTaskIntegrationMutationVariables
+  variables: TCreateTaskIntegrationMutation['variables']
 ) => {
   const {integrationRepoId: fullPath, taskId} = variables
   const now = new Date()
@@ -156,8 +169,8 @@ const gitlabTaskIntegrationOptimisitcUpdater = (
   })
   const contentStr = task.getValue('content') as string
   if (!contentStr) return
-  const {title, contentState} = splitDraftContent(contentStr)
-  const descriptionHtml = stateToHTML(contentState)
+  const {title, bodyContent} = splitTipTapContent(JSON.parse(contentStr))
+  const descriptionHtml = generateHTML(bodyContent, serverTipTapExtensions)
   const webPath = `${fullPath}/-/issues/0`
   const optimisticIntegration = {
     title,
@@ -174,7 +187,7 @@ const gitlabTaskIntegrationOptimisitcUpdater = (
 
 const jiraServerTaskIntegrationOptimisticUpdater = (
   store: RecordSourceSelectorProxy,
-  variables: CreateTaskIntegrationMutationVariables
+  variables: TCreateTaskIntegrationMutation['variables']
 ) => {
   const {taskId} = variables
   const now = new Date()
@@ -182,8 +195,8 @@ const jiraServerTaskIntegrationOptimisticUpdater = (
   if (!task) return
   const contentStr = task.getValue('content') as string
   if (!contentStr) return
-  const {title: summary, contentState} = splitDraftContent(contentStr)
-  const descriptionHTML = stateToHTML(contentState)
+  const {title: summary, bodyContent} = splitTipTapContent(JSON.parse(contentStr))
+  const descriptionHTML = generateHTML(bodyContent, serverTipTapExtensions)
   const optimisticIntegration = {
     summary,
     descriptionHTML,
@@ -194,9 +207,9 @@ const jiraServerTaskIntegrationOptimisticUpdater = (
   task.setLinkedRecord(integration, 'integration')
 }
 
-const azureTaskIntegrationOptimisitcUpdater = (
+const azureTaskIntegrationOptimisticUpdater = (
   store: RecordSourceSelectorProxy,
-  variables: CreateTaskIntegrationMutationVariables
+  variables: TCreateTaskIntegrationMutation['variables']
 ) => {
   const {integrationRepoId: teamProject, taskId} = variables
   const now = new Date()
@@ -204,8 +217,8 @@ const azureTaskIntegrationOptimisitcUpdater = (
   if (!task) return
   const contentStr = task.getValue('content') as string
   if (!contentStr) return
-  const {title, contentState} = splitDraftContent(contentStr)
-  const descriptionHTML = stateToHTML(contentState)
+  const {title, bodyContent} = splitTipTapContent(JSON.parse(contentStr))
+  const descriptionHTML = generateHTML(bodyContent, serverTipTapExtensions)
   const optimisticIntegration = {
     id: '?',
     title,
@@ -216,6 +229,37 @@ const azureTaskIntegrationOptimisitcUpdater = (
     updatedAt: now.toJSON()
   } as const
   const integration = createProxyRecord(store, 'AzureDevOpsWorkItem', optimisticIntegration)
+  task.setLinkedRecord(integration, 'integration')
+}
+
+const linearTaskIntegrationOptimisticUpdater = (
+  store: RecordSourceSelectorProxy,
+  variables: TCreateTaskIntegrationMutation['variables']
+) => {
+  const {taskId} = variables
+  const now = new Date()
+  const task = store.get(taskId)
+  if (!task) return
+  const contentStr = task.getValue('content') as string
+  if (!contentStr) return
+  const integrationProject = createProxyRecord(store, '_xLinearProject', {
+    name: '?'
+  })
+  const integrationTeam = createProxyRecord(store, '_xLinearTeam', {
+    name: '?'
+  })
+  const {title, bodyContent} = splitTipTapContent(JSON.parse(contentStr))
+  const description = generateHTML(bodyContent, serverTipTapExtensions)
+  const optimisticIntegration = {
+    id: '?',
+    description,
+    identifier: '?',
+    title,
+    updatedAt: now.toJSON()
+  } as const
+  const integration = createProxyRecord(store, '_xLinearIssue', optimisticIntegration)
+  integration.setLinkedRecord(integrationProject, 'project')
+  integration.setLinkedRecord(integrationTeam, 'team')
   task.setLinkedRecord(integration, 'integration')
 }
 
@@ -233,13 +277,15 @@ const CreateTaskIntegrationMutation: StandardMutation<TCreateTaskIntegrationMuta
       if (integrationProviderService === 'jira') {
         jiraTaskIntegrationOptimisticUpdater(store, variables)
       } else if (integrationProviderService === 'github') {
-        githubTaskIntegrationOptimisitcUpdater(store, variables)
+        githubTaskIntegrationOptimisticUpdater(store, variables)
       } else if (integrationProviderService === 'jiraServer') {
         jiraServerTaskIntegrationOptimisticUpdater(store, variables)
       } else if (integrationProviderService === 'gitlab') {
-        gitlabTaskIntegrationOptimisitcUpdater(store, variables)
+        gitlabTaskIntegrationOptimisticUpdater(store, variables)
       } else if (integrationProviderService === 'azureDevOps') {
-        azureTaskIntegrationOptimisitcUpdater(store, variables)
+        azureTaskIntegrationOptimisticUpdater(store, variables)
+      } else if (integrationProviderService === 'linear') {
+        linearTaskIntegrationOptimisticUpdater(store, variables)
       }
     },
     onCompleted: (data, errors) => {
@@ -252,7 +298,7 @@ const CreateTaskIntegrationMutation: StandardMutation<TCreateTaskIntegrationMuta
         ? (store.getSource().get(meetingId) as any)?.meetingType
         : undefined
       if (data.createTaskIntegration && !data?.createTaskIntegration?.error) {
-        SendClientSegmentEventMutation(atmosphere, 'Task Published', {
+        SendClientSideEvent(atmosphere, 'Task Published', {
           taskId: data.createTaskIntegration.task?.id,
           teamId: data.createTaskIntegration.task?.teamId,
           inMeeting: !!meetingId,

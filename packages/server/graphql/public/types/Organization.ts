@@ -1,5 +1,14 @@
-import {isSuperUser} from '../../../utils/authorization'
-import {OrganizationResolvers} from '../resolverTypes'
+import {
+  getUserId,
+  isSuperUser,
+  isUserBillingLeader,
+  isUserOrgAdmin
+} from '../../../utils/authorization'
+import {CipherId} from '../../../utils/CipherId'
+import {getStripeManager} from '../../../utils/stripe'
+import {getFeatureTier} from '../../types/helpers/getFeatureTier'
+import type {OrganizationResolvers} from '../resolverTypes'
+import getActiveTeamCountByOrgIds from './helpers/getActiveTeamCountByOrgIds'
 
 const Organization: OrganizationResolvers = {
   approvedDomains: async ({id: orgId}, _args, {dataLoader}) => {
@@ -15,9 +24,126 @@ const Organization: OrganizationResolvers = {
     if (!activeDomain || !isSuperUser(authToken)) return null
     return {id: activeDomain}
   },
-  featureFlags: ({featureFlags}) => {
-    if (!featureFlags) return {}
-    return Object.fromEntries(featureFlags.map((flag) => [flag as any, true]))
+  featureFlag: async ({id: orgId}, {featureName}, {dataLoader}) => {
+    return await dataLoader.get('featureFlagByOwnerId').load({ownerId: orgId, featureName})
+  },
+  tier: ({tier, trialStartDate}) => {
+    return getFeatureTier({tier, trialStartDate})
+  },
+  billingTier: ({tier}) => tier,
+  saml: async ({id: orgId}, _args, {dataLoader}) => {
+    const saml = await dataLoader.get('samlByOrgId').load(orgId)
+    return saml || null
+  },
+
+  isBillingLeader: async ({id: orgId}, _args, {authToken, dataLoader}) => {
+    const viewerId = getUserId(authToken)
+    return isUserBillingLeader(viewerId, orgId, dataLoader)
+  },
+
+  isOrgAdmin: async ({id: orgId}, _args, {authToken, dataLoader}) => {
+    const viewerId = getUserId(authToken)
+    return isUserOrgAdmin(viewerId, orgId, dataLoader)
+  },
+
+  activeTeamCount: async ({id: orgId}) => {
+    return getActiveTeamCountByOrgIds(orgId)
+  },
+
+  teams: async ({id: orgId}, _args, {dataLoader, authToken}) => {
+    const viewerId = getUserId(authToken)
+    const [teamsInOrg, isOrgAdmin] = await Promise.all([
+      dataLoader.get('teamsByOrgIds').load(orgId),
+      isUserOrgAdmin(viewerId, orgId, dataLoader)
+    ])
+    const sortedTeams = teamsInOrg.sort((a, b) => a.name.localeCompare(b.name))
+
+    if (isOrgAdmin || isSuperUser(authToken)) {
+      // Org admins and super users can see all teams
+      return sortedTeams
+    } else {
+      // Regular users can see teams they're on plus public teams
+      return sortedTeams.filter((team) => team.isPublic || authToken.tms.includes(team.id))
+    }
+  },
+
+  allTeamsCount: async ({id: orgId}, _args, {dataLoader}) => {
+    const allTeamsOnOrg = await dataLoader.get('teamsByOrgIds').load(orgId)
+    return allTeamsOnOrg?.length ?? 0
+  },
+
+  viewerOrganizationUser: async ({id: orgId}, _args, {dataLoader, authToken}) => {
+    const viewerId = getUserId(authToken)
+    return dataLoader.get('organizationUsersByUserIdOrgId').load({userId: viewerId, orgId})
+  },
+
+  organizationUsers: async ({id: orgId}, _args, {dataLoader}) => {
+    const organizationUsers = await dataLoader.get('organizationUsersByOrgId').load(orgId)
+    organizationUsers.sort((a, b) => (a.orgId > b.orgId ? 1 : -1))
+    const edges = organizationUsers.map((node) => ({
+      cursor: node.id,
+      node
+    }))
+    // TODO implement pagination
+    const firstEdge = edges[0]
+    return {
+      edges,
+      pageInfo: {
+        endCursor: firstEdge ? edges[edges.length - 1]!.cursor : null,
+        hasNextPage: false,
+        hasPreviousPage: false
+      }
+    }
+  },
+
+  orgUserCount: async ({id: orgId}, _args, {dataLoader}) => {
+    const [organizationUsers, activeOrganizationUsers] = await Promise.all([
+      dataLoader.get('organizationUsersByOrgId').load(orgId),
+      dataLoader.get('activeOrganizationUsersByOrgId').load(orgId)
+    ])
+    return {
+      inactiveUserCount: organizationUsers.length - activeOrganizationUsers.length,
+      activeUserCount: activeOrganizationUsers.length
+    }
+  },
+
+  billingLeaders: async ({id: orgId}, _args, {dataLoader}) => {
+    const organizationUsers = await dataLoader.get('organizationUsersByOrgId').load(orgId)
+    return organizationUsers.filter(
+      (organizationUser) =>
+        organizationUser.role === 'BILLING_LEADER' || organizationUser.role === 'ORG_ADMIN'
+    )
+  },
+  integrationProviders: ({id: orgId}) => ({orgId}),
+  orgFeatureFlags: async ({id: orgId}, _args, {dataLoader}) => {
+    const orgFeatureFlags = await dataLoader
+      .get('allFeatureFlagsByOwner')
+      .load({ownerId: orgId, scope: 'Organization'})
+    return orgFeatureFlags.filter((flag) => flag.isPublic)
+  },
+  oauthApplications: async ({id: orgId}, _args, {dataLoader}) => {
+    return dataLoader.get('oauthProvidersByOrgId').load(orgId)
+  },
+  oauthAPIProvider: async ({id: orgId}, {providerId}, {dataLoader}) => {
+    const [dbProviderId] = CipherId.fromClient(providerId)
+    const provider = await dataLoader.get('oAuthProviders').load(dbProviderId)
+
+    if (!provider || provider.orgId !== orgId) {
+      return null
+    }
+
+    return provider
+  },
+
+  coupon: async ({couponId}) => {
+    if (!couponId) return null
+    const manager = getStripeManager()
+    const coupon = await manager.retrieveCoupon(couponId)
+    if (coupon instanceof Error) return null
+    return {
+      percentOff: coupon.percent_off ?? 0,
+      durationInMonths: coupon.duration_in_months ?? null
+    }
   }
 }
 

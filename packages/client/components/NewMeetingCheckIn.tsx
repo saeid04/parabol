@@ -1,10 +1,10 @@
 import styled from '@emotion/styled'
 import {RecordVoiceOver} from '@mui/icons-material'
 import graphql from 'babel-plugin-relay/macro'
-import React, {ReactElement} from 'react'
-import {createFragmentContainer} from 'react-relay'
-import useGotoStageId from '~/hooks/useGotoStageId'
-import {NewMeetingCheckIn_meeting} from '~/__generated__/NewMeetingCheckIn_meeting.graphql'
+import type {ReactElement} from 'react'
+import {useFragment} from 'react-relay'
+import type {NewMeetingCheckIn_meeting$key} from '~/__generated__/NewMeetingCheckIn_meeting.graphql'
+import type useGotoStageId from '~/hooks/useGotoStageId'
 import useAtmosphere from '../hooks/useAtmosphere'
 import NewMeetingCheckInPrompt from '../modules/meeting/components/MeetingCheckInPrompt/NewMeetingCheckInPrompt'
 import MeetingFacilitationHint from '../modules/meeting/components/MeetingFacilitationHint/MeetingFacilitationHint'
@@ -37,23 +37,44 @@ const StyledIcon = styled(RecordVoiceOver)({
 
 interface Props {
   avatarGroup: ReactElement
-  meeting: NewMeetingCheckIn_meeting
+  meeting: NewMeetingCheckIn_meeting$key
   toggleSidebar: () => void
   gotoStageId?: ReturnType<typeof useGotoStageId>
 }
 
 const NewMeetingCheckIn = (props: Props) => {
-  const {avatarGroup, meeting, toggleSidebar} = props
+  const {avatarGroup, meeting: meetingRef, toggleSidebar} = props
+  const meeting = useFragment(
+    graphql`
+      fragment NewMeetingCheckIn_meeting on NewMeeting {
+        ...NewMeetingCheckInPrompt_meeting
+        endedAt
+        showSidebar
+        facilitatorStageId
+        localStage {
+          id
+          ...NewMeetingCheckInLocalStage @relay(mask: false)
+        }
+        phases {
+          stages {
+            id
+            ...NewMeetingCheckInLocalStage @relay(mask: false)
+          }
+        }
+        teamId
+      }
+    `,
+    meetingRef
+  )
   const atmosphere = useAtmosphere()
   const {endedAt, showSidebar, localStage, phases} = meeting
   const {id: localStageId} = localStage
-  const teamMember = localStage.teamMember!
-  const {userId} = teamMember
+  const user = localStage.teamMember?.user
   const nextStageRes = findStageAfterId(phases, localStageId)
   // in case the checkin is the last phase of the meeting
   if (!nextStageRes) return null
   const {viewerId} = atmosphere
-  const isViewerMeetingSection = userId === viewerId
+  const isViewerMeetingSection = user?.id === viewerId
   return (
     <MeetingContent>
       <MeetingHeaderAndPhase hideBottomBar={!!endedAt}>
@@ -65,7 +86,7 @@ const NewMeetingCheckIn = (props: Props) => {
           <PhaseHeaderTitle>{phaseLabelLookup.checkin}</PhaseHeaderTitle>
         </MeetingTopBar>
         <PhaseWrapper>
-          <NewMeetingCheckInPrompt meeting={meeting} teamMember={teamMember} />
+          <NewMeetingCheckInPrompt meetingRef={meeting} userRef={user!} />
           <CheckIn>
             {isViewerMeetingSection && (
               <Hint>
@@ -85,30 +106,12 @@ const NewMeetingCheckIn = (props: Props) => {
 graphql`
   fragment NewMeetingCheckInLocalStage on CheckInStage {
     teamMember {
-      userId
-      ...NewMeetingCheckInPrompt_teamMember
+      user {
+        id
+        ...NewMeetingCheckInPrompt_user
+      }
     }
   }
 `
 
-export default createFragmentContainer(NewMeetingCheckIn, {
-  meeting: graphql`
-    fragment NewMeetingCheckIn_meeting on NewMeeting {
-      ...NewMeetingCheckInPrompt_meeting
-      endedAt
-      showSidebar
-      facilitatorStageId
-      localStage {
-        id
-        ...NewMeetingCheckInLocalStage @relay(mask: false)
-      }
-      phases {
-        stages {
-          id
-          ...NewMeetingCheckInLocalStage @relay(mask: false)
-        }
-      }
-      teamId
-    }
-  `
-})
+export default NewMeetingCheckIn

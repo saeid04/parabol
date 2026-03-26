@@ -1,10 +1,9 @@
 import styled from '@emotion/styled'
+import {DragDropContext, Draggable, Droppable, type DropResult} from '@hello-pangea/dnd'
 import graphql from 'babel-plugin-relay/macro'
-import React from 'react'
-import {DragDropContext, Draggable, Droppable, DropResult} from 'react-beautiful-dnd'
-import {createFragmentContainer} from 'react-relay'
-import useGotoStageId from '~/hooks/useGotoStageId'
-import {PokerSidebarEstimateSection_meeting} from '~/__generated__/PokerSidebarEstimateSection_meeting.graphql'
+import {useFragment} from 'react-relay'
+import type {PokerSidebarEstimateSection_meeting$key} from '~/__generated__/PokerSidebarEstimateSection_meeting.graphql'
+import type useGotoStageId from '~/hooks/useGotoStageId'
 import useAtmosphere from '../hooks/useAtmosphere'
 import useMakeStageSummaries from '../hooks/useMakeStageSummaries'
 import DragEstimatingTaskMutation from '../mutations/DragEstimatingTaskMutation'
@@ -18,7 +17,7 @@ import PokerSidebarEstimateMeta from './PokerSidebarEstimateMeta'
 interface Props {
   gotoStageId: ReturnType<typeof useGotoStageId>
   handleMenuClick: () => void
-  meeting: PokerSidebarEstimateSection_meeting
+  meeting: PokerSidebarEstimateSection_meeting$key
 }
 
 const DraggableMeetingSubnavItem = styled('div')<{isDragging: boolean}>(({isDragging}) => ({
@@ -49,7 +48,38 @@ const Subtitle = styled('div')({
 })
 
 const PokerSidebarEstimateSection = (props: Props) => {
-  const {gotoStageId, handleMenuClick, meeting} = props
+  const {gotoStageId, handleMenuClick, meeting: meetingRef} = props
+  const meeting = useFragment(
+    graphql`
+      fragment PokerSidebarEstimateSection_meeting on PokerMeeting {
+        id
+        endedAt
+        localStage {
+          id
+        }
+        facilitatorStageId
+        # load up the localPhase
+        phases {
+          ...useMakeStageSummaries_phase
+          ... on EstimatePhase {
+            stages {
+              scores {
+                userId
+              }
+            }
+          }
+          phaseType
+          stages {
+            id
+          }
+        }
+        localStage {
+          id
+        }
+      }
+    `,
+    meetingRef
+  )
   const {localStage, facilitatorStageId, id: meetingId, phases, endedAt} = meeting
   const atmosphere = useAtmosphere()
   const {viewerId} = atmosphere
@@ -75,19 +105,27 @@ const PokerSidebarEstimateSection = (props: Props) => {
     }
 
     const {taskId} = sourceTopic
-    const variables = {meetingId, taskId, newPositionIndex: destination.index}
+    const variables = {
+      meetingId,
+      taskId,
+      newPositionIndex: destination.index
+    }
     DragEstimatingTaskMutation(atmosphere, variables)
   }
 
   const handleClick = (stageIds: string[]) => {
     // if the facilitator is at one of the stages, go there
     if (stageIds.includes(facilitatorStageId)) {
-      gotoStageId(facilitatorStageId).catch()
+      gotoStageId(facilitatorStageId).catch(() => {
+        /*ignore*/
+      })
     } else {
       // goto the first stage that the user hasn't voted on
       const summaryStages = stageIds.map((id) => stages.find((stage) => stage.id === id))
       const unvotedStage = summaryStages.find((stage) => {
-        return !stage!.scores!.find(({userId}) => userId === viewerId)
+        if (!stage || !stage.scores) return false
+        const hasUserVoted = stage.scores.find(({userId}) => userId === viewerId)
+        return !hasUserVoted
       })
       if (unvotedStage) {
         gotoStageId(unvotedStage.id)
@@ -158,33 +196,4 @@ const PokerSidebarEstimateSection = (props: Props) => {
   )
 }
 
-export default createFragmentContainer(PokerSidebarEstimateSection, {
-  meeting: graphql`
-    fragment PokerSidebarEstimateSection_meeting on PokerMeeting {
-      id
-      endedAt
-      localStage {
-        id
-      }
-      facilitatorStageId
-      # load up the localPhase
-      phases {
-        ...useMakeStageSummaries_phase
-        ... on EstimatePhase {
-          stages {
-            scores {
-              userId
-            }
-          }
-        }
-        phaseType
-        stages {
-          id
-        }
-      }
-      localStage {
-        id
-      }
-    }
-  `
-})
+export default PokerSidebarEstimateSection

@@ -1,98 +1,68 @@
-import styled from '@emotion/styled'
 import {Add, Check} from '@mui/icons-material'
-import React from 'react'
-import DialogTitle from '../../../../components/DialogTitle'
-import {PALETTE} from '../../../../styles/paletteV3'
+import graphql from 'babel-plugin-relay/macro'
+import {useFragment} from 'react-relay'
+import type {OrgAuthenticationSSOFrame_saml$key} from '../../../../__generated__/OrgAuthenticationSSOFrame_saml.graphql'
 import {ExternalLinks} from '../../../../types/constEnums'
 
-const IconBlock = styled('div')({
-  padding: '0px 8px 0 8px'
-})
-
-const StyledAddIcon = styled(Add)({
-  color: PALETTE.SKY_500,
-  width: '24px',
-  height: '24px'
-})
-
-const StyledCheckIcon = styled(Check)({
-  color: PALETTE.SUCCESS_LIGHT,
-  width: '24px',
-  height: '24px'
-})
-
-const SSOEnabledToggleBlock = styled('div')({
-  padding: '0 16px 28px 16px'
-})
-
-const ContentWrapper = styled('div')({
-  display: 'flex',
-  flexDirection: 'row',
-  border: `1px solid ${PALETTE.SLATE_500}`,
-  borderRadius: '4px',
-  padding: '4px 8px 4px '
-})
-
-const SSOEnabledLabelBlock = styled('div')({
-  display: 'flex',
-  flexDirection: 'column'
-})
-
-const SubTitle = styled(DialogTitle)({
-  color: PALETTE.SLATE_700,
-  fontSize: '16px',
-  padding: 0
-})
-
-const SSOEnabledLabel = styled('span')({
-  color: PALETTE.SLATE_700,
-  fontSize: '14px'
-})
-
-const ContactLink = styled('a')({
-  fontSize: '14px',
-  fontWeight: 600,
-  color: PALETTE.SKY_500,
-  '&:focus, &:active': {
-    color: PALETTE.SKY_500
-  }
-})
-
 interface Props {
-  disabled: boolean
+  samlRef: OrgAuthenticationSSOFrame_saml$key | null
 }
 
 const OrgAuthenticationSSOFrame = (props: Props) => {
-  const {disabled} = props
-
-  const isSSOEnabled = false
+  const {samlRef} = props
+  const saml = useFragment(
+    graphql`
+      fragment OrgAuthenticationSSOFrame_saml on SAML {
+        id
+        domains
+      }
+    `,
+    samlRef
+  )
+  const disabled = !saml
+  const domains: readonly string[] = saml?.domains ?? []
 
   return (
-    <SSOEnabledToggleBlock>
-      <ContentWrapper>
-        <IconBlock>
-          {isSSOEnabled ? (
-            <StyledCheckIcon>{'check'}</StyledCheckIcon>
+    <div className='px-6 pb-8'>
+      <div className='flex flex-row rounded border border-slate-500 px-2 py-1'>
+        <div className='px-2'>
+          {disabled ? (
+            <Add className='h-6 w-6 text-sky-500' />
           ) : (
-            <StyledAddIcon>{'add'}</StyledAddIcon>
+            <Check className='h-6 w-6 text-green-500' />
           )}
-        </IconBlock>
-        <SSOEnabledLabelBlock>
-          <SubTitle>Enable SSO</SubTitle>
-          <SSOEnabledLabel>
-            <ContactLink
+        </div>
+        <div className='flex flex-col'>
+          <span className='font-semibold text-base text-slate-700'>
+            {disabled ? 'Enable SSO' : 'SSO Enabled'}
+          </span>
+          <span className='text-slate-700 text-sm'>
+            <a
+              className='font-semibold text-sky-500 text-sm focus:text-sky-500 active:text-sky-500'
               href={`${ExternalLinks.CONTACT}?subject=${
                 disabled ? 'Enable SSO' : 'Update Email Domains'
               }`}
               title={'Contact customer success to enable SSO'}
             >
               Contact customer success
-            </ContactLink>{' '}
+            </a>{' '}
             {disabled ? 'to enable SSO' : 'to update email domains'}
-          </SSOEnabledLabel>
-        </SSOEnabledLabelBlock>
-      </ContentWrapper>
-    </SSOEnabledToggleBlock>
+          </span>
+          <div className='flex flex-wrap gap-2 pt-2 pb-1 empty:hidden'>
+            {domains.map((domain) => {
+              return (
+                <div
+                  key={domain}
+                  className='w-max select-none rounded-full bg-slate-200 px-3 py-1 font-semibold text-slate-800 text-xs'
+                >
+                  {domain}
+                </div>
+              )
+            })}
+          </div>
+        </div>
+      </div>
+    </div>
   )
 }
 

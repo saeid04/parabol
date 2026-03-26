@@ -1,7 +1,6 @@
 import graphql from 'babel-plugin-relay/macro'
-import React from 'react'
-import {PreloadedQuery, usePreloadedQuery} from 'react-relay'
-import {InvitationLinkQuery} from '../__generated__/InvitationLinkQuery.graphql'
+import {type PreloadedQuery, usePreloadedQuery} from 'react-relay'
+import type {InvitationLinkQuery} from '../__generated__/InvitationLinkQuery.graphql'
 import InvitationLinkDialog from './InvitationLinkDialog'
 import TeamInvitationMeetingAbstract from './TeamInvitationMeetingAbstract'
 
@@ -19,9 +18,7 @@ const query = graphql`
 
 function InvitationLink(props: Props) {
   const {queryRef} = props
-  const data = usePreloadedQuery<InvitationLinkQuery>(query, queryRef, {
-    UNSTABLE_renderPolicy: 'full'
-  })
+  const data = usePreloadedQuery<InvitationLinkQuery>(query, queryRef)
   const {massInvitation} = data
   // the meeting background is prettier than the plain one, so let's always use it
   return (

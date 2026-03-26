@@ -1,11 +1,11 @@
 import graphql from 'babel-plugin-relay/macro'
+import type {RetroTopics_meeting$key} from 'parabol-client/__generated__/RetroTopics_meeting.graphql'
 import {PALETTE} from 'parabol-client/styles/paletteV3'
 import {FONT_FAMILY} from 'parabol-client/styles/typographyV2'
 import {RETRO_TOPIC_LABEL} from 'parabol-client/utils/constants'
 import plural from 'parabol-client/utils/plural'
-import {RetroTopics_meeting} from 'parabol-client/__generated__/RetroTopics_meeting.graphql'
-import React from 'react'
-import {createFragmentContainer} from 'react-relay'
+import {Fragment} from 'react'
+import {useFragment} from 'react-relay'
 import useEmailItemGrid from '../../../../../hooks/useEmailItemGrid'
 import makeAppURL from '../../../../../utils/makeAppURL'
 import AnchorIfEmail from './AnchorIfEmail'
@@ -34,11 +34,37 @@ interface Props {
   isDemo: boolean
   isEmail: boolean
   appOrigin: string
-  meeting: RetroTopics_meeting
+  meeting: RetroTopics_meeting$key
 }
 
 const RetroTopics = (props: Props) => {
-  const {isDemo, isEmail, appOrigin, meeting} = props
+  const {isDemo, isEmail, appOrigin, meeting: meetingRef} = props
+  const meeting = useFragment(
+    graphql`
+      fragment RetroTopics_meeting on RetrospectiveMeeting {
+        id
+        reflectionGroups(sortBy: voteCount) {
+          id
+          title
+          reflections {
+            ...EmailReflectionCard_reflection
+          }
+        }
+        phases {
+          phaseType
+          ... on DiscussPhase {
+            stages {
+              id
+              reflectionGroupId
+              ...RetroTopic_stage
+            }
+          }
+        }
+        ...RetroTopic_meeting
+      }
+    `,
+    meetingRef
+  )
   const {id: meetingId, phases, reflectionGroups} = meeting
   const discussPhase = phases.find((phase) => phase.phaseType === 'discuss')
   if (!discussPhase || !discussPhase.stages) return null
@@ -81,16 +107,18 @@ const RetroTopics = (props: Props) => {
                 isDemo={isDemo}
                 isEmail={isEmail}
                 stageRef={stage}
+                meetingRef={meeting}
                 to={topicUrl}
+                appOrigin={appOrigin}
               />
             )
           })
         : reflectionGroups.map((reflectionGroup) => {
             const {reflections, title} = reflectionGroup
-            // eslint-disable-next-line react-hooks/rules-of-hooks
+            // biome-ignore lint/correctness/useHookAtTopLevel: legacy
             const grid = useEmailItemGrid(reflections, 3)
             return (
-              <React.Fragment key={reflectionGroup.id}>
+              <Fragment key={reflectionGroup.id}>
                 <tr>
                   <td align='center' style={{paddingTop: 20}}>
                     <AnchorIfEmail
@@ -110,7 +138,7 @@ const RetroTopics = (props: Props) => {
                     ))}
                   </td>
                 </tr>
-              </React.Fragment>
+              </Fragment>
             )
           })}
       <EmailBorderBottom />
@@ -118,27 +146,4 @@ const RetroTopics = (props: Props) => {
   )
 }
 
-export default createFragmentContainer(RetroTopics, {
-  meeting: graphql`
-    fragment RetroTopics_meeting on RetrospectiveMeeting {
-      id
-      reflectionGroups(sortBy: voteCount) {
-        id
-        title
-        reflections {
-          ...EmailReflectionCard_reflection
-        }
-      }
-      phases {
-        phaseType
-        ... on DiscussPhase {
-          stages {
-            id
-            reflectionGroupId
-            ...RetroTopic_stage
-          }
-        }
-      }
-    }
-  `
-})
+export default RetroTopics

@@ -1,56 +1,74 @@
+import type {GraphQLResolveInfo} from 'graphql'
+import {sql} from 'kysely'
 import {SubscriptionChannel} from 'parabol-client/types/constEnums'
-import {checkTeamsLimit} from '../../../billing/helpers/teamLimitsCheck'
-import {ParabolR} from '../../../database/rethinkDriver'
-import MeetingTeamPrompt from '../../../database/types/MeetingTeamPrompt'
 import TimelineEventTeamPromptComplete from '../../../database/types/TimelineEventTeamPromptComplete'
+import {sendSummaryEmailV2} from '../../../email/sendSummaryEmailV2'
+import getKysely from '../../../postgres/getKysely'
 import {getTeamPromptResponsesByMeetingId} from '../../../postgres/queries/getTeamPromptResponsesByMeetingIds'
+import type {TeamPromptMeeting} from '../../../postgres/types/Meeting'
 import {analytics} from '../../../utils/analytics/analytics'
-import publish, {SubOptions} from '../../../utils/publish'
+import {getUserId} from '../../../utils/authorization'
+import {Logger} from '../../../utils/Logger'
+import publish from '../../../utils/publish'
 import standardError from '../../../utils/standardError'
-import {InternalContext} from '../../graphql'
-import sendNewMeetingSummary from './endMeeting/sendNewMeetingSummary'
+import type {InternalContext} from '../../graphql'
+import gatherInsights from './gatherInsights'
+import generateStandupMeetingSummary from './generateStandupMeetingSummary'
+import {IntegrationNotifier} from './notifications/IntegrationNotifier'
+import {publishSummaryPage} from './summaryPage/publishSummaryPage'
+import updateQualAIMeetingsCount from './updateQualAIMeetingsCount'
+
+const summarizeTeamPrompt = async (meeting: TeamPromptMeeting, context: InternalContext) => {
+  const {dataLoader} = context
+  const pg = getKysely()
+
+  const summary = await generateStandupMeetingSummary(meeting, dataLoader)
+  await pg.updateTable('NewMeeting').set({summary}).where('id', '=', meeting.id).execute()
+
+  // wait for whole meeting summary to be generated before sending summary email and updating qualAIMeetingCount
+  updateQualAIMeetingsCount(meeting.id, meeting.teamId, dataLoader)
+  // wait for meeting stats to be generated before sending Slack notification
+  IntegrationNotifier.endMeeting(dataLoader, meeting.id, meeting.teamId)
+  return summary
+}
 
 const safeEndTeamPrompt = async ({
   meeting,
-  now,
-  viewerId,
-  r,
   context,
-  subOptions
+  info
 }: {
-  meeting: MeetingTeamPrompt
-  now: Date
-  viewerId?: string
-  r: ParabolR
+  meeting: TeamPromptMeeting
   context: InternalContext
-  subOptions: SubOptions
+  info: GraphQLResolveInfo
 }) => {
-  const {dataLoader} = context
-
+  const pg = getKysely()
+  const {authToken, socketId: mutatorId, dataLoader} = context
+  const operationId = dataLoader.share()
+  const subOptions = {mutatorId, operationId}
+  const viewerId = getUserId(authToken)
   const {endedAt, id: meetingId, teamId} = meeting
 
-  if (endedAt) return standardError(new Error('Meeting already ended'), {userId: viewerId})
-
-  // RESOLUTION
-  const completedTeamPrompt = (await r
-    .table('NewMeeting')
-    .get(meetingId)
-    .update(
-      {
-        endedAt: now
-      },
-      {returnChanges: true}
-    )('changes')(0)('new_val')
-    .default(null)
-    .run()) as unknown as MeetingTeamPrompt
-
-  if (!completedTeamPrompt) {
-    return standardError(new Error('Completed team prompt meeting does not exist'), {
+  if (endedAt)
+    return standardError(new Error('Meeting already ended'), {
       userId: viewerId
     })
-  }
 
-  const [meetingMembers, team, teamMembers, responses] = await Promise.all([
+  // RESOLUTION
+  const insights = await gatherInsights(meeting, dataLoader)
+  await pg
+    .updateTable('NewMeeting')
+    .set({
+      endedAt: sql`CURRENT_TIMESTAMP`,
+      usedReactjis: JSON.stringify(insights.usedReactjis),
+      engagement: insights.engagement,
+      summary: '<loading>' // set as "<loading>" while the AI summary is being generated
+    })
+    .where('id', '=', meetingId)
+    .execute()
+  dataLoader.clearAll('newMeetings')
+
+  const [completedTeamPrompt, meetingMembers, team, teamMembers, responses] = await Promise.all([
+    dataLoader.get('newMeetings').loadNonNull(meetingId) as Promise<TeamPromptMeeting>,
     dataLoader.get('meetingMembersByMeetingId').load(meetingId),
     dataLoader.get('teams').loadNonNull(teamId),
     dataLoader.get('teamMembersByTeamId').load(teamId),
@@ -66,19 +84,28 @@ const safeEndTeamPrompt = async ({
         meetingId
       })
   )
-  const timelineEventId = events[0]!.id
-  await r.table('TimelineEvent').insert(events).run()
-  sendNewMeetingSummary(completedTeamPrompt, context).catch(console.log)
-  checkTeamsLimit(team.orgId, dataLoader)
-  analytics.teamPromptEnd(completedTeamPrompt, meetingMembers, responses)
-  dataLoader.get('newMeetings').clear(meetingId)
-
+  await pg.insertInto('TimelineEvent').values(events).execute()
+  analytics.teamPromptEnd(completedTeamPrompt, meetingMembers, responses, dataLoader)
+  const [page, summary] = await Promise.all([
+    publishSummaryPage(meetingId, context, info),
+    summarizeTeamPrompt(completedTeamPrompt, context)
+  ])
+  completedTeamPrompt.summaryPageId = page.id
+  completedTeamPrompt.summary = summary
   const data = {
     meetingId,
-    teamId,
-    timelineEventId
+    teamId
   }
+  publish(
+    SubscriptionChannel.MEETING,
+    meeting.id,
+    'EndTeamPromptSuccess',
+    {meetingId},
+    {operationId}
+  )
   publish(SubscriptionChannel.TEAM, teamId, 'EndTeamPromptSuccess', data, subOptions)
+  // do not await sending the email
+  sendSummaryEmailV2(meetingId, page.id, context, info).catch(Logger.log)
   return data
 }
 

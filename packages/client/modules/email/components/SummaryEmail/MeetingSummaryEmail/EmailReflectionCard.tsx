@@ -1,14 +1,13 @@
 import graphql from 'babel-plugin-relay/macro'
-import {convertFromRaw, Editor, EditorState} from 'draft-js'
-import editorDecorators from 'parabol-client/components/TaskEditor/decorators'
+import type {EmailReflectionCard_reflection$key} from 'parabol-client/__generated__/EmailReflectionCard_reflection.graphql'
 import {PALETTE} from 'parabol-client/styles/paletteV3'
 import {FONT_FAMILY} from 'parabol-client/styles/typographyV2'
-import {EmailReflectionCard_reflection} from 'parabol-client/__generated__/EmailReflectionCard_reflection.graphql'
-import React, {useMemo, useRef} from 'react'
-import {createFragmentContainer} from 'react-relay'
+import type * as React from 'react'
+import {useFragment} from 'react-relay'
+import {useTipTapContext} from '../../../../../components/TipTapProvider'
 
 interface Props {
-  reflection: EmailReflectionCard_reflection
+  reflection: EmailReflectionCard_reflection$key
 }
 
 const contentStyle = {
@@ -18,6 +17,7 @@ const contentStyle = {
   borderStyle: 'solid',
   borderWidth: '1px',
   boxSizing: 'content-box',
+  breakInside: 'avoid',
   color: PALETTE.SLATE_700,
   fontFamily: FONT_FAMILY.SANS_SERIF,
   fontSize: '14px',
@@ -29,7 +29,8 @@ const contentStyle = {
   verticalAlign: 'top',
   width: 188,
   minWidth: 188,
-  maxWidth: 188
+  maxWidth: 188,
+  wordBreak: 'break-word'
 } as React.CSSProperties
 
 const reflectionCardFooter = {
@@ -40,18 +41,22 @@ const reflectionCardFooter = {
 }
 
 const EmailReflectionCard = (props: Props) => {
-  const {reflection} = props
+  const {reflection: reflectionRef} = props
+  const reflection = useFragment(
+    graphql`
+      fragment EmailReflectionCard_reflection on RetroReflection {
+        content
+        prompt {
+          question
+        }
+      }
+    `,
+    reflectionRef
+  )
   const {content, prompt} = reflection
   const {question} = prompt
-  const contentState = useMemo(() => convertFromRaw(JSON.parse(content)), [content])
-  const editorStateRef = useRef<EditorState>()
-  const getEditorState = () => {
-    return editorStateRef.current
-  }
-  editorStateRef.current = EditorState.createWithContent(
-    contentState,
-    editorDecorators(getEditorState)
-  )
+  const {generateHTML} = useTipTapContext()
+  const htmlContent = generateHTML(JSON.parse(content))
   return (
     <tr>
       <td>
@@ -63,13 +68,7 @@ const EmailReflectionCard = (props: Props) => {
                   <tbody>
                     <tr>
                       <td>
-                        <Editor
-                          readOnly
-                          editorState={editorStateRef.current}
-                          onChange={() => {
-                            /**/
-                          }}
-                        />
+                        <div dangerouslySetInnerHTML={{__html: htmlContent}}></div>
                       </td>
                     </tr>
                   </tbody>
@@ -86,13 +85,4 @@ const EmailReflectionCard = (props: Props) => {
   )
 }
 
-export default createFragmentContainer(EmailReflectionCard, {
-  reflection: graphql`
-    fragment EmailReflectionCard_reflection on RetroReflection {
-      content
-      prompt {
-        question
-      }
-    }
-  `
-})
+export default EmailReflectionCard

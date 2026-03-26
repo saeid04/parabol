@@ -1,11 +1,11 @@
 import styled from '@emotion/styled'
 import graphql from 'babel-plugin-relay/macro'
-import React from 'react'
-import {createFragmentContainer} from 'react-relay'
-import {MenuPosition} from '~/hooks/useCoords'
-import useTooltip from '~/hooks/useTooltip'
-import {NewMeetingPhaseTypeEnum} from '~/__generated__/ActionMeeting_meeting.graphql'
-import {ColorBadge_reflection} from '~/__generated__/ColorBadge_reflection.graphql'
+import {useFragment} from 'react-relay'
+import type {NewMeetingPhaseTypeEnum} from '~/__generated__/ActionMeeting_meeting.graphql'
+import type {ColorBadge_reflection$key} from '~/__generated__/ColorBadge_reflection.graphql'
+import {Tooltip} from '~/ui/Tooltip/Tooltip'
+import {TooltipContent} from '~/ui/Tooltip/TooltipContent'
+import {TooltipTrigger} from '~/ui/Tooltip/TooltipTrigger'
 
 const DROP_SIZE = 32
 const DROP_SIZE_HALF = DROP_SIZE / 2
@@ -33,37 +33,35 @@ const BadgeWrapper = styled('div')({
 
 interface Props {
   phaseType: NewMeetingPhaseTypeEnum
-  reflection: ColorBadge_reflection
+  reflection: ColorBadge_reflection$key
 }
 
 const ColorBadge = (props: Props) => {
-  const {reflection, phaseType} = props
+  const {reflection: reflectionRef, phaseType} = props
+  const reflection = useFragment(
+    graphql`
+      fragment ColorBadge_reflection on RetroReflection {
+        prompt {
+          question
+          groupColor
+        }
+      }
+    `,
+    reflectionRef
+  )
   const {prompt} = reflection
   const {question, groupColor} = prompt
-  const {tooltipPortal, openTooltip, closeTooltip, originRef} = useTooltip<HTMLDivElement>(
-    MenuPosition.LOWER_LEFT,
-    {
-      disabled: phaseType !== 'discuss'
-    }
-  )
   if (phaseType === 'reflect') return null
   return (
-    <>
-      <BadgeWrapper onMouseEnter={openTooltip} onMouseLeave={closeTooltip} ref={originRef}>
-        <ColorDrop groupColor={groupColor} />
-      </BadgeWrapper>
-      {tooltipPortal(question)}
-    </>
+    <Tooltip disableHoverableContent={phaseType !== 'discuss'}>
+      <TooltipTrigger asChild>
+        <BadgeWrapper>
+          <ColorDrop groupColor={groupColor} />
+        </BadgeWrapper>
+      </TooltipTrigger>
+      <TooltipContent>{question}</TooltipContent>
+    </Tooltip>
   )
 }
 
-export default createFragmentContainer(ColorBadge, {
-  reflection: graphql`
-    fragment ColorBadge_reflection on RetroReflection {
-      prompt {
-        question
-        groupColor
-      }
-    }
-  `
-})
+export default ColorBadge

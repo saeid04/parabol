@@ -1,4 +1,3 @@
-import React from 'react'
 import {ContactInfo} from '../../../../types/constEnums'
 import {emailCopyStyle, emailTableBase, emailTextColor} from '../../styles'
 import EmptySpace from '../EmptySpace/EmptySpace'
@@ -35,14 +34,16 @@ const EmailFooter = () => {
             <div style={finePrintStyle}>
               {'Parabol, Inc.'}
               <br />
-              {'8605 Santa Monica Blvd'}
+              {'1111 6th Ave., Ste 550'}
               <br />
-              {'West Hollywood, CA 90069-4109'}
+              {'PMB 73201'}
+              <br />
+              {'San Diego, CA 92101'}
               <br />
               {'United States'}
               <br />
               <a
-                href={`tel:${ContactInfo.TELEPHONE.replace('-', '')}`}
+                href={`tel:${ContactInfo.TELEPHONE.replace('-', '').replace(' ', '')}`}
                 title={`Call us: ${ContactInfo.TELEPHONE}`}
                 style={linkStyle}
               >

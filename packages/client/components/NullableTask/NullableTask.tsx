@@ -1,81 +1,136 @@
+import type {DraggableProvided, DraggableStateSnapshot} from '@hello-pangea/dnd'
+import {useEventCallback} from '@mui/material'
 import graphql from 'babel-plugin-relay/macro'
-import {convertFromRaw} from 'draft-js'
-import React, {useMemo} from 'react'
-import {createFragmentContainer} from 'react-relay'
-import {AreaEnum, TaskStatusEnum} from '~/__generated__/UpdateTaskMutation.graphql'
+import {useFragment} from 'react-relay'
+import type {AreaEnum, TaskStatusEnum} from '~/__generated__/UpdateTaskMutation.graphql'
+import type {NullableTask_task$key} from '../../__generated__/NullableTask_task.graphql'
+import DraggableTaskWrapper from '../../containers/TaskCard/DraggableTaskWrapper'
 import useAtmosphere from '../../hooks/useAtmosphere'
+import useTaskChildFocus from '../../hooks/useTaskChildFocus'
+import {useTipTapTaskEditor} from '../../hooks/useTipTapTaskEditor'
 import OutcomeCardContainer from '../../modules/outcomeCard/containers/OutcomeCard/OutcomeCardContainer'
-import makeEmptyStr from '../../utils/draftjs/makeEmptyStr'
-import {NullableTask_task} from '../../__generated__/NullableTask_task.graphql'
+import DeleteTaskMutation from '../../mutations/DeleteTaskMutation'
+import UpdateTaskMutation from '../../mutations/UpdateTaskMutation'
+import {isEqualWhenSerialized} from '../../shared/isEqualWhenSerialized'
+import isTaskArchived from '../../utils/isTaskArchived'
+import isTempId from '../../utils/relay/isTempId'
 import NullCard from '../NullCard/NullCard'
 
-interface Props {
+type Props = {
   area: AreaEnum
   className?: string
   isAgenda?: boolean
-  isDraggingOver?: TaskStatusEnum
-  task: NullableTask_task
-  dataCy: string
+  task: NullableTask_task$key
   isViewerMeetingSection?: boolean
   meetingId?: string
-}
+} & (
+  | {
+      isDraggable?: false | undefined
+      draggableIndex?: undefined
+    }
+  | {
+      isDraggable: true
+      draggableIndex: number
+    }
+)
 
 const NullableTask = (props: Props) => {
   const {
     area,
     className,
     isAgenda,
-    task,
-    isDraggingOver,
-    dataCy,
+    task: taskRef,
     isViewerMeetingSection,
-    meetingId
+    meetingId,
+    isDraggable,
+    draggableIndex
   } = props
-  const {content, createdBy, createdByUser, integration} = task
-  const {preferredName} = createdByUser
-  const contentState = useMemo(() => {
-    try {
-      return convertFromRaw(JSON.parse(content))
-    } catch (e) {
-      return convertFromRaw(JSON.parse(makeEmptyStr()))
-    }
-  }, [content])
-
-  const atmosphere = useAtmosphere()
-
-  const showOutcome = contentState.hasText() || createdBy === atmosphere.viewerId || integration
-  return showOutcome ? (
-    <OutcomeCardContainer
-      dataCy={`${dataCy}`}
-      area={area}
-      className={className}
-      contentState={contentState}
-      isDraggingOver={isDraggingOver}
-      isAgenda={isAgenda}
-      task={task}
-      isViewerMeetingSection={isViewerMeetingSection}
-      meetingId={meetingId}
-    />
-  ) : (
-    <NullCard className={className} preferredName={preferredName} />
+  const task = useFragment(
+    graphql`
+      # from this place upward the tree, the task components are also used outside of meetings, thus we default to null here
+      fragment NullableTask_task on Task
+      @argumentDefinitions(meetingId: {type: "ID", defaultValue: null}) {
+        id
+        content
+        createdBy
+        sortOrder
+        createdByUser {
+          preferredName
+        }
+        integration {
+          __typename
+        }
+        status
+        teamId
+        tags
+        ...OutcomeCardContainer_task @arguments(meetingId: $meetingId)
+      }
+    `,
+    taskRef
   )
+  const {content, createdBy, createdByUser, integration, teamId, id: taskId, tags} = task
+  const isIntegration = !!integration?.__typename
+  const {preferredName} = createdByUser
+  const atmosphere = useAtmosphere()
+  const isArchived = isTaskArchived(tags)
+  const readOnly = isTempId(taskId) || isArchived || isIntegration
+
+  const {isTaskFocused} = useTaskChildFocus(taskId)
+
+  const handleCardUpdate = useEventCallback(() => {
+    if (!editor || readOnly) return
+    const isFocused = isTaskFocused()
+    if (editor.isEmpty && !isFocused) {
+      DeleteTaskMutation(atmosphere, {taskId})
+      return
+    }
+    const nextContentJSON = editor.getJSON()
+    if (isEqualWhenSerialized(JSON.parse(content), nextContentJSON)) return
+    const updatedTask = {
+      id: taskId,
+      content: JSON.stringify(nextContentJSON)
+    }
+    UpdateTaskMutation(atmosphere, {updatedTask, area}, {})
+  })
+
+  const onModEnter = useEventCallback(() => {
+    handleCardUpdate()
+    editor?.commands.blur()
+  })
+
+  const {editor} = useTipTapTaskEditor(content, {
+    atmosphere,
+    teamId,
+    readOnly,
+    onModEnter: onModEnter
+  })
+
+  const showOutcome =
+    editor && (!editor.isEmpty || createdBy === atmosphere.viewerId || isIntegration)
+  const renderTask = (_dragProvided?: DraggableProvided, dragSnapshot?: DraggableStateSnapshot) =>
+    showOutcome ? (
+      <OutcomeCardContainer
+        area={area}
+        className={className}
+        editor={editor}
+        isDraggingOver={dragSnapshot?.draggingOver as TaskStatusEnum}
+        isAgenda={isAgenda}
+        task={task}
+        isViewerMeetingSection={isViewerMeetingSection}
+        meetingId={meetingId}
+        handleCardUpdate={handleCardUpdate}
+      />
+    ) : (
+      <NullCard className={className} preferredName={preferredName} />
+    )
+  if (isDraggable) {
+    return (
+      <DraggableTaskWrapper draggableId={taskId} index={draggableIndex}>
+        {renderTask}
+      </DraggableTaskWrapper>
+    )
+  }
+  return renderTask()
 }
 
-export default createFragmentContainer(NullableTask, {
-  task: graphql`
-    # from this place upward the tree, the task components are also used outside of meetings, thus we default to null here
-    fragment NullableTask_task on Task
-    @argumentDefinitions(meetingId: {type: "ID", defaultValue: null}) {
-      content
-      createdBy
-      createdByUser {
-        preferredName
-      }
-      integration {
-        __typename
-      }
-      status
-      ...OutcomeCardContainer_task @arguments(meetingId: $meetingId)
-    }
-  `
-})
+export default NullableTask

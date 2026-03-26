@@ -1,46 +1,20 @@
 import styled from '@emotion/styled'
 import graphql from 'babel-plugin-relay/macro'
-import React from 'react'
-import {PreloadedQuery, usePreloadedQuery} from 'react-relay'
-import {TeamDashMainQuery} from '~/__generated__/TeamDashMainQuery.graphql'
+import {type PreloadedQuery, usePreloadedQuery} from 'react-relay'
+import {Route, Routes} from 'react-router'
+import type {TeamDashMainQuery} from '~/__generated__/TeamDashMainQuery.graphql'
 import StartMeetingFAB from '../../../../components/StartMeetingFAB'
 import useDocumentTitle from '../../../../hooks/useDocumentTitle'
-import TeamColumnsContainer from '../../containers/TeamColumns/TeamColumnsContainer'
+import getTeamIdFromPathname from '../../../../utils/getTeamIdFromPathname'
 import TeamTasksHeaderContainer from '../../containers/TeamTasksHeader/TeamTasksHeaderContainer'
+import TeamDashActivityTab from '../TeamDashActivityTab/TeamDashActivityTab'
+import TeamDashInsightsTab from '../TeamDashInsightsTab/TeamDashInsightsTab'
+import TeamDashIntegrationsTab from '../TeamDashIntegrationsTab/TeamDashIntegrationsTab'
+import TeamDashTasksTab from '../TeamDashTasksTab/TeamDashTasksTab'
 import TeamDrawer from './TeamDrawer'
 
 const AbsoluteFab = styled(StartMeetingFAB)({
   position: 'absolute'
-})
-
-const RootBlock = styled('div')({
-  display: 'flex',
-  height: '100%',
-  width: '100%'
-})
-
-const TasksMain = styled('div')({
-  display: 'flex',
-  flex: 1,
-  flexDirection: 'column',
-  height: '100%',
-  overflow: 'auto',
-  position: 'relative'
-})
-
-const TasksHeader = styled('div')({
-  display: 'flex',
-  justifyContent: 'flex-start',
-  width: '100%'
-})
-
-const TasksContent = styled('div')({
-  display: 'flex',
-  flex: 1,
-  height: '100%',
-  margin: 0,
-  minHeight: 0,
-  width: '100%'
 })
 
 interface Props {
@@ -56,34 +30,39 @@ const TeamDashMain = (props: Props) => {
           team(teamId: $teamId) {
             name
             ...TeamTasksHeaderContainer_team
+            ...TeamDashActivityTab_team
           }
-          ...TeamColumnsContainer_viewer
+          ...TeamDashTasksTab_viewer
           ...TeamDrawer_viewer
         }
       }
     `,
-    queryRef,
-    {UNSTABLE_renderPolicy: 'full'}
+    queryRef
   )
 
   const {viewer} = data
   const team = viewer.team!
   const {name: teamName} = team
+  const teamId = getTeamIdFromPathname()
   useDocumentTitle(`Team Dashboard | ${teamName}`, teamName)
 
   return (
-    <RootBlock>
-      <TasksMain>
-        <TasksHeader>
+    <div className='flex h-full w-full'>
+      <div className='relative flex h-full flex-1 flex-col overflow-auto'>
+        <div className='flex w-full justify-start'>
           <TeamTasksHeaderContainer team={team} />
-        </TasksHeader>
-        <TasksContent>
-          <TeamColumnsContainer viewer={viewer} />
-        </TasksContent>
+        </div>
+        <Routes>
+          <Route path='tasks' element={<TeamDashTasksTab viewerRef={viewer} />} />
+          <Route path='integrations' element={<TeamDashIntegrationsTab teamRef={teamId} />} />
+          <Route path='insights' element={<TeamDashInsightsTab teamId={teamId} />} />
+          {/*Fall back to activity view if nothing is specified*/}
+          <Route path='*' element={<TeamDashActivityTab teamRef={team} />} />
+        </Routes>
         <AbsoluteFab />
-      </TasksMain>
+      </div>
       <TeamDrawer viewer={viewer} />
-    </RootBlock>
+    </div>
   )
 }
 export default TeamDashMain

@@ -1,66 +1,59 @@
-import styled from '@emotion/styled'
 import graphql from 'babel-plugin-relay/macro'
-import {EditorState} from 'draft-js'
-import React from 'react'
-import {createFragmentContainer} from 'react-relay'
-import {AreaEnum} from '~/__generated__/UpdateTaskMutation.graphql'
+import {Fragment} from 'react'
+import {useFragment} from 'react-relay'
+import type {AreaEnum} from '~/__generated__/UpdateTaskMutation.graphql'
+import {TaskJiraFieldsContent} from '~/components/TaskJiraFieldsContent'
+import {cn} from '~/ui/cn'
+import type {TaskFooter_task$key} from '../../../../__generated__/TaskFooter_task.graphql'
 import CardButton from '../../../../components/CardButton'
 import IconLabel from '../../../../components/IconLabel'
+import {TaskMoreOptionsMenu} from '../../../../components/TaskMoreOptionsMenu'
 import useAtmosphere from '../../../../hooks/useAtmosphere'
 import useMutationProps from '../../../../hooks/useMutationProps'
-import {UseTaskChild} from '../../../../hooks/useTaskChildFocus'
-import {Card} from '../../../../types/constEnums'
-import {CompletedHandler} from '../../../../types/relayMutations'
+import type {UseTaskChild} from '../../../../hooks/useTaskChildFocus'
+import type {CompletedHandler} from '../../../../types/relayMutations'
 import {USER_DASH} from '../../../../utils/constants'
-import removeContentTag from '../../../../utils/draftjs/removeContentTag'
 import isTaskArchived from '../../../../utils/isTaskArchived'
 import setLocalTaskError from '../../../../utils/relay/setLocalTaskError'
-import {TaskFooter_task} from '../../../../__generated__/TaskFooter_task.graphql'
 import OutcomeCardMessage from '../OutcomeCardMessage/OutcomeCardMessage'
+import {TaskTagContent} from '../OutcomeCardStatusMenu/TaskTagContent'
 import TaskFooterIntegrateToggle from './TaskFooterIntegrateToggle'
-import TaskFooterTagMenuToggle from './TaskFooterTagMenuToggle'
 import TaskFooterTeamAssignee from './TaskFooterTeamAssignee'
 import TaskFooterUserAssignee from './TaskFooterUserAssignee'
-
-const Footer = styled('div')({
-  display: 'flex',
-  justifyContent: 'space-between',
-  maxWidth: '100%',
-  padding: `12px ${Card.PADDING} ${Card.PADDING}`
-})
-
-const ButtonGroup = styled('div')<{cardIsActive: boolean}>(({cardIsActive}) => ({
-  display: 'flex',
-  justifyContent: 'flex-end',
-  opacity: cardIsActive ? 1 : 0
-}))
-
-// ButtonSpacer helps truncated names (…) be consistent
-const ButtonSpacer = styled('div')({
-  display: 'inline-block',
-  height: 24,
-  verticalAlign: 'middle',
-  width: 24
-})
-
-const AvatarBlock = styled('div')({
-  flex: 1,
-  height: 24,
-  minWidth: 0
-})
 
 interface Props {
   area: AreaEnum
   cardIsActive: boolean
-  editorState: EditorState
+  toggleTag: (tag: string) => void
   isAgenda: boolean
-  task: TaskFooter_task
+  task: TaskFooter_task$key
   useTaskChild: UseTaskChild
-  dataCy: string
 }
 
 const TaskFooter = (props: Props) => {
-  const {area, cardIsActive, editorState, isAgenda, task, useTaskChild, dataCy} = props
+  const {area, cardIsActive, toggleTag, isAgenda, task: taskRef, useTaskChild} = props
+  const task = useFragment(
+    graphql`
+      fragment TaskFooter_task on Task {
+        ...TaskTagContent_task
+        ...TaskJiraFieldsContent_task
+        id
+        error
+        tags
+        team {
+          id
+        }
+        integration {
+          __typename
+        }
+        userId
+        ...TaskFooterTeamAssignee_task
+        ...TaskFooterUserAssignee_task
+        ...TaskFooterIntegrateMenuRoot_task
+      }
+    `,
+    taskRef
+  )
   const {onCompleted, onError, submitMutation, submitting} = useMutationProps()
   const handleError = (err: Error) => {
     onError(err)
@@ -83,14 +76,14 @@ const TaskFooter = (props: Props) => {
   }
   const atmosphere = useAtmosphere()
   const showTeam = area === USER_DASH
-  const {content, id: taskId, error, integration, tags, userId} = task
+  const {id: taskId, error, integration, tags, userId} = task
   const isArchived = isTaskArchived(tags)
   const canAssignUser = !integration && !isArchived
   const canAssignTeam = !isArchived
   return (
-    <React.Fragment>
-      <Footer>
-        <AvatarBlock>
+    <Fragment>
+      <div className='flex max-w-full justify-between px-4 pt-2 pb-4'>
+        <div className='h-6 min-w-0 flex-1'>
           {showTeam ? (
             <TaskFooterTeamAssignee
               canAssign={canAssignTeam}
@@ -101,65 +94,47 @@ const TaskFooter = (props: Props) => {
             <TaskFooterUserAssignee
               area={area}
               canAssign={canAssignUser}
-              cardIsActive={cardIsActive}
               task={task}
               useTaskChild={useTaskChild}
             />
           )}
-        </AvatarBlock>
-        <ButtonGroup cardIsActive={cardIsActive}>
+        </div>
+        <div className={cn('flex justify-end', cardIsActive ? 'opacity-100' : 'opacity-0')}>
           {integration || isArchived || !userId ? (
-            <ButtonSpacer />
+            <div className='inline-block h-6 w-6 align-middle' />
           ) : (
             <TaskFooterIntegrateToggle
-              dataCy={`${dataCy}-integration`}
               mutationProps={mutationProps}
               task={task}
               useTaskChild={useTaskChild}
             />
           )}
           {isArchived ? (
-            <CardButton
-              onClick={() => removeContentTag('archived', atmosphere, taskId, content, area)}
-            >
+            <CardButton onClick={() => toggleTag('archived')}>
               <IconLabel icon='reply' />
             </CardButton>
           ) : (
-            <TaskFooterTagMenuToggle
-              dataCy={`${dataCy}-tag`}
-              area={area}
-              editorState={editorState}
-              isAgenda={isAgenda}
-              task={task}
-              useTaskChild={useTaskChild}
-              mutationProps={mutationProps}
+            <TaskMoreOptionsMenu
+              jiraFieldsContent={
+                integration?.__typename === 'JiraIssue' && <TaskJiraFieldsContent taskRef={task} />
+              }
+              tagContent={
+                <TaskTagContent
+                  area={area}
+                  toggleTag={toggleTag}
+                  isAgenda={isAgenda}
+                  task={task}
+                  useTaskChild={useTaskChild}
+                  mutationProps={mutationProps}
+                />
+              }
             />
           )}
-        </ButtonGroup>
-      </Footer>
+        </div>
+      </div>
       {error && <OutcomeCardMessage onClose={handleCompleted} message={error} />}
-    </React.Fragment>
+    </Fragment>
   )
 }
 
-export default createFragmentContainer(TaskFooter, {
-  task: graphql`
-    fragment TaskFooter_task on Task {
-      id
-      content
-      error
-      integration {
-        __typename
-      }
-      tags
-      team {
-        id
-      }
-      userId
-      ...TaskFooterTeamAssignee_task
-      ...TaskFooterUserAssignee_task
-      ...TaskFooterTagMenu_task
-      ...TaskFooterIntegrateMenuRoot_task
-    }
-  `
-})
+export default TaskFooter

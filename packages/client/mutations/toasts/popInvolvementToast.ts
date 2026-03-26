@@ -1,16 +1,18 @@
-import {matchPath} from 'react-router-dom'
-import {OnNextHandler, OnNextHistoryContext} from '../../types/relayMutations'
+import {matchPath} from 'react-router'
+import type {TaskInvolves_notification$data} from '../../__generated__/TaskInvolves_notification.graphql'
+import type {OnNextHandler, OnNextNavigateContext} from '../../types/relayMutations'
 import {MENTIONEE} from '../../utils/constants'
-import {TaskInvolves_notification} from '../../__generated__/TaskInvolves_notification.graphql'
 
-const popInvolvementToast: OnNextHandler<TaskInvolves_notification, OnNextHistoryContext> = (
+const popInvolvementToast: OnNextHandler<TaskInvolves_notification$data, OnNextNavigateContext> = (
   notification,
-  {atmosphere, history}
+  {atmosphere, navigate}
 ) => {
   if (!notification) return
   const {
     involvement,
-    changeAuthor: {preferredName: changeAuthorName},
+    changeAuthor: {
+      user: {preferredName: changeAuthorName}
+    },
     task,
     team
   } = notification
@@ -18,11 +20,7 @@ const popInvolvementToast: OnNextHandler<TaskInvolves_notification, OnNextHistor
   const {id: taskId} = task
   const {id: teamId} = team
   const {pathname} = window.location
-  const inMeeting = !!matchPath(pathname, {
-    path: '/meet',
-    exact: false,
-    strict: false
-  })
+  const inMeeting = !!matchPath({path: '/meet', end: false}, pathname)
   if (inMeeting) return
 
   const wording = involvement === MENTIONEE ? 'mentioned you in' : 'assigned you to'
@@ -34,7 +32,7 @@ const popInvolvementToast: OnNextHandler<TaskInvolves_notification, OnNextHistor
     action: {
       label: 'Check it out!',
       callback: () => {
-        history?.push(`/team/${teamId}`)
+        navigate?.(`/team/${teamId}`)
       }
     }
   })

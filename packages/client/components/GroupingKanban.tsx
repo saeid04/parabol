@@ -1,10 +1,9 @@
-import styled from '@emotion/styled'
-import {captureException} from '@sentry/browser'
+import {datadogRum} from '@datadog/browser-rum'
 import graphql from 'babel-plugin-relay/macro'
-import React, {RefObject, useEffect, useMemo, useRef, useState} from 'react'
-import {createFragmentContainer} from 'react-relay'
+import {type RefObject, useEffect, useMemo, useRef, useState} from 'react'
+import {useFragment} from 'react-relay'
+import type {GroupingKanban_meeting$key} from '~/__generated__/GroupingKanban_meeting.graphql'
 import useCallbackRef from '~/hooks/useCallbackRef'
-import {GroupingKanban_meeting} from '~/__generated__/GroupingKanban_meeting.graphql'
 import useAnimatedSpotlightSource from '../hooks/useAnimatedSpotlightSource'
 import useBreakpoint from '../hooks/useBreakpoint'
 import useHideBodyScroll from '../hooks/useHideBodyScroll'
@@ -12,6 +11,7 @@ import useModal from '../hooks/useModal'
 import useSpotlightSimulatedDrag from '../hooks/useSpotlightSimulatedDrag'
 import useThrottledEvent from '../hooks/useThrottledEvent'
 import {Breakpoint, Times} from '../types/constEnums'
+import {cn} from '../ui/cn'
 import PortalProvider from './AtmosphereProvider/PortalProvider'
 import GroupingKanbanColumn from './GroupingKanbanColumn'
 import ReflectWrapperMobile from './RetroReflectPhase/ReflectionWrapperMobile'
@@ -19,25 +19,63 @@ import ReflectWrapperDesktop from './RetroReflectPhase/ReflectWrapperDesktop'
 import SpotlightModal from './SpotlightModal'
 
 interface Props {
-  meeting: GroupingKanban_meeting
+  meeting: GroupingKanban_meeting$key
   phaseRef: RefObject<HTMLDivElement>
 }
 
-const ColumnsBlock = styled('div')<{isDesktop: boolean}>(({isDesktop}) => ({
-  alignItems: 'center',
-  display: 'flex',
-  flex: '1',
-  flexDirection: 'column',
-  height: '100%',
-  justifyContent: 'center',
-  margin: '0 auto',
-  overflow: 'auto',
-  padding: isDesktop ? '0 0 16px' : undefined,
-  width: '100%'
-}))
 export type SwipeColumn = (offset: number) => void
 const GroupingKanban = (props: Props) => {
-  const {meeting, phaseRef} = props
+  const {meeting: meetingRef, phaseRef} = props
+  const meeting = useFragment(
+    graphql`
+      fragment GroupingKanban_meeting on RetrospectiveMeeting {
+        ...GroupingKanbanColumn_meeting
+        ...ReflectionGroup_meeting
+        ...SpotlightModal_meeting
+        id
+        teamId
+        localPhase {
+          phaseType
+        }
+        localStage {
+          isComplete
+        }
+        meetingMembers {
+          id
+        }
+        meetingNumber
+        phases {
+          ... on ReflectPhase {
+            phaseType
+            reflectPrompts {
+              ...GroupingKanbanColumn_prompt
+              id
+            }
+          }
+        }
+        reflectionGroups {
+          ...GroupingKanbanColumn_reflectionGroups
+          id
+          promptId
+          reflections {
+            id
+            isViewerDragging
+            isEditing
+          }
+        }
+        spotlightReflectionId
+        spotlightGroup {
+          ...ReflectionGroup_reflectionGroup
+          id
+          reflections {
+            id
+          }
+        }
+        spotlightSearchQuery
+      }
+    `,
+    meetingRef
+  )
   const {
     reflectionGroups,
     phases,
@@ -89,14 +127,16 @@ const GroupingKanban = (props: Props) => {
   }
 
   const {groupsByPrompt, isAnyEditing} = useMemo(() => {
-    const container = {} as {[promptId: string]: typeof reflectionGroups[0][]}
+    const container = {} as {
+      [promptId: string]: (typeof reflectionGroups)[0][]
+    }
     let isEditing = false
     reflectionGroups.forEach((group) => {
       const {reflections, promptId} = group
       container[promptId] = container[promptId] ?? []
       container[promptId]!.push(group)
       if (!reflections) {
-        captureException(new Error('Invalid invariant: reflectionGroup.reflections is null'))
+        datadogRum.addError(new Error('Invalid invariant: reflectionGroup.reflections is null'))
       } else if (!isEditing && reflections.some((reflection) => reflection.isEditing)) {
         isEditing = true
       }
@@ -141,7 +181,12 @@ const GroupingKanban = (props: Props) => {
 
   return (
     <PortalProvider>
-      <ColumnsBlock isDesktop={isDesktop}>
+      <div
+        className={cn(
+          'm-0 flex h-full w-full flex-1 flex-col items-center justify-center overflow-auto',
+          isDesktop && 'px-4'
+        )}
+      >
         <ColumnWrapper
           setActiveIdx={setActiveIdx}
           activeIdx={activeIdx}
@@ -165,7 +210,7 @@ const GroupingKanban = (props: Props) => {
             />
           ))}
         </ColumnWrapper>
-      </ColumnsBlock>
+      </div>
       {modalPortal(
         <SpotlightModal
           closeSpotlight={closePortal}
@@ -178,52 +223,4 @@ const GroupingKanban = (props: Props) => {
   )
 }
 
-export default createFragmentContainer(GroupingKanban, {
-  meeting: graphql`
-    fragment GroupingKanban_meeting on RetrospectiveMeeting {
-      ...GroupingKanbanColumn_meeting
-      ...ReflectionGroup_meeting
-      ...SpotlightModal_meeting
-      id
-      teamId
-      localPhase {
-        phaseType
-      }
-      localStage {
-        isComplete
-      }
-      meetingMembers {
-        id
-      }
-      meetingNumber
-      phases {
-        ... on ReflectPhase {
-          phaseType
-          reflectPrompts {
-            ...GroupingKanbanColumn_prompt
-            id
-          }
-        }
-      }
-      reflectionGroups {
-        ...GroupingKanbanColumn_reflectionGroups
-        id
-        promptId
-        reflections {
-          id
-          isViewerDragging
-          isEditing
-        }
-      }
-      spotlightReflectionId
-      spotlightGroup {
-        ...ReflectionGroup_reflectionGroup
-        id
-        reflections {
-          id
-        }
-      }
-      spotlightSearchQuery
-    }
-  `
-})
+export default GroupingKanban

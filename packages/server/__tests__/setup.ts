@@ -1,5 +1,3 @@
-import {drainRethink} from './common'
+import * as matchers from 'jest-extended'
 
-afterAll(() => {
-  return drainRethink()
-})
+expect.extend(matchers)

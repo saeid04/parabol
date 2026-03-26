@@ -1,6 +1,6 @@
+import {expect, test} from '@playwright/test'
 import config from '../config'
-import {test, expect} from '@playwright/test'
-import {goToNextPhase, startDemo} from './retrospective-demo-helpers'
+import {goToNextPhase, goToNextPhaseWhenReady, startDemo} from './retrospective-demo-helpers'
 
 test.describe('retrospective-demo / reflect page', () => {
   test('it shows an explanation popup', async ({page}) => {
@@ -23,7 +23,8 @@ test.describe('retrospective-demo / reflect page', () => {
     const startTextbox = '[data-cy=reflection-column-Start] [role=textbox]'
     await page.click(startTextbox)
     await page.type(startTextbox, 'Start doing this')
-    await page.press(startTextbox, 'Enter')
+    await page.keyboard.press('Tab')
+    await page.keyboard.press('Enter')
 
     await expect(
       page.locator('[data-cy="reflection-stack-Start"] :text("Start doing this")')
@@ -36,7 +37,8 @@ test.describe('retrospective-demo / reflect page', () => {
     const stopTextbox = '[data-cy=reflection-column-Stop] [role=textbox]'
     await page.click(stopTextbox)
     await page.type(stopTextbox, 'Stop doing this')
-    await page.press(stopTextbox, 'Enter')
+    await page.keyboard.press('Tab')
+    await page.keyboard.press('Enter')
 
     await expect(
       page.locator('[data-cy="reflection-stack-Stop"] :text("Stop doing this")')
@@ -48,8 +50,9 @@ test.describe('retrospective-demo / reflect page', () => {
 
     const continueTextbox = '[data-cy=reflection-column-Continue] [role=textbox]'
     await page.click(continueTextbox)
-    await page.type(continueTextbox, 'Continue doing this')
-    await page.press(continueTextbox, 'Enter')
+    await page.fill(continueTextbox, 'Continue doing this')
+    await page.keyboard.press('Tab')
+    await page.keyboard.press('Enter')
 
     await expect(
       page.locator('[data-cy="reflection-stack-Continue"] :text("Continue doing this")')
@@ -61,8 +64,9 @@ test.describe('retrospective-demo / reflect page', () => {
 
     const startTextbox = '[data-cy=reflection-column-Start] [role=textbox]'
     await page.click(startTextbox)
-    await page.type(startTextbox, 'Start doing this')
-    await page.press(startTextbox, 'Enter')
+    await page.fill(startTextbox, 'Start doing this')
+    await page.keyboard.press('Tab')
+    await page.keyboard.press('Enter')
 
     await expect(
       page.locator('[data-cy="reflection-stack-Start"] :text("Start doing this")')
@@ -78,7 +82,6 @@ test.describe('retrospective-demo / reflect page', () => {
   })
 
   test('displays simulated users writing reflections in the start column', async ({page}) => {
-    test.setTimeout(30_000)
     await startDemo(page)
 
     await expect(
@@ -209,8 +212,44 @@ test.describe('retrospective-demo / reflect page', () => {
   })
 
   test('transitions to the group phase after clicking "next" twice', async ({page}) => {
+    test.setTimeout(80_000)
+
     await startDemo(page)
-    await goToNextPhase(page)
+    await expect(
+      page.locator(
+        '[data-cy=reflection-column-Continue] :text("1 team member writing reflections...")'
+      )
+    ).toBeVisible({
+      timeout: 40_000 // first, the simulated users are only typing in the "Start"/"Stop" columns, so this takes > 5 seconds
+    })
+
+    await expect(
+      page.locator(
+        '[data-cy=reflection-column-Continue] :text("2 team members writing reflections...")'
+      )
+    ).toBeVisible({
+      timeout: 20_000 // this seems to be delayed from the server
+    })
+
+    await expect(
+      page.locator(
+        '[data-cy=reflection-column-Continue] :text("1 team member reflection + 2 in progress")'
+      )
+    ).toBeVisible()
+
+    await expect(page.locator('button :text("1 / 2 Ready")')).toBeVisible()
+
+    await expect(
+      page.locator(
+        '[data-cy=reflection-column-Continue] :text("1 team member reflection + 1 in progress")'
+      )
+    ).toBeVisible()
+
+    await expect(
+      page.locator('[data-cy=reflection-column-Continue] :text("1 team member reflection")')
+    ).toBeVisible()
+
+    await goToNextPhaseWhenReady(page)
 
     expect(page.url()).toEqual(`${config.rootUrlPath}/retrospective-demo/group`)
   })

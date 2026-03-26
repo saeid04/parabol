@@ -1,5 +1,4 @@
 import styled from '@emotion/styled'
-import React from 'react'
 import {PALETTE} from '~/styles/paletteV3'
 import makeMinWidthMediaQuery from '~/utils/makeMinWidthMediaQuery'
 import EmptyDiscussionIllustration from '../../../static/images/illustrations/discussions.png'
@@ -41,21 +40,25 @@ interface Props {
   allowTasks: boolean
 }
 
+const getMessage = (allowTasks: boolean, isReadOnly: boolean) => {
+  if (isReadOnly) {
+    return allowTasks ? 'No comments or tasks were added here' : 'No comments were added here'
+  }
+  return allowTasks
+    ? 'Start the conversation or add takeaway task cards to capture next steps.'
+    : 'Start the conversation to capture next steps.'
+}
+
 const DiscussionThreadListEmptyState = (props: Props) => {
   const {isReadOnly, allowTasks} = props
-  const readOnlyMessage = allowTasks
-    ? 'No comments or tasks were added here'
-    : 'No comments were added here'
-  const message = `Start the conversation${
-    allowTasks ? ' or add takeaway task cards' : ''
-  } to capture next steps.`
+  const message = getMessage(allowTasks, !!isReadOnly)
 
   return (
     <DiscussionThreadEmptyStateRoot>
       <EmptyDiscussionContainer>
         <EmptyDiscussionImage src={EmptyDiscussionIllustration} />
       </EmptyDiscussionContainer>
-      <Message>{isReadOnly ? readOnlyMessage : message}</Message>
+      <Message>{message}</Message>
     </DiscussionThreadEmptyStateRoot>
   )
 }

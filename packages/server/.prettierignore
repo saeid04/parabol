@@ -1,0 +1,12 @@
+**/__generated__/
+**/generated/
+githubTypes.ts
+gitlabTypes.ts
+linearTypes.ts
+resolverTypes.ts
+githubSchema.graphql
+gitlabSchema.graphql
+graphql/private/schema.graphql
+graphql/public/schema.graphql
+billing/debug.ts
+pg.d.ts

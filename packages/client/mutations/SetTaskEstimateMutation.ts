@@ -1,13 +1,14 @@
 import graphql from 'babel-plugin-relay/macro'
 import {commitMutation} from 'react-relay'
-import {BaseLocalHandlers, StandardMutation} from '../types/relayMutations'
-import {SetTaskEstimateMutation as TSetTaskEstimateMutation} from '../__generated__/SetTaskEstimateMutation.graphql'
+import type {SetTaskEstimateMutation as TSetTaskEstimateMutation} from '../__generated__/SetTaskEstimateMutation.graphql'
+import type {BaseLocalHandlers, StandardMutation} from '../types/relayMutations'
 
 graphql`
   fragment SetTaskEstimateMutation_meeting on SetTaskEstimateSuccess {
     stage {
       finalScore
     }
+    exportCount
   }
 `
 

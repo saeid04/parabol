@@ -1,6 +1,5 @@
 import {useCallback, useEffect, useRef, useState} from 'react'
-import {PayloadError} from 'relay-runtime'
-import {WithMutationProps} from '../utils/relay/withMutationProps'
+import type {PayloadError} from 'relay-runtime'
 
 interface MutationServerError {
   message: string
@@ -13,10 +12,12 @@ interface RelayMustFixError extends MutationServerError {
   source: MutationServerError[]
 }
 
-export type MenuMutationProps = Pick<
-  WithMutationProps,
-  'onCompleted' | 'onError' | 'submitMutation' | 'submitting'
->
+export type MenuMutationProps = {
+  onCompleted: (res?: any, errors?: any) => void
+  onError: (error?: any) => void
+  submitMutation: () => void
+  submitting: boolean
+}
 
 export const getOnCompletedError = (
   res?: null | {[operationNames: string]: {error?: MutationServerError}},
@@ -31,6 +32,7 @@ const useMutationProps = () => {
   const [error, setError] = useState<{message: string} | undefined>(undefined)
   const isMountedRef = useRef(true)
   useEffect(() => {
+    isMountedRef.current = true
     return () => {
       isMountedRef.current = false
     }
@@ -38,7 +40,9 @@ const useMutationProps = () => {
 
   const onCompleted = useCallback(
     (
-      res?: null | {[operationNames: string]: {error?: MutationServerError}},
+      res?: null | {
+        [operationNames: string]: {error?: MutationServerError}
+      },
       errors?: readonly PayloadError[] | null
     ) => {
       if (isMountedRef.current) {

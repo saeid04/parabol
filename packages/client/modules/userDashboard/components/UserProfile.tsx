@@ -1,7 +1,7 @@
 import styled from '@emotion/styled'
 import graphql from 'babel-plugin-relay/macro'
-import React from 'react'
-import {PreloadedQuery, usePreloadedQuery} from 'react-relay'
+import {type PreloadedQuery, usePreloadedQuery} from 'react-relay'
+import type {UserProfileQuery} from '../../../__generated__/UserProfileQuery.graphql'
 import DeleteAccount from '../../../components/DeleteAccount'
 import EmailNotifications from '../../../components/EmailNotifications'
 import Panel from '../../../components/Panel/Panel'
@@ -9,7 +9,6 @@ import PasswordResetLink from '../../../components/PasswordResetLink'
 import useDocumentTitle from '../../../hooks/useDocumentTitle'
 import {PALETTE} from '../../../styles/paletteV3'
 import {AuthIdentityTypeEnum, Layout} from '../../../types/constEnums'
-import {UserProfileQuery} from '../../../__generated__/UserProfileQuery.graphql'
 import UserSettingsForm from './UserSettingsForm/UserSettingsForm'
 import UserSettingsWrapper from './UserSettingsWrapper/UserSettingsWrapper'
 
@@ -33,6 +32,7 @@ const query = graphql`
     viewer {
       ...PasswordResetLink_viewer
       ...EmailNotifications_viewer
+      ...DeleteAccount_viewer
       preferredName
       picture
       identities {
@@ -43,9 +43,7 @@ const query = graphql`
 `
 
 const UserProfile = ({queryRef}: Props) => {
-  const data = usePreloadedQuery<UserProfileQuery>(query, queryRef, {
-    UNSTABLE_renderPolicy: 'full'
-  })
+  const data = usePreloadedQuery<UserProfileQuery>(query, queryRef)
   const {viewer} = data
   const {identities} = viewer
   const isLocal = identities?.find((identity) => identity?.type === AuthIdentityTypeEnum.LOCAL)
@@ -70,7 +68,7 @@ const UserProfile = ({queryRef}: Props) => {
         </Panel>
         <Panel label='Danger Zone' casing={'capitalize'}>
           <PanelRow>
-            <DeleteAccount />
+            <DeleteAccount viewerRef={viewer} />
           </PanelRow>
         </Panel>
       </SettingsBlock>

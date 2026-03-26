@@ -1,6 +1,8 @@
 import styled from '@emotion/styled'
-import React, {useRef} from 'react'
-import useRouter from '../hooks/useRouter'
+import {useRef} from 'react'
+import {useLocation} from 'react-router'
+import useDocumentTitle from '../hooks/useDocumentTitle'
+import useMetaTagContent from '../hooks/useMetaTagContent'
 import {ForgotPasswordResType} from '../mutations/EmailPasswordResetMutation'
 import {PALETTE} from '../styles/paletteV3'
 import {
@@ -16,6 +18,7 @@ import EmailPasswordAuthForm from './EmailPasswordAuthForm'
 import ForgotPasswordPage from './ForgotPasswordPage'
 import GoogleOAuthButtonBlock from './GoogleOAuthButtonBlock'
 import HorizontalSeparator from './HorizontalSeparator/HorizontalSeparator'
+import MicrosoftOAuthButtonBlock from './MicrosoftOAuthButtonBlock'
 import PlainButton from './PlainButton/PlainButton'
 import SubmittedForgotPasswordPage from './SubmittedForgotPasswordPage'
 
@@ -60,19 +63,29 @@ const DialogSubTitle = styled('div')({
   fontWeight: 400,
   lineHeight: 1.5,
   paddingTop: 16,
-  paddingBottom: 24
+  paddingBottom: 8
 })
 
 const GenericAuthentication = (props: Props) => {
   const {goToPage, invitationToken, page, teamName} = props
   const emailRef = useRef<{email: () => string}>()
-  const {location} = useRouter()
+  const location = useLocation()
   const params = new URLSearchParams(location.search)
   const email = params.get('email')
-
+  const authDialogRef = useRef<HTMLDivElement>(null)
+  const getOffsetTop = () => authDialogRef.current?.offsetTop || 0
   const isGoogleAuthEnabled = window.__ACTION__.AUTH_GOOGLE_ENABLED
+  const isMicrosoftAuthEnabled = window.__ACTION__.AUTH_MICROSOFT_ENABLED
   const isInternalAuthEnabled = window.__ACTION__.AUTH_INTERNAL_ENABLED
   const isSSOAuthEnabled = window.__ACTION__.AUTH_SSO_ENABLED
+  const isCreate = page === 'create-account'
+  const action = isCreate ? CREATE_ACCOUNT_LABEL : SIGNIN_LABEL
+  const pageTitle = `${action} | Parabol`
+  const metaCopy = isCreate
+    ? 'Give structure to your meetings to get your team talking and moving forward faster. Get started in 44 seconds or less.'
+    : 'Access Parabol to streamline your agile meetings. Collaborate, reflect, and grow with your team in real-time.'
+  useDocumentTitle(pageTitle, action)
+  useMetaTagContent(metaCopy)
 
   if (page === 'forgot-password') {
     return <ForgotPasswordPage goToPage={goToPage} />
@@ -85,8 +98,6 @@ const GenericAuthentication = (props: Props) => {
     }
   }
 
-  const isCreate = page === 'create-account'
-  const action = isCreate ? CREATE_ACCOUNT_LABEL : SIGNIN_LABEL
   const counterAction = isCreate ? SIGNIN_LABEL : CREATE_ACCOUNT_LABEL
   const counterActionSlug = isCreate ? SIGNIN_SLUG : CREATE_ACCOUNT_SLUG
   const actionCopy = isCreate ? 'Already have an account? ' : 'New to Parabol? '
@@ -95,7 +106,7 @@ const GenericAuthentication = (props: Props) => {
     goToPage('forgot-password', `?email=${emailRef.current?.email()}`)
   }
   return (
-    <AuthenticationDialog>
+    <AuthenticationDialog ref={authDialogRef}>
       <DialogTitle>{title}</DialogTitle>
       <DialogSubTitle>
         <span>{actionCopy}</span>
@@ -104,17 +115,30 @@ const GenericAuthentication = (props: Props) => {
         </BrandedLink>
       </DialogSubTitle>
       {isGoogleAuthEnabled && (
-        <GoogleOAuthButtonBlock isCreate={isCreate} invitationToken={invitationToken} />
+        <GoogleOAuthButtonBlock
+          isCreate={isCreate}
+          invitationToken={invitationToken}
+          getOffsetTop={getOffsetTop}
+        />
       )}
-      {isGoogleAuthEnabled && (isInternalAuthEnabled || isSSOAuthEnabled) && (
-        <HorizontalSeparator margin='1rem 0 0' text='or' />
+      {isMicrosoftAuthEnabled && (
+        <MicrosoftOAuthButtonBlock
+          isCreate={isCreate}
+          invitationToken={invitationToken}
+          getOffsetTop={getOffsetTop}
+        />
       )}
+      {(isGoogleAuthEnabled || isMicrosoftAuthEnabled) &&
+        (isInternalAuthEnabled || isSSOAuthEnabled) && (
+          <HorizontalSeparator margin='1rem 0 0' text='or' />
+        )}
       {(isInternalAuthEnabled || isSSOAuthEnabled) && (
         <EmailPasswordAuthForm
           email={email || ''}
           isSignin={!isCreate}
           invitationToken={invitationToken}
           ref={emailRef}
+          getOffsetTop={getOffsetTop}
           goToPage={goToPage}
         />
       )}

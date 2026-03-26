@@ -1,26 +1,27 @@
 import styled from '@emotion/styled'
-import {ArrowForward, Check} from '@mui/icons-material'
+import {ArrowForward, CheckCircle, CheckCircleOutline} from '@mui/icons-material'
 import graphql from 'babel-plugin-relay/macro'
-import React from 'react'
+import {useMemo} from 'react'
 import {useFragment} from 'react-relay'
+import type {BottomControlBarReady_meeting$key} from '~/__generated__/BottomControlBarReady_meeting.graphql'
 import useAtmosphere from '~/hooks/useAtmosphere'
-import useGotoNext from '~/hooks/useGotoNext'
-import {TransitionStatus} from '~/hooks/useTransition'
+import type useGotoNext from '~/hooks/useGotoNext'
+import type {TransitionStatus} from '~/hooks/useTransition'
 import FlagReadyToAdvanceMutation from '~/mutations/FlagReadyToAdvanceMutation'
 import {PALETTE} from '~/styles/paletteV3'
 import {BezierCurve, Times} from '~/types/constEnums'
 import handleRightArrow from '~/utils/handleRightArrow'
-import {BottomControlBarReady_meeting$key} from '~/__generated__/BottomControlBarReady_meeting.graphql'
+import type {NewMeetingPhaseTypeEnum} from '../__generated__/BottomControlBarReady_meeting.graphql'
 import {MenuPosition} from '../hooks/useCoords'
 import useTooltip from '../hooks/useTooltip'
-import {NewMeetingPhaseTypeEnum} from '../__generated__/BottomControlBarReady_meeting.graphql'
 import BottomControlBarProgress from './BottomControlBarProgress'
-import BottomControlBarReadyButton from './BottomControlBarReadyButton'
 import BottomNavControl from './BottomNavControl'
 import BottomNavIconLabel from './BottomNavIconLabel'
 
 interface Props {
   isNext: boolean
+  isPoker: boolean
+  isFacilitating: boolean
   cancelConfirm: undefined | (() => void)
   isConfirming: boolean
   setConfirmingButton: (button: string) => void
@@ -31,23 +32,24 @@ interface Props {
   handleGotoNext: ReturnType<typeof useGotoNext>
 }
 
-const StyledIcon = styled('div')<{progress: number; isNext: boolean; isViewerReady: boolean}>(
-  ({isViewerReady, progress, isNext}) => ({
-    height: 24,
-    width: 24,
-    opacity: isNext ? 1 : isViewerReady ? 1 : 0.5,
-    transformOrigin: '0 0',
-    // 20px to 16 = 0.75
-    transform: progress > 0 ? `scale(0.75)translate(4px, 4px)` : undefined,
-    transition: `transform 100ms ${BezierCurve.DECELERATE}`,
-    svg: {
-      // without fill property the stroke property will be ignored
-      fill: isNext ? PALETTE.ROSE_500 : isViewerReady ? PALETTE.JADE_400 : PALETTE.SLATE_600,
-      stroke: isNext ? PALETTE.ROSE_500 : isViewerReady ? PALETTE.JADE_400 : PALETTE.SLATE_600,
-      strokeWidth: 1
-    }
-  })
-)
+const StyledIcon = styled('div')<{
+  progress: number
+  isNext: boolean
+  isViewerReady: boolean
+}>(({isViewerReady, progress, isNext}) => ({
+  height: 24,
+  width: 24,
+  transformOrigin: '0 0',
+  // 20px to 16 = 0.75
+  transform: isNext ? (progress > 0 ? `scale(0.75)translate(4px, 4px)` : undefined) : 'none',
+  transition: `transform 100ms ${BezierCurve.DECELERATE}`,
+  svg: {
+    // without fill property the stroke property will be ignored
+    fill: isNext ? PALETTE.ROSE_500 : isViewerReady ? PALETTE.JADE_400 : PALETTE.SLATE_600,
+    stroke: isNext ? PALETTE.ROSE_500 : isViewerReady ? PALETTE.JADE_400 : PALETTE.SLATE_600,
+    strokeWidth: isNext ? 1 : 0
+  }
+}))
 
 const PHASE_REQUIRES_CONFIRM = new Set<NewMeetingPhaseTypeEnum>(['reflect', 'group', 'vote'])
 
@@ -55,17 +57,20 @@ const BottomControlBarReady = (props: Props) => {
   const {
     cancelConfirm,
     isConfirming,
+    isPoker,
     isNext,
+    isFacilitating,
     setConfirmingButton,
     handleGotoNext,
     meeting: meetingRef,
     onTransitionEnd,
     status
   } = props
+  const atmosphere = useAtmosphere()
+  const {viewerId} = atmosphere
   const meeting = useFragment(
     graphql`
       fragment BottomControlBarReady_meeting on NewMeeting {
-        ...BottomControlBarReadyButton_meeting
         ... on RetrospectiveMeeting {
           reflectionGroups {
             id
@@ -82,6 +87,8 @@ const BottomControlBarReady = (props: Props) => {
         }
         meetingMembers {
           id
+          userId
+          isConnectedAt
         }
         phases {
           stages {
@@ -92,21 +99,34 @@ const BottomControlBarReady = (props: Props) => {
     `,
     meetingRef
   )
-  const {id: meetingId, localPhase, localStage, meetingMembers, reflectionGroups} = meeting
+  const {id: meetingId, localPhase, localStage, meetingMembers} = meeting
   const stages = localPhase.stages || []
   const {id: stageId, isComplete, isViewerReady, phaseType} = localStage
   const {gotoNext, ref} = handleGotoNext
-  const activeCount = meetingMembers.length
+
+  const connectedMeetingMembers = useMemo(() => {
+    return meetingMembers.filter(
+      (meetingMember) => meetingMember.userId === viewerId || meetingMember.isConnectedAt
+    )
+  }, [meetingMembers])
+  const activeCount = connectedMeetingMembers.length
+  const readyUserIds = localStage.readyUserIds ?? []
+  const readyCount = useMemo(() => {
+    return readyUserIds.filter(
+      (userId) =>
+        (!isFacilitating || userId !== viewerId) &&
+        connectedMeetingMembers.find((member) => member.userId === userId)
+    ).length
+  }, [readyUserIds, connectedMeetingMembers, isFacilitating, viewerId])
+
   const {openTooltip, tooltipPortal, originRef} = useTooltip<HTMLDivElement>(
     MenuPosition.UPPER_CENTER,
     {
-      disabled: !isConfirming,
       delay: Times.MEETING_CONFIRM_TOOLTIP_DELAY
     }
   )
-  const atmosphere = useAtmosphere()
-  const readyCount = localStage.readyCount || 0
-  const progress = readyCount / Math.max(1, activeCount - 1)
+  const isOnlyViewer = activeCount === 1 // viewer is the only active meeting member
+  const progress = isOnlyViewer || isPoker ? 1.0 : readyCount / (activeCount - 1)
   const isLastStageInPhase = stages[stages.length - 1]?.id === localStage?.id
   const isConfirmRequired =
     isLastStageInPhase &&
@@ -116,7 +136,11 @@ const BottomControlBarReady = (props: Props) => {
 
   const onClick = () => {
     if (!isNext) {
-      FlagReadyToAdvanceMutation(atmosphere, {isReady: !isViewerReady, meetingId, stageId})
+      FlagReadyToAdvanceMutation(atmosphere, {
+        isReady: !isViewerReady,
+        meetingId,
+        stageId
+      })
     } else if (isComplete || !isConfirmRequired || isConfirming) {
       setConfirmingButton('')
       gotoNext()
@@ -131,21 +155,17 @@ const BottomControlBarReady = (props: Props) => {
         gotoNext()
       })
     : undefined
-  const label = isNext ? 'Next' : 'Ready'
-  const getDisabled = () => {
-    if (!isNext) return false
-    if (phaseType === 'reflect') {
-      return reflectionGroups?.length === 0 ?? true
-    }
-    return false
+  let label = ''
+  if (isNext) {
+    label = progress === 1.0 ? 'Next' : `${readyCount} / ${activeCount - 1} Ready`
+  } else {
+    label = isViewerReady ? 'Undo ready status' : 'Tap when ready'
   }
 
-  const disabled = getDisabled()
   return (
     <>
       <BottomNavControl
         dataCy={`next-phase`}
-        disabled={disabled}
         confirming={!!cancelConfirm}
         onClick={cancelConfirm || onClick}
         status={status}
@@ -153,14 +173,12 @@ const BottomControlBarReady = (props: Props) => {
         onKeyDown={onKeyDown}
         ref={ref}
       >
-        <BottomControlBarReadyButton meetingRef={meeting} progress={progress}>
-          <BottomControlBarProgress isNext={isNext} progress={progress} />
-          <BottomNavIconLabel label={label} ref={originRef}>
-            <StyledIcon isViewerReady={isViewerReady} isNext={isNext} progress={progress}>
-              {isNext ? <ArrowForward /> : <Check />}
-            </StyledIcon>
-          </BottomNavIconLabel>
-        </BottomControlBarReadyButton>
+        {isNext && <BottomControlBarProgress isNext={isNext} progress={progress} />}
+        <BottomNavIconLabel className='px-2' label={label} ref={originRef}>
+          <StyledIcon isViewerReady={isViewerReady} isNext={isNext} progress={progress}>
+            {isNext ? <ArrowForward /> : isViewerReady ? <CheckCircle /> : <CheckCircleOutline />}
+          </StyledIcon>
+        </BottomNavIconLabel>
       </BottomNavControl>
       {tooltipPortal(`Tap 'Next' again if everyone is ready`)}
     </>
@@ -171,7 +189,7 @@ graphql`
   fragment BottomControlBarReadyStage on NewMeetingStage {
     id
     isComplete
-    readyCount
+    readyUserIds
     isViewerReady
     phaseType
   }

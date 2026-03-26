@@ -1,4 +1,4 @@
-import {HttpResponse} from 'uWebSockets.js'
+import type {HttpResponse} from 'uWebSockets.js'
 
 type Json = null | boolean | number | string | Json[] | {[key: string]: Json}
 const defaultParser = <T>(buffer: Buffer): T => JSON.parse(buffer.toString())
@@ -14,11 +14,15 @@ const parseBody = <T = Json>({
     let buffer: Buffer
     res.onData((ab, isLast) => {
       const curBuf = Buffer.from(ab)
-      buffer = buffer ? Buffer.concat([buffer, curBuf]) : isLast ? curBuf : Buffer.concat([curBuf])
+      buffer = buffer
+        ? Buffer.concat([buffer as any, curBuf])
+        : isLast
+          ? curBuf
+          : Buffer.concat([curBuf as any])
       if (isLast) {
         try {
           resolve(parser(buffer))
-        } catch (e) {
+        } catch {
           resolve(null)
         }
       }

@@ -1,10 +1,9 @@
 import graphql from 'babel-plugin-relay/macro'
-import React from 'react'
 import {useFragment} from 'react-relay'
-import {MenuProps} from '~/hooks/useMenu'
+import type {MenuProps} from '~/hooks/useMenu'
 import useSearchFilter from '~/hooks/useSearchFilter'
-import {
-  NewAzureIssueMenu_AzureDevOpsRemoteProjects,
+import type {
+  NewAzureIssueMenu_AzureDevOpsRemoteProjects$data,
   NewAzureIssueMenu_AzureDevOpsRemoteProjects$key
 } from '../__generated__/NewAzureIssueMenu_AzureDevOpsRemoteProjects.graphql'
 import {EmptyDropdownMenuItemLabel} from './EmptyDropdownMenuItemLabel'
@@ -18,7 +17,7 @@ interface Props {
   projectsRef: NewAzureIssueMenu_AzureDevOpsRemoteProjects$key
 }
 
-const getValue = (project: NewAzureIssueMenu_AzureDevOpsRemoteProjects[0]) => project.name
+const getValue = (project: NewAzureIssueMenu_AzureDevOpsRemoteProjects$data[0]) => project.name
 
 const NewAzureIssueMenu = (props: Props) => {
   const {setSelectedProjectName, menuProps, projectsRef} = props

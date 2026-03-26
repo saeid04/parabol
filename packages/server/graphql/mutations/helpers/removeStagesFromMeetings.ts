@@ -1,5 +1,5 @@
-import getRethink from '../../../database/rethinkDriver'
-import {DataLoaderWorker} from '../../graphql'
+import getKysely from '../../../postgres/getKysely'
+import type {DataLoaderWorker} from '../../graphql'
 import getNextFacilitatorStageAfterStageRemoved from './getNextFacilitatorStageAfterStageRemoved'
 
 /*
@@ -11,8 +11,8 @@ const removeStagesFromMeetings = async (
   teamId: string,
   dataLoader: DataLoaderWorker
 ) => {
+  const pg = getKysely()
   const now = new Date()
-  const r = await getRethink()
   const [activeMeetings, completedMeetings] = await Promise.all([
     dataLoader.get('activeMeetingsByTeamId').load(teamId),
     dataLoader.get('completedMeetingsByTeamId').load(teamId)
@@ -20,7 +20,7 @@ const removeStagesFromMeetings = async (
   const meetings = activeMeetings.concat(completedMeetings)
 
   await Promise.all(
-    meetings.map((meeting) => {
+    meetings.map(async (meeting) => {
       const {id: meetingId, phases} = meeting
       phases.forEach((phase) => {
         // do this inside the loop since it's mutative
@@ -40,20 +40,19 @@ const removeStagesFromMeetings = async (
               nextStage.viewCount = nextStage.viewCount ? nextStage.viewCount + 1 : 1
               nextStage.isNavigable = true
             }
-            const stageIdx = stages.indexOf(stage)
+            const stageIdx = (stages as any).indexOf(stage)
             stages.splice(stageIdx, 1)
           }
         }
       })
-      return r
-        .table('NewMeeting')
-        .get(meetingId)
-        .update({
+      await pg
+        .updateTable('NewMeeting')
+        .set({
           facilitatorStageId: meeting.facilitatorStageId,
-          phases,
-          updatedAt: now
+          phases: JSON.stringify(phases)
         })
-        .run()
+        .where('id', '=', meetingId)
+        .execute()
     })
   )
   return meetings.map((meeting) => meeting.id)

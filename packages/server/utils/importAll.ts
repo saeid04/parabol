@@ -1,10 +1,15 @@
 import path from 'path'
+import '../types/webpackEnv'
 
 const importAll = (context: __WebpackModuleApi.RequireContext) => {
   const collector = {} as Record<string, any>
   context.keys().forEach((relativePath) => {
     const {name} = path.parse(relativePath)
-    collector[name] = context(relativePath).default
+    if (['Query', 'Mutation', 'Subscription'].includes(name)) {
+      throw new Error(`Overwriting root type ${name} with ${relativePath}`)
+    }
+    const relativeContext = context(relativePath)
+    collector[name] = relativeContext.default || relativeContext[name]
   })
   return collector
 }

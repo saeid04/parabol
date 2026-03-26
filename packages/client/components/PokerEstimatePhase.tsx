@@ -1,13 +1,12 @@
 import styled from '@emotion/styled'
 import graphql from 'babel-plugin-relay/macro'
-import React from 'react'
-import {createFragmentContainer} from 'react-relay'
+import {useFragment} from 'react-relay'
 import useBreakpoint from '~/hooks/useBreakpoint'
-import useGotoStageId from '~/hooks/useGotoStageId'
+import type useGotoStageId from '~/hooks/useGotoStageId'
 import useRightDrawer from '~/hooks/useRightDrawer'
 import {Breakpoint, DiscussionThreadEnum} from '~/types/constEnums'
+import type {PokerEstimatePhase_meeting$key} from '../__generated__/PokerEstimatePhase_meeting.graphql'
 import {phaseLabelLookup} from '../utils/meetings/lookups'
-import {PokerEstimatePhase_meeting} from '../__generated__/PokerEstimatePhase_meeting.graphql'
 import ErrorBoundary from './ErrorBoundary'
 import EstimatePhaseArea from './EstimatePhaseArea'
 import EstimatePhaseDiscussionDrawer from './EstimatePhaseDiscussionDrawer'
@@ -17,17 +16,18 @@ import MeetingTopBar from './MeetingTopBar'
 import PhaseHeaderDescription from './PhaseHeaderDescription'
 import PhaseHeaderTitle from './PhaseHeaderTitle'
 import PokerEstimateHeaderCard from './PokerEstimateHeaderCard'
-import {PokerMeetingPhaseProps} from './PokerMeeting'
+import type {PokerMeetingPhaseProps} from './PokerMeeting'
 import ResponsiveDashSidebar from './ResponsiveDashSidebar'
+import StageTimerDisplay from './StageTimerDisplay'
 
-const StyledMeetingHeaderAndPhase = styled(MeetingHeaderAndPhase)<{isOpen: boolean}>(
-  ({isOpen}) => ({
-    width: isOpen ? `calc(100% - ${DiscussionThreadEnum.WIDTH}px)` : '100%',
-    [`@media screen and (max-width: ${Breakpoint.POKER_DISCUSSION_FULLSCREEN_DRAWER}px)`]: {
-      width: '100%'
-    }
-  })
-)
+const StyledMeetingHeaderAndPhase = styled(MeetingHeaderAndPhase)<{
+  isOpen: boolean
+}>(({isOpen}) => ({
+  width: isOpen ? `calc(100% - ${DiscussionThreadEnum.WIDTH}px)` : '100%',
+  [`@media screen and (max-width: ${Breakpoint.POKER_DISCUSSION_FULLSCREEN_DRAWER}px)`]: {
+    width: '100%'
+  }
+}))
 
 const StoryAndEstimateWrapper = styled('div')({
   display: 'flex',
@@ -45,11 +45,37 @@ const EstimateAreaWrapper = styled('div')({
 
 interface Props extends PokerMeetingPhaseProps {
   gotoStageId: ReturnType<typeof useGotoStageId>
-  meeting: PokerEstimatePhase_meeting
+  meeting: PokerEstimatePhase_meeting$key
 }
 
 const PokerEstimatePhase = (props: Props) => {
-  const {avatarGroup, meeting, toggleSidebar, gotoStageId} = props
+  const {avatarGroup, meeting: meetingRef, toggleSidebar, gotoStageId} = props
+  const meeting = useFragment(
+    graphql`
+      fragment PokerEstimatePhase_meeting on PokerMeeting {
+        ...StageTimerDisplay_meeting
+        ...StageTimerControl_meeting
+        ...EstimatePhaseArea_meeting
+        id
+        endedAt
+        isCommentUnread
+        isRightDrawerOpen
+        localStage {
+          ...PokerEstimateHeaderCard_stage
+        }
+        phases {
+          ... on EstimatePhase {
+            stages {
+              ...PokerEstimateHeaderCard_stage
+            }
+          }
+        }
+        showSidebar
+        ...EstimatePhaseDiscussionDrawer_meeting
+      }
+    `,
+    meetingRef
+  )
   const {
     id: meetingId,
     localStage,
@@ -79,6 +105,7 @@ const PokerEstimatePhase = (props: Props) => {
           <ErrorBoundary>
             <PokerEstimateHeaderCard stage={localStage} />
           </ErrorBoundary>
+          <StageTimerDisplay meeting={meeting} />
           <EstimateAreaWrapper>
             <EstimatePhaseArea gotoStageId={gotoStageId} meeting={meeting} />
           </EstimateAreaWrapper>
@@ -101,26 +128,4 @@ const PokerEstimatePhase = (props: Props) => {
   )
 }
 
-export default createFragmentContainer(PokerEstimatePhase, {
-  meeting: graphql`
-    fragment PokerEstimatePhase_meeting on PokerMeeting {
-      ...EstimatePhaseArea_meeting
-      id
-      endedAt
-      isCommentUnread
-      isRightDrawerOpen
-      localStage {
-        ...PokerEstimateHeaderCard_stage
-      }
-      phases {
-        ... on EstimatePhase {
-          stages {
-            ...PokerEstimateHeaderCard_stage
-          }
-        }
-      }
-      showSidebar
-      ...EstimatePhaseDiscussionDrawer_meeting
-    }
-  `
-})
+export default PokerEstimatePhase

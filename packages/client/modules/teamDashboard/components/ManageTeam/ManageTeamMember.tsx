@@ -1,9 +1,9 @@
 import styled from '@emotion/styled'
 import {MoreVert as MoreVertIcon} from '@mui/icons-material'
 import graphql from 'babel-plugin-relay/macro'
-import React, {useRef} from 'react'
+import {useRef} from 'react'
 import {useFragment} from 'react-relay'
-import {ManageTeamMember_teamMember$key} from '~/__generated__/ManageTeamMember_teamMember.graphql'
+import type {ManageTeamMember_teamMember$key} from '~/__generated__/ManageTeamMember_teamMember.graphql'
 import Avatar from '../../../../components/Avatar/Avatar'
 import FlatButton from '../../../../components/FlatButton'
 import Row from '../../../../components/Row/Row'
@@ -73,12 +73,13 @@ const TeamMemberAvatarMenu = lazyPreload(
 
 interface Props {
   isViewerLead: boolean
+  isViewerOrgAdmin: boolean
   manageTeamMemberId?: string | null
   teamMember: ManageTeamMember_teamMember$key
 }
 
 const ManageTeamMember = (props: Props) => {
-  const {isViewerLead, manageTeamMemberId} = props
+  const {isViewerLead, isViewerOrgAdmin, manageTeamMemberId} = props
   const teamMember = useFragment(
     graphql`
       fragment ManageTeamMember_teamMember on TeamMember {
@@ -88,19 +89,37 @@ const ManageTeamMember = (props: Props) => {
         ...RemoveTeamMemberModal_teamMember
         id
         isLead
-        preferredName
-        picture
-        userId
+        isOrgAdmin
+        user {
+          id
+          preferredName
+          picture
+        }
       }
     `,
     props.teamMember
   )
-  const {id: teamMemberId, isLead, preferredName, picture, userId} = teamMember
+  const {id: teamMemberId, isLead, isOrgAdmin, user} = teamMember
+  const {id: userId, preferredName, picture} = user
   const atmosphere = useAtmosphere()
   const {viewerId} = atmosphere
   const isSelf = userId === viewerId
   const isSelectedAvatar = manageTeamMemberId === teamMemberId
-  const showMenuButton = (isViewerLead && !isSelf) || (!isViewerLead && isSelf)
+  // Team management permissions:
+  // * Org admin can do anything, including promote themselves to team lead, and remove non-lead
+  //   team members
+  // * Team leads can do anything, except manage org admins
+  // * Non-lead non-admins can only leave the team
+  // Show the menu iff:
+  // 1. Viewer is an admin, and the user is not a lead (viewer can promote them a lead, or remove
+  //    from team).
+  // 2. Viewer is a lead, and user is not the viewer, and not an admin (viewer can promote to lead,
+  //    or remove from team).
+  // 3. User is the viewer, and the user is not a lead (can leave team).
+  const showMenuButton =
+    (isViewerOrgAdmin && !isLead) ||
+    (isViewerLead && !isSelf && !isOrgAdmin) ||
+    (!isViewerLead && isSelf)
   const {
     closePortal: closePromote,
     togglePortal: togglePromote,
@@ -118,10 +137,14 @@ const ManageTeamMember = (props: Props) => {
 
   return (
     <StyledRow ref={ref}>
-      <Avatar size={24} picture={picture} />
+      <Avatar className='h-6 w-6' picture={picture} />
       <Content>
         <Name>{preferredName}</Name>
-        <TeamLeadLabel isLead={isLead}>Team Lead</TeamLeadLabel>
+        <TeamLeadLabel isLead={isLead || isOrgAdmin}>
+          {isLead && 'Team Lead'}
+          {isLead && isOrgAdmin && ', '}
+          {isOrgAdmin && 'Org Admin'}
+        </TeamLeadLabel>
       </Content>
       <StyledButton
         showMenuButton={showMenuButton}
@@ -138,6 +161,7 @@ const ManageTeamMember = (props: Props) => {
           menuProps={menuProps}
           isLead={isLead}
           isViewerLead={isViewerLead}
+          isViewerOrgAdmin={isViewerOrgAdmin}
           teamMember={teamMember}
           togglePromote={togglePromote}
           toggleRemove={toggleRemove}

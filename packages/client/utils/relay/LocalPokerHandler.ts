@@ -1,5 +1,5 @@
-import {Handler} from 'relay-runtime/lib/store/RelayStoreTypes'
-import {TaskStatusEnum} from '~/__generated__/UpdateTaskMutation.graphql'
+import type {Handler} from 'relay-runtime/lib/store/RelayStoreTypes'
+import type {TaskStatusEnum} from '~/__generated__/UpdateTaskMutation.graphql'
 import SearchQueryId from '../../shared/gqlIds/SearchQueryId'
 import createProxyRecord from './createProxyRecord'
 import initHandler from './initHandler'
@@ -56,6 +56,15 @@ const defaults = [
     service: 'gitlab',
     meetingPropName: 'gitlabSearchQuery',
     type: 'GitLabSearchQuery',
+    defaultQuery: {
+      queryString: '',
+      selectedProjectsIds: [] as string[]
+    }
+  },
+  {
+    service: 'linear',
+    meetingPropName: 'linearSearchQuery',
+    type: 'LinearSearchQuery',
     defaultQuery: {
       queryString: '',
       selectedProjectsIds: [] as string[]

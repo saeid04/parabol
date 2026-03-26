@@ -1,0 +1,403 @@
+import type * as React from 'react'
+import {useRef} from 'react'
+import {ConnectionHandler, commitLocalUpdate} from 'relay-runtime'
+import type {RecordSource} from 'relay-runtime/lib/store/RelayStoreTypes'
+import * as Y from 'yjs'
+import type {PageDragHandleQuery$data} from '../__generated__/PageDragHandleQuery.graphql'
+import type Atmosphere from '../Atmosphere'
+import type {PageConnectionKey} from '../components/DashNavList/LeftNavPageLink'
+import {snackOnError} from '../mutations/handlers/snackOnError'
+import {
+  isPrivatePageConnectionLookup,
+  useUpdatePageMutation
+} from '../mutations/useUpdatePageMutation'
+import {__END__, positionAfter, positionBefore, positionBetween} from '../shared/sortOrder'
+import {createPageLinkElement} from '../shared/tiptap/createPageLinkElement'
+import {getPageLinks} from '../shared/tiptap/getPageLinks'
+import {providerManager} from '../tiptap/providerManager'
+import {GQLID} from '../utils/GQLID'
+import useAtmosphere from './useAtmosphere'
+import useEventCallback from './useEventCallback'
+
+const makeDragRef = () => ({
+  startY: null as number | null,
+  clientY: null as number | null,
+  isDrag: false,
+  cardOffsetY: null as number | null,
+  cardOffsetX: null as number | null,
+  waitingForMovement: false,
+  startTimer: null as number | null,
+  clone: null as HTMLElement | null
+})
+
+const getCursor = (source: RecordSource, edgeKey: string | null | undefined) => {
+  if (!edgeKey) return null
+  return source.get(edgeKey)?.cursor as string
+}
+const getSortOrder = (source: RecordSource, connectionId: string, idx: number | null) => {
+  const edges = (source.get(connectionId)?.edges as {__refs?: string[]})?.__refs
+  // Dropping into a page that was never expanded. we don't know what's in it, put it at the end
+  if (!edges) return __END__
+  // Dropping into a page, but we know the children. Put it after the last
+  if (idx === null) {
+    const lastEdgeKey = edges.at(-1)
+    const lastEdgeSortOrder = getCursor(source, lastEdgeKey)
+    return positionAfter(lastEdgeSortOrder || ' ')
+  }
+  // Dropped on a bar at the top of a list. Put it before the first
+  if (idx === -1) {
+    // dropped on a bar at the top of the list
+    const firstEdgeKey = edges[0]
+    const topEdgeSortOrder = getCursor(source, firstEdgeKey)
+    return positionBefore(topEdgeSortOrder || ' ')
+  }
+  // Dropped on a bar in the middle or end. Put it below the bar
+  const afterEdgeKey = edges[idx]!
+  const beforeEdgeKey = edges[idx + 1]
+  const afterEdgeSortOrder = getCursor(source, afterEdgeKey)!
+  const beforeEdgeSortOrder = getCursor(source, beforeEdgeKey)
+  return beforeEdgeSortOrder
+    ? positionBetween(afterEdgeSortOrder, beforeEdgeSortOrder)
+    : positionAfter(afterEdgeSortOrder)
+}
+
+// This function must support browser native drags that originate from TipTap PageLinkBlocks
+// As well as pseudo drags coming from left nav PageLinks
+// If we build our own global drag handler & do it without native Drag API, we can simplify a bit here
+export const rawOnPointerUp =
+  (params: {
+    atmosphere: Atmosphere
+    sourceParentPageId: string | null
+    pageId: string
+    sourceConnectionKey: PageConnectionKey
+    sourceTeamId?: string | null | undefined
+    executeUpdatePage: ReturnType<typeof useUpdatePageMutation>[0]
+  }) =>
+  async (e: PointerEvent | React.DragEvent<HTMLDivElement>) => {
+    const {
+      atmosphere,
+      sourceParentPageId,
+      pageId,
+      sourceConnectionKey,
+      sourceTeamId,
+      executeUpdatePage
+    } = params
+    e.preventDefault()
+    const dropCurrentTarget = document.elementFromPoint(e.clientX, e.clientY)
+    const dropTarget = dropCurrentTarget?.closest('[data-drop-below], [data-drop-in]')
+    if (!dropTarget) return
+    const isDropBelow = dropTarget.hasAttribute('data-drop-below')
+    const section = dropTarget.closest('[data-pages-connection]')
+    const targetConnectionKey = section
+      ? (section.getAttribute('data-pages-connection') as PageConnectionKey)
+      : 'User_pages'
+    // A parent section is either the teamId or parentPageId that contains the page
+    const targetParentSection = isDropBelow
+      ? dropTarget.getAttribute('data-drop-below') || null
+      : dropTarget.getAttribute('data-drop-in')
+
+    const targetParentPageId = targetParentSection?.startsWith('page:') ? targetParentSection : null
+    // null means a drop-in, -1 means at the beginning, else below whatever number is there
+    const dropIdx = isDropBelow ? Number(dropTarget.getAttribute('data-drop-idx')) : null
+    const source = atmosphere.getStore().getSource()
+    if (sourceParentPageId && sourceParentPageId === targetParentPageId) {
+      // move within the same document
+      await providerManager.withDoc(targetParentPageId, ({document, authorizedScope}) => {
+        if (authorizedScope === 'readonly') {
+          atmosphere.eventEmitter.emit('addSnackbar', {
+            key: 'useDraggablePage:noDropAccess',
+            message: 'You must be an editor of the target page',
+            autoDismiss: 5
+          })
+          return
+        }
+        const pageCode = GQLID.fromKey(pageId)[0]
+        const children = getPageLinks(document, true)
+        const fromNodeIdx = children.findIndex(
+          (child) => child.getAttribute('pageCode') === pageCode
+        )
+        if (fromNodeIdx === -1) return
+        const fromNode = children.at(fromNodeIdx)!
+
+        // yjs nodes cannot be moved, only created and destroyed, so clone the old, delete the old, add the new
+        const nodeToMove = [
+          createPageLinkElement(
+            fromNode.getAttribute('pageCode') as number,
+            fromNode.getAttribute('title') as string,
+            fromNode.getAttribute('database') as boolean
+          ) as Y.XmlElement
+        ]
+
+        // delete the old node first, but flag it as isMoving so it doesn't trigger side effects
+        fromNode.setAttribute('isMoving', true)
+        const parent = fromNode.parent as Y.XmlElement
+        const fromIdx = parent.toArray().findIndex((child) => child === fromNode)
+        parent.delete(fromIdx)
+
+        if (dropIdx === -1) {
+          // put it at the beginning
+          const dropTarget = children.at(0)!
+          const firstChildParent = dropTarget.parent as Y.XmlElement
+          const firstChildIdx = firstChildParent
+            .toArray()
+            .findIndex((child) => child === dropTarget)
+          firstChildParent.insert(firstChildIdx, nodeToMove)
+        } else {
+          // if null, put after the last one, else, put after the dropIdx
+          const idx = dropIdx === null ? -1 : dropIdx
+          const dropTarget = children.at(idx) as Y.XmlElement
+          const dropTargetParent = dropTarget.parent as Y.XmlElement
+          dropTargetParent.insertAfter(dropTarget, nodeToMove)
+        }
+      })
+      return
+    }
+    if (targetParentPageId) {
+      await providerManager.withDoc(targetParentPageId, ({document, authorizedScope}) => {
+        if (authorizedScope === 'readonly') {
+          atmosphere.eventEmitter.emit('addSnackbar', {
+            key: 'useDraggablePage:noDropAccess',
+            message: 'You must be an editor of the target page',
+            autoDismiss: 5
+          })
+          return
+        }
+        // FIXME: if the doc is readOnly, how come I can still make edits?
+        const pageCode = GQLID.fromKey(pageId)[0]
+        const pageGQLRecord = source.get(pageId) as PageDragHandleQuery$data['public']['page']
+        if (!pageGQLRecord) {
+          console.warn('Page not found in Relay')
+          return
+        }
+        const {title, isDatabase, isMeetingTOC} = pageGQLRecord
+        if (isMeetingTOC) {
+          atmosphere.eventEmitter.emit('addSnackbar', {
+            key: 'useDraggablePage:noDropAccess',
+            message: 'Cannot move Meeting Summaries',
+            autoDismiss: 5
+          })
+          return
+        }
+        const children = getPageLinks(document, true)
+        const idx = dropIdx === null ? -1 : dropIdx
+        const dropTarget = children.at(idx) as Y.XmlElement
+        if (dropTarget) {
+          const dropTargetParent = dropTarget.parent as Y.XmlElement
+          dropTargetParent.insertAfter(dropTarget, [
+            createPageLinkElement(pageCode, title, isDatabase) as Y.XmlElement
+          ])
+        } else {
+          // this will be the first page link, put it at the top just below the title
+          const frag = document.getXmlFragment('default')
+          frag.insert(1, [createPageLinkElement(pageCode, title, isDatabase) as Y.XmlElement])
+        }
+      })
+    } else {
+      // the target is top-level, under a team, shared pages, or private pages
+      const targetTeamId =
+        targetParentSection && !targetParentPageId ? targetParentSection : undefined
+      const {viewerId} = atmosphere
+      const isPrivate = isPrivatePageConnectionLookup[targetConnectionKey!]
+      const targetConnectionId = ConnectionHandler.getConnectionID(viewerId, targetConnectionKey!, {
+        isPrivate,
+        parentPageId: targetParentPageId,
+        teamId: targetTeamId
+      })
+      const sortOrder = getSortOrder(source, targetConnectionId, dropIdx)
+
+      const getSection = (connectionKey: PageConnectionKey, teamId: string | null | undefined) => {
+        switch (connectionKey) {
+          case 'User_sharedPages':
+            return 'shared'
+          case 'User_privatePages':
+            return 'private'
+          case 'User_pages':
+            return teamId ? 'team' : 'page'
+        }
+      }
+
+      executeUpdatePage({
+        variables: {
+          pageId,
+          sortOrder,
+          sourceSection: getSection(sourceConnectionKey, sourceTeamId),
+          targetSection: getSection(targetConnectionKey, targetTeamId),
+          teamId: targetTeamId
+        },
+        onError: snackOnError(atmosphere, 'updatePageErr'),
+        onCompleted: (_res, errors) => {
+          const firstError = errors?.[0]
+          if (firstError) {
+            atmosphere.eventEmitter.emit('addSnackbar', {
+              message: firstError.message,
+              autoDismiss: 10,
+              key: 'dragPageError'
+            })
+          }
+        },
+        sourceTeamId,
+        sourceParentPageId,
+        sourceConnectionKey,
+        targetConnectionKey
+      })
+    }
+  }
+
+export const useDraggablePage = (
+  pageId: string,
+  isPageIdPrivate: boolean,
+  sourceParentPageId: string | null,
+  sourceTeamId: string | null | undefined,
+  sourceConnectionKey: PageConnectionKey,
+  isFirstChild: boolean,
+  isLastChild: boolean
+) => {
+  const ref = useRef<HTMLDivElement>(null)
+  const dragRef = useRef(makeDragRef())
+  const atmosphere = useAtmosphere()
+  const [executeUpdatePage] = useUpdatePageMutation()
+  const drag = dragRef.current
+
+  const onPointerDown: React.PointerEventHandler<HTMLDivElement> = useEventCallback((e) => {
+    const el = ref.current
+    if (e.button !== 0) return
+    if (!el) return
+    e.preventDefault()
+    drag.startY = e.clientY
+    if (e.pointerType === 'touch') {
+      drag.startTimer = window.setTimeout(() => {
+        drag.waitingForMovement = true
+      }, 120)
+    } else {
+      drag.waitingForMovement = true
+    }
+    document.addEventListener('pointermove', onPointerMove)
+    document.addEventListener('pointerup', onPointerUp, {once: true})
+    document.addEventListener('pointercancel', cleanupDrag)
+    window.addEventListener('blur', cleanupDrag, {once: true})
+  })
+
+  const cleanupWrapper = (fn: (e: PointerEvent) => void) => (e: PointerEvent) => {
+    fn(e)
+    cleanupDrag()
+  }
+
+  const onPointerUp = useEventCallback(
+    cleanupWrapper(
+      rawOnPointerUp({
+        executeUpdatePage,
+        sourceTeamId,
+        sourceConnectionKey,
+        atmosphere,
+        pageId,
+        sourceParentPageId
+      })
+    )
+  )
+
+  const onPointerMove = useEventCallback((e: PointerEvent) => {
+    const el = ref.current
+    if (!el) return
+    if (!drag.waitingForMovement && !drag.isDrag) return
+
+    if (!drag.isDrag) {
+      const deltaY = Math.abs(e.clientY - drag.startY!)
+      if (deltaY < 3) return
+      const bbox = el.getBoundingClientRect()
+      // clip quick drags so the cursor is guaranteed to be inside the card
+      drag.cardOffsetY = Math.min(e.clientY - bbox.top, bbox.height)
+      drag.cardOffsetX = Math.min(bbox.left, bbox.width)
+
+      drag.isDrag = true
+      drag.waitingForMovement = false
+      startVisualDragImage(e)
+
+      commitLocalUpdate(atmosphere, (store) => {
+        const draggingPageParentSection =
+          sourceConnectionKey === 'User_pages'
+            ? `${sourceConnectionKey}:${sourceParentPageId || sourceTeamId}`
+            : sourceConnectionKey
+
+        const draggingPageViewerAccess = store
+          .get(pageId)
+          ?.getLinkedRecord('access')
+          ?.getValue('viewer')
+        store
+          .getRoot()
+          .getLinkedRecord('viewer')
+          ?.setValue(pageId, 'draggingPageId')
+          .setValue(isPageIdPrivate, 'draggingPageIsPrivate')
+          .setValue(draggingPageParentSection, 'draggingPageParentSection')
+          .setValue(draggingPageViewerAccess, 'draggingPageViewerAccess')
+        const parentId = sourceParentPageId || sourceTeamId
+        const parent = parentId ? store.get(parentId) : null
+        parent
+          ?.setValue(isFirstChild, 'isDraggingFirstChild')
+          .setValue(isLastChild, 'isDraggingLastChild')
+      })
+    }
+    if (!drag.clone) return
+    drag.clientY = e.clientY
+    drag.clone.style.transform = `translateY(${drag.clientY - drag.cardOffsetY!}px)`
+    updateVisualDragImage(e)
+  })
+
+  function startVisualDragImage(e: PointerEvent) {
+    const el = ref.current
+    if (!el) return
+    drag.clone = el.cloneNode(true) as HTMLElement
+    drag.clone.style.position = 'absolute'
+    drag.clone.style.pointerEvents = 'none'
+    drag.clone.style.opacity = '0.5'
+    drag.clone.style.transform = `translateY(0px)`
+    drag.clone.style.top = `${e.clientY - drag.cardOffsetY!}px`
+    drag.clone.style.left = `${drag.cardOffsetX}px`
+    drag.clone.style.width = `${el.offsetWidth}px`
+    drag.clone.style.height = `${el.offsetHeight}px`
+    drag.clone.style.zIndex = '10'
+    document.body.appendChild(drag.clone)
+  }
+
+  function updateVisualDragImage(e: PointerEvent) {
+    if (!drag.clone) return
+    const deltaY = e.clientY - drag.startY!
+    drag.clone.style.transform = `translateY(${deltaY}px)`
+  }
+
+  function removeVisualDragImage() {
+    if (drag.clone) {
+      drag.clone.remove()
+      drag.clone = null
+    }
+  }
+
+  const cleanupDrag = useEventCallback(() => {
+    if (drag.startTimer !== null) {
+      clearTimeout(drag.startTimer)
+      drag.startTimer = null
+    }
+    drag.isDrag = false
+    drag.waitingForMovement = false
+    removeVisualDragImage()
+    window.removeEventListener('blur', cleanupDrag)
+    document.removeEventListener('pointercancel', cleanupDrag)
+    document.removeEventListener('pointerup', onPointerUp)
+    // in a set timeout for the <Link/> onClick handler to fire while draggingPageId is still set
+    setTimeout(() => {
+      commitLocalUpdate(atmosphere, (store) => {
+        store
+          .getRoot()
+          .getLinkedRecord('viewer')
+          ?.setValue(null, 'draggingPageId')
+          .setValue(null, 'draggingPageIsPrivate')
+          .setValue(null, 'draggingPageParentSection')
+          .setValue(null, 'draggingPageViewerAccess')
+        const parentId = sourceParentPageId || sourceTeamId
+        const parent = parentId ? store.get(parentId) : null
+        parent?.setValue(null, 'isDraggingFirstChild').setValue(null, 'isDraggingLastChild')
+      })
+    })
+  })
+
+  return {onPointerDown, ref}
+}

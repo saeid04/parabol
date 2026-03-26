@@ -1,15 +1,15 @@
 import styled from '@emotion/styled'
 import graphql from 'babel-plugin-relay/macro'
-import React from 'react'
 import {useFragment} from 'react-relay'
+import type {TimelineEventTeamPromptComplete_timelineEvent$key} from '../__generated__/TimelineEventTeamPromptComplete_timelineEvent.graphql'
 import useAtmosphere from '../hooks/useAtmosphere'
-import SendClientSegmentEventMutation from '../mutations/SendClientSegmentEventMutation'
+import {GQLID} from '../utils/GQLID'
 import plural from '../utils/plural'
-import {TimelineEventTeamPromptComplete_timelineEvent$key} from '../__generated__/TimelineEventTeamPromptComplete_timelineEvent.graphql'
+import SendClientSideEvent from '../utils/SendClientSideEvent'
 import StyledLink from './StyledLink'
+import TimelineEventTitle from './TImelineEventTitle'
 import TimelineEventBody from './TimelineEventBody'
 import TimelineEventCard from './TimelineEventCard'
-import TimelineEventTitle from './TImelineEventTitle'
 
 interface Props {
   timelineEvent: TimelineEventTeamPromptComplete_timelineEvent$key
@@ -43,6 +43,7 @@ const TimelineEventTeamPromptComplete = (props: Props) => {
               id
             }
           }
+          summaryPageId
         }
         team {
           id
@@ -52,6 +53,8 @@ const TimelineEventTeamPromptComplete = (props: Props) => {
     `,
     timelineEventRef
   )
+
+  const atmosphere = useAtmosphere()
 
   const {meeting, team} = timelineEvent
   if (!meeting) {
@@ -65,15 +68,17 @@ const TimelineEventTeamPromptComplete = (props: Props) => {
     commentCount,
     taskCount,
     locked,
-    organization
+    organization,
+    summaryPageId
   } = meeting
   const {name: teamName} = team
   const {id: orgId, viewerOrganizationUser} = organization
   const canUpgrade = !!viewerOrganizationUser
-
-  const atmosphere = useAtmosphere()
+  const summaryURL = summaryPageId
+    ? `/pages/${GQLID.fromKey(summaryPageId)[0]}`
+    : `/new-summary/${meetingId}`
   const onUpgrade = () => {
-    SendClientSegmentEventMutation(atmosphere, 'Upgrade CTA Clicked', {
+    SendClientSideEvent(atmosphere, 'Upgrade CTA Clicked', {
       upgradeCTALocation: 'timelineHistoryLock',
       upgradeTier: 'team',
       meetingId
@@ -116,7 +121,7 @@ const TimelineEventTeamPromptComplete = (props: Props) => {
           <>
             <Link to={`/meet/${meetingId}/responses`}>See responses and discussions</Link>
             {' or '}
-            <Link to={`/new-summary/${meetingId}`}>review a summary</Link>
+            <Link to={summaryURL}>review a summary</Link>
           </>
         )}
       </TimelineEventBody>

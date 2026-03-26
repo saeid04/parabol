@@ -1,23 +1,24 @@
 import styled from '@emotion/styled'
 import {ExpandMore} from '@mui/icons-material'
 import graphql from 'babel-plugin-relay/macro'
-import React, {FormEvent, useEffect, useRef, useState} from 'react'
+import {type FormEvent, useEffect, useRef, useState} from 'react'
 import {useFragment} from 'react-relay'
+import type {NewGitLabIssueInput_viewer$key} from '~/__generated__/NewGitLabIssueInput_viewer.graphql'
 import useAtmosphere from '~/hooks/useAtmosphere'
 import {MenuPosition} from '~/hooks/useCoords'
 import useMenu from '~/hooks/useMenu'
 import useMutationProps from '~/hooks/useMutationProps'
 import {PALETTE} from '~/styles/paletteV3'
 import getNonNullEdges from '~/utils/getNonNullEdges'
-import {NewGitLabIssueInput_viewer$key} from '~/__generated__/NewGitLabIssueInput_viewer.graphql'
+import type {CreateTaskMutation as TCreateTaskMutation} from '../__generated__/CreateTaskMutation.graphql'
 import useForm from '../hooks/useForm'
 import {PortalStatus} from '../hooks/usePortal'
+import useTimedState from '../hooks/useTimedState'
 import CreateTaskMutation from '../mutations/CreateTaskMutation'
 import UpdatePokerScopeMutation from '../mutations/UpdatePokerScopeMutation'
-import {CompletedHandler} from '../types/relayMutations'
-import convertToTaskContent from '../utils/draftjs/convertToTaskContent'
+import {plaintextToTipTap} from '../shared/tiptap/plaintextToTipTap'
+import type {CompletedHandler} from '../types/relayMutations'
 import Legitity from '../validation/Legitity'
-import {CreateTaskMutationResponse} from '../__generated__/CreateTaskMutation.graphql'
 import Checkbox from './Checkbox'
 import NewGitLabIssueMenu from './NewGitLabIssueMenu'
 import PlainButton from './PlainButton/PlainButton'
@@ -156,6 +157,12 @@ const NewGitLabIssueInput = (props: Props) => {
   const gitlabProjects = getNonNullEdges(nullableEdges).map(({node}) => node)
   const atmosphere = useAtmosphere()
   const {onCompleted, onError} = useMutationProps()
+  const [createTaskError, setCreateTaskError] = useTimedState()
+  useEffect(() => {
+    if (isEditing) {
+      setCreateTaskError(undefined)
+    }
+  }, [isEditing])
   const [selectedFullPath, setSelectedFullPath] = useState(gitlabProjects[0]?.fullPath || '')
   const {fields, onChange, validateField, setDirtyField} = useForm({
     newIssue: {
@@ -194,7 +201,7 @@ const NewGitLabIssueInput = (props: Props) => {
       teamId,
       userId,
       meetingId,
-      content: convertToTaskContent(`${newIssueTitle} #archived`),
+      content: JSON.stringify(plaintextToTipTap(newIssueTitle, {taskTags: ['archived']})),
       plaintextContent: newIssueTitle,
       status: 'active' as const,
       integration: {
@@ -202,8 +209,13 @@ const NewGitLabIssueInput = (props: Props) => {
         serviceProjectHash: selectedFullPath
       }
     }
-    const handleCompleted: CompletedHandler<CreateTaskMutationResponse> = (res) => {
-      const integrationHash = res.createTask?.task?.integrationHash ?? null
+    const handleCompleted: CompletedHandler<TCreateTaskMutation['response']> = (res) => {
+      const {error, task} = res.createTask
+      if (error) {
+        setCreateTaskError(error.message)
+      }
+      if (error || !task) return
+      const {integrationHash} = task
       if (!integrationHash) return
       const pokerScopeVariables = {
         meetingId,
@@ -224,6 +236,17 @@ const NewGitLabIssueInput = (props: Props) => {
     CreateTaskMutation(atmosphere, {newTask}, {onError, onCompleted: handleCompleted})
   }
 
+  if (createTaskError) {
+    return (
+      <Item>
+        <Checkbox active disabled />
+        <Issue>
+          <Error>{createTaskError}</Error>
+          <StyledLink>{selectedFullPath}</StyledLink>
+        </Issue>
+      </Item>
+    )
+  }
   if (!isEditing) return null
   return (
     <>

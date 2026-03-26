@@ -1,17 +1,22 @@
 import styled from '@emotion/styled'
 import graphql from 'babel-plugin-relay/macro'
-import React, {useState} from 'react'
-import {PreloadedQuery, useFragment, usePaginationFragment, usePreloadedQuery} from 'react-relay'
+import {useState} from 'react'
+import {
+  type PreloadedQuery,
+  useFragment,
+  usePaginationFragment,
+  usePreloadedQuery
+} from 'react-relay'
 import useGetUsedServiceTaskIds from '~/hooks/useGetUsedServiceTaskIds'
 import useLoadNextOnScrollBottom from '~/hooks/useLoadNextOnScrollBottom'
 import MockScopingList from '~/modules/meeting/components/MockScopingList'
+import type {GitLabScopingSearchResults_meeting$key} from '../__generated__/GitLabScopingSearchResults_meeting.graphql'
+import type {GitLabScopingSearchResults_query$key} from '../__generated__/GitLabScopingSearchResults_query.graphql'
+import type {GitLabScopingSearchResultsPaginationQuery} from '../__generated__/GitLabScopingSearchResultsPaginationQuery.graphql'
+import type {GitLabScopingSearchResultsQuery} from '../__generated__/GitLabScopingSearchResultsQuery.graphql'
 import GitLabIssueId from '../shared/gqlIds/GitLabIssueId'
 import getNonNullEdges from '../utils/getNonNullEdges'
 import {parseWebPath} from '../utils/parseWebPath'
-import {GitLabScopingSearchResultsPaginationQuery} from '../__generated__/GitLabScopingSearchResultsPaginationQuery.graphql'
-import {GitLabScopingSearchResultsQuery} from '../__generated__/GitLabScopingSearchResultsQuery.graphql'
-import {GitLabScopingSearchResults_meeting$key} from '../__generated__/GitLabScopingSearchResults_meeting.graphql'
-import {GitLabScopingSearchResults_query$key} from '../__generated__/GitLabScopingSearchResults_query.graphql'
 import Ellipsis from './Ellipsis/Ellipsis'
 import GitLabScopingSelectAllIssues from './GitLabScopingSelectAllIssues'
 import IntegrationScopingNoResults from './IntegrationScopingNoResults'
@@ -44,9 +49,9 @@ const GitLabScopingSearchResults = (props: Props) => {
       query GitLabScopingSearchResultsQuery(
         $teamId: ID!
         $queryString: String!
-        $selectedProjectsIds: [ID!]
-        $sort: _xGitLabIssueSort!
-        $state: _xGitLabIssuableState!
+        $selectedProjectsIds: [String!]
+        $sort: String!
+        $state: String!
       ) {
         ...GitLabScopingSearchResults_query
         viewer {
@@ -65,8 +70,7 @@ const GitLabScopingSearchResults = (props: Props) => {
         }
       }
     `,
-    queryRef,
-    {UNSTABLE_renderPolicy: 'full'}
+    queryRef
   )
 
   const paginationRes = usePaginationFragment<

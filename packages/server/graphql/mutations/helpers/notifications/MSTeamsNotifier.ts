@@ -3,46 +3,48 @@ import makeAppURL from 'parabol-client/utils/makeAppURL'
 import findStageById from 'parabol-client/utils/meetings/findStageById'
 import {phaseLabelLookup} from 'parabol-client/utils/meetings/lookups'
 import appOrigin from '../../../../appOrigin'
-import Meeting from '../../../../database/types/Meeting'
-import {SlackNotificationEventEnum as EventEnum} from '../../../../database/types/SlackNotification'
-import {IntegrationProviderMSTeams} from '../../../../postgres/queries/getIntegrationProvidersByIds'
-import {Team} from '../../../../postgres/queries/getTeamsByIds'
-import {MeetingTypeEnum} from '../../../../postgres/types/Meeting'
+import type {SlackNotification, Team, User} from '../../../../postgres/types'
+import type {IntegrationProviderMSTeams as IIntegrationProviderMSTeams} from '../../../../postgres/types/IntegrationProvider'
+import type {AnyMeeting, MeetingTypeEnum} from '../../../../postgres/types/Meeting'
+import {analytics} from '../../../../utils/analytics/analytics'
+import logError from '../../../../utils/logError'
 import MSTeamsServerManager from '../../../../utils/MSTeamsServerManager'
-import segmentIo from '../../../../utils/segmentIo'
-import sendToSentry from '../../../../utils/sendToSentry'
-import {DataLoaderWorker} from '../../../graphql'
+import type {DataLoaderWorker} from '../../../graphql'
+import isValid from '../../../isValid'
+import type {SlackNotificationEventEnum} from '../../../public/resolverTypes'
 import getSummaryText from './getSummaryText'
-import {NotificationIntegrationHelper} from './NotificationIntegrationHelper'
-import {Notifier} from './Notifier'
+import type {NotificationIntegrationHelper} from './NotificationIntegrationHelper'
+import {createNotifier} from './Notifier'
+
+const WEBHOOK_INTEGRATION_DISABLED = process.env.MSTEAMS_WEBHOOK_INTEGRATION_DISABLED === 'true'
 
 const notifyMSTeams = async (
-  event: EventEnum,
+  event: SlackNotification['event'],
   webhookUrl: string,
-  userId: string,
+  user: User,
   teamId: string,
   textOrAttachmentsArray: string | unknown[]
 ) => {
   const manager = new MSTeamsServerManager(webhookUrl)
   const result = await manager.post(textOrAttachmentsArray)
   if (result instanceof Error) {
-    sendToSentry(result, {userId, tags: {teamId, event, webhookUrl}})
+    logError(result, {userId: user.id, tags: {teamId, event, webhookUrl}})
     return {
       error: result
     }
   }
-  segmentIo.track({
-    userId,
-    event: 'MSTeams notification sent',
-    properties: {
-      teamId,
-      notificationEvent: event
-    }
-  })
+  analytics.teamsNotificationSent(user, teamId, event)
 
   return 'success'
 }
-export type MSTeamsNotificationAuth = IntegrationProviderMSTeams & {userId: string}
+
+type IntegrationProviderMSTeams = IIntegrationProviderMSTeams & {
+  teamId: string
+}
+export type MSTeamsNotificationAuth = IntegrationProviderMSTeams & {
+  userId: string
+  email: string
+}
 
 const createTeamPromptMeetingTitle = (meetingName: string) => `*${meetingName}* is open 💬`
 const createGenericMeetingTitle = () => `Meeting Started 👋`
@@ -85,8 +87,7 @@ const MeetingActionLookup: Record<
 export const MSTeamsNotificationHelper: NotificationIntegrationHelper<MSTeamsNotificationAuth> = (
   notificationChannel
 ) => ({
-  async startMeeting(meeting, team) {
-    const {facilitatorUserId} = meeting
+  async startMeeting(meeting, team, user) {
     const {webhookUrl} = notificationChannel
 
     const searchParams = {
@@ -99,7 +100,7 @@ export const MSTeamsNotificationHelper: NotificationIntegrationHelper<MSTeamsNot
     const card = new AdaptiveCards.AdaptiveCard()
     card.version = new AdaptiveCards.Version(1.2, 0)
 
-    const meetingTitle = meetingTypeTitleLookup[meeting.meetingType](meeting.name)
+    const meetingTitle = meetingTypeTitleLookup[meeting.meetingType]!(meeting.name)
     const titleTextBlock = GenerateACMeetingTitle(meetingTitle)
     card.addItem(titleTextBlock)
 
@@ -111,7 +112,7 @@ export const MSTeamsNotificationHelper: NotificationIntegrationHelper<MSTeamsNot
     const meetingLinkColumn = new AdaptiveCards.Column()
     meetingLinkColumn.width = 'stretch'
     const joinMeetingActionSet = new AdaptiveCards.ActionSet()
-    const joinMeetingAction = MeetingActionLookup[meeting.meetingType](meetingUrl)
+    const joinMeetingAction = MeetingActionLookup[meeting.meetingType]!(meetingUrl)
     joinMeetingActionSet.addAction(joinMeetingAction)
     meetingLinkColumn.addItem(joinMeetingActionSet)
     meetingLinkColumnSet.addColumn(meetingLinkColumn)
@@ -121,11 +122,11 @@ export const MSTeamsNotificationHelper: NotificationIntegrationHelper<MSTeamsNot
 
     const attachments = MakeACAttachment(adaptiveCard)
 
-    return notifyMSTeams('meetingStart', webhookUrl, facilitatorUserId, team.id, attachments)
+    return notifyMSTeams('meetingStart', webhookUrl, user, team.id, attachments)
   },
 
-  async endMeeting(meeting, team) {
-    const {facilitatorUserId, summary} = meeting
+  async endMeeting(meeting, team, user) {
+    const {summary} = meeting
     const {webhookUrl} = notificationChannel
     const searchParams = {
       utm_source: 'MS Teams meeting start',
@@ -149,7 +150,7 @@ export const MSTeamsNotificationHelper: NotificationIntegrationHelper<MSTeamsNot
     summaryColumnSet.spacing = AdaptiveCards.Spacing.ExtraLarge
     const summaryColumn = new AdaptiveCards.Column()
     summaryColumn.width = 'stretch'
-    const summaryTextBlock = new AdaptiveCards.TextBlock(getSummaryText(meeting))
+    const summaryTextBlock = new AdaptiveCards.TextBlock(await getSummaryText(meeting))
     summaryTextBlock.wrap = true
     summaryColumn.addItem(summaryTextBlock)
     summaryColumnSet.addColumn(summaryColumn)
@@ -201,13 +202,13 @@ export const MSTeamsNotificationHelper: NotificationIntegrationHelper<MSTeamsNot
 
     const adaptiveCard = JSON.stringify(card.toJSON())
     const attachments = MakeACAttachment(adaptiveCard)
-    return notifyMSTeams('meetingEnd', webhookUrl, facilitatorUserId, team.id, attachments)
+    return notifyMSTeams('meetingEnd', webhookUrl, user, team.id, attachments)
   },
 
-  async startTimeLimit(scheduledEndTime, meeting, team) {
+  async startTimeLimit(scheduledEndTime, meeting, team, user) {
     const {webhookUrl} = notificationChannel
 
-    const {phases, facilitatorStageId, facilitatorUserId} = meeting
+    const {phases, facilitatorStageId} = meeting
 
     const meetingUrl = makeAppURL(appOrigin, `meet/${meeting.id}`)
 
@@ -263,17 +264,10 @@ export const MSTeamsNotificationHelper: NotificationIntegrationHelper<MSTeamsNot
     const adaptiveCard = JSON.stringify(card.toJSON())
     const attachments = MakeACAttachment(adaptiveCard)
 
-    return notifyMSTeams(
-      'MEETING_STAGE_TIME_LIMIT_START',
-      webhookUrl,
-      facilitatorUserId,
-      team.id,
-      attachments
-    )
+    return notifyMSTeams('MEETING_STAGE_TIME_LIMIT_START', webhookUrl, user, team.id, attachments)
   },
 
-  async endTimeLimit(meeting, team) {
-    const {facilitatorUserId: userId} = meeting
+  async endTimeLimit(meeting, team, user) {
     const {webhookUrl} = notificationChannel
 
     const card = new AdaptiveCards.AdaptiveCard()
@@ -314,10 +308,10 @@ export const MSTeamsNotificationHelper: NotificationIntegrationHelper<MSTeamsNot
     const adaptiveCard = JSON.stringify(card.toJSON())
     const attachments = MakeACAttachment(adaptiveCard)
 
-    return notifyMSTeams('MEETING_STAGE_TIME_LIMIT_END', webhookUrl, userId, team.id, attachments)
+    return notifyMSTeams('MEETING_STAGE_TIME_LIMIT_END', webhookUrl, user, team.id, attachments)
   },
-  async integrationUpdated() {
-    const {webhookUrl, teamId, userId} = notificationChannel
+  async integrationUpdated(user) {
+    const {webhookUrl, teamId} = notificationChannel
 
     const card = new AdaptiveCards.AdaptiveCard()
     card.version = new AdaptiveCards.Version(1.2, 0)
@@ -338,70 +332,58 @@ export const MSTeamsNotificationHelper: NotificationIntegrationHelper<MSTeamsNot
 
     const adaptiveCard = JSON.stringify(card.toJSON())
     const attachments = MakeACAttachment(adaptiveCard)
-    return notifyMSTeams('meetingEnd', webhookUrl, userId, teamId, attachments)
+    return notifyMSTeams('meetingEnd', webhookUrl, user, teamId, attachments)
+  },
+
+  async standupResponseSubmitted() {
+    // Not implemented
+    return 'success'
   }
 })
 
-async function getMSTeams(dataLoader: DataLoaderWorker, teamId: string, userId: string) {
-  const provider = await dataLoader
-    .get('bestTeamIntegrationProviders')
-    .load({service: 'msTeams', teamId, userId})
-  return provider
-    ? MSTeamsNotificationHelper({
-        ...(provider as IntegrationProviderMSTeams),
-        userId
-      })
-    : null
-}
-
-async function loadMeetingTeam(dataLoader: DataLoaderWorker, meetingId: string, teamId: string) {
-  const [team, meeting] = await Promise.all([
-    dataLoader.get('teams').load(teamId),
-    dataLoader.get('newMeetings').load(meetingId)
+async function getMSTeams(
+  dataLoader: DataLoaderWorker,
+  teamId: string,
+  userId: string,
+  event: SlackNotificationEventEnum
+) {
+  if (WEBHOOK_INTEGRATION_DISABLED) return []
+  const [auths, user] = await Promise.all([
+    dataLoader
+      .get('teamMemberIntegrationAuthsByTeamIdAndService')
+      .load({service: 'msTeams', teamId}),
+    dataLoader.get('users').loadNonNull(userId)
   ])
-  return {
-    meeting,
-    team
-  }
-}
-export const MSTeamsNotifier: Notifier = {
-  async startMeeting(dataLoader: DataLoaderWorker, meetingId: string, teamId: string) {
-    const {meeting, team} = await loadMeetingTeam(dataLoader, meetingId, teamId)
-    if (!meeting || !team) return
-    ;(await getMSTeams(dataLoader, team.id, meeting.facilitatorUserId))?.startMeeting(meeting, team)
-  },
 
-  async endMeeting(dataLoader: DataLoaderWorker, meetingId: string, teamId: string) {
-    const {meeting, team} = await loadMeetingTeam(dataLoader, meetingId, teamId)
-    if (!meeting || !team) return
-    ;(await getMSTeams(dataLoader, team.id, meeting.facilitatorUserId))?.endMeeting(meeting, team)
-  },
-
-  async startTimeLimit(
-    dataLoader: DataLoaderWorker,
-    scheduledEndTime: Date,
-    meetingId: string,
-    teamId: string
-  ) {
-    const {meeting, team} = await loadMeetingTeam(dataLoader, meetingId, teamId)
-    if (!meeting || !team) return
-    ;(await getMSTeams(dataLoader, team.id, meeting.facilitatorUserId))?.startTimeLimit(
-      scheduledEndTime,
-      meeting,
-      team
+  const providers = (
+    await Promise.all(
+      auths.map(async (auth) => {
+        const {providerId} = auth
+        const [provider, settings] = await Promise.all([
+          dataLoader
+            .get('integrationProviders')
+            .loadNonNull(providerId) as Promise<IntegrationProviderMSTeams>,
+          dataLoader.get('teamNotificationSettingsByProviderIdAndTeamId').load({providerId, teamId})
+        ])
+        const activeSettings = settings.find(({channelId}) => channelId === null)
+        if (activeSettings?.events.includes(event)) {
+          return provider
+        }
+        return null
+      })
     )
-  },
+  ).filter(isValid)
 
-  async endTimeLimit(dataLoader: DataLoaderWorker, meetingId: string, teamId: string) {
-    const {meeting, team} = await loadMeetingTeam(dataLoader, meetingId, teamId)
-    if (!meeting || !team) return
-    ;(await getMSTeams(dataLoader, team.id, meeting.facilitatorUserId))?.endTimeLimit(meeting, team)
-  },
-
-  async integrationUpdated(dataLoader: DataLoaderWorker, teamId: string, userId: string) {
-    ;(await getMSTeams(dataLoader, teamId, userId))?.integrationUpdated()
-  }
+  return providers.map((provider) =>
+    MSTeamsNotificationHelper({
+      ...(provider as IntegrationProviderMSTeams),
+      userId,
+      email: user.email
+    })
+  )
 }
+
+export const MSTeamsNotifier = createNotifier(getMSTeams)
 
 function GenerateACMeetingTitle(meetingTitle: string) {
   const titleTextBlock = new AdaptiveCards.TextBlock(meetingTitle)
@@ -411,7 +393,7 @@ function GenerateACMeetingTitle(meetingTitle: string) {
   return titleTextBlock
 }
 
-function GenerateACMeetingAndTeamsDetails(team: Team, meeting: Meeting) {
+function GenerateACMeetingAndTeamsDetails(team: Team, meeting: AnyMeeting) {
   const meetingDetailColumnSet = new AdaptiveCards.ColumnSet()
   const teamDetailColumn = new AdaptiveCards.Column()
   teamDetailColumn.width = 'stretch'

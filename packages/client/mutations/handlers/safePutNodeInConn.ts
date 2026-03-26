@@ -1,4 +1,4 @@
-import {ConnectionHandler, RecordProxy, RecordSourceProxy} from 'relay-runtime'
+import {ConnectionHandler, type RecordProxy, type RecordSourceProxy} from 'relay-runtime'
 import getNodeById from '../../utils/relay/getNodeById'
 import {insertEdgeAfter} from '../../utils/relay/insertEdge'
 
@@ -11,7 +11,9 @@ const safePutNodeInConn = (
 ) => {
   const nodeId = node.getDataID()
   if (conn && !getNodeById(nodeId, conn)) {
-    const newEdge = ConnectionHandler.createEdge(store, conn, node, 'TaskEdge')
+    const type = node.getType()
+    const edgeType = `${type}Edge`
+    const newEdge = ConnectionHandler.createEdge(store, conn, node, edgeType)
     newEdge.setValue(node.getValue(sortValue), 'cursor')
     const options = {isAscending}
     insertEdgeAfter(conn, newEdge, sortValue, options)

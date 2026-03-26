@@ -1,11 +1,10 @@
-import {ReactableEnum} from '~/__generated__/AddReactjiToReactableMutation.graphql'
+import type {ReactableEnum} from '~/__generated__/AddReactjiToReactableMutation.graphql'
 import {ACTIVE, GROUP, REFLECT, VOTE} from '../../utils/constants'
-import extractTextFromDraftString from '../../utils/draftjs/extractTextFromDraftString'
 import mapGroupsToStages from '../../utils/makeGroupsToStages'
 import clientTempId from '../../utils/relay/clientTempId'
 import commentLookup from './commentLookup'
 import DemoDiscussStage from './DemoDiscussStage'
-import {RetroDemoDB} from './initDB'
+import type {RetroDemoDB} from './initDB'
 import reactjiLookup from './reactjiLookup'
 import taskLookup from './taskLookup'
 
@@ -14,7 +13,7 @@ const removeEmptyReflections = (db: RetroDemoDB) => {
   const emptyReflectionGroupIds: string[] = []
   const emptyReflectionIds: string[] = []
   reflections.forEach((reflection) => {
-    const text = extractTextFromDraftString(reflection.content)
+    const text = reflection.plaintextContent
     if (text.length === 0) {
       emptyReflectionGroupIds.push(reflection.reflectionGroupId)
       emptyReflectionIds.push(reflection.id)
@@ -52,7 +51,7 @@ const addStageToBotScript = (stageId: string, db: RetroDemoDB, reflectionGroupId
       stageTasks.push(...tasks)
     }
     const reactjis = reactjiLookup[reflection.id as keyof typeof reactjiLookup]
-    if (!!reactjis) {
+    if (reactjis) {
       reactions.push(
         ...reactjis.map((reactji) => ({
           reactableType: 'REFLECTION' as ReactableEnum,
@@ -74,12 +73,8 @@ const addStageToBotScript = (stageId: string, db: RetroDemoDB, reflectionGroupId
       delay: 1000,
       variables
     }
-    if (Math.random() > 0.1) {
-      ops.push({...baseOp, botId: 'bot1'})
-    }
-    if (Math.random() > 0.6) {
-      ops.push({...baseOp, botId: 'bot2'})
-    }
+    const botId = Math.random() > 0.5 ? 'bot1' : 'bot2'
+    ops.push({...baseOp, botId})
   })
   stageTasks.forEach((taskContent, idx) => {
     const taskId = `botTask${stageId}:${idx}`
@@ -166,7 +161,7 @@ const addStageToBotScript = (stageId: string, db: RetroDemoDB, reflectionGroupId
       isReady: true
     }
   })
-  db._botScript[stageId as keyof typeof db['_botScript']] = ops
+  db._botScript[stageId as keyof (typeof db)['_botScript']] = ops
 }
 
 const addDiscussionTopics = (db: RetroDemoDB) => {

@@ -1,6 +1,5 @@
 import {PALETTE} from 'parabol-client/styles/paletteV3'
 import {FONT_FAMILY} from 'parabol-client/styles/typographyV2'
-import React from 'react'
 import Ellipsis from '../../../../../components/Ellipsis/Ellipsis'
 
 const explainerStyle = {
@@ -25,12 +24,10 @@ const WholeMeetingSummary = () => {
           borderBottom: `1px solid ${PALETTE.SLATE_400}`
         }}
       >
-        <tr>
-          <td style={explainerStyle}>
-            {'Hold tight! Our AI 🤖 is generating your meeting summary'}
-            <Ellipsis />
-          </td>
-        </tr>
+        <div style={explainerStyle}>
+          {'Hold tight! Our AI 🤖 is generating your meeting summary'}
+          <Ellipsis />
+        </div>
       </td>
     </tr>
   )

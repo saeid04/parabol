@@ -1,12 +1,11 @@
 import styled from '@emotion/styled'
 import graphql from 'babel-plugin-relay/macro'
-import React from 'react'
 import {useFragment} from 'react-relay'
+import type {ScopePhaseAreaAddGitHub_meeting$key} from '../__generated__/ScopePhaseAreaAddGitHub_meeting.graphql'
 import useAtmosphere from '../hooks/useAtmosphere'
 import useMutationProps from '../hooks/useMutationProps'
 import {PALETTE} from '../styles/paletteV3'
 import GitHubClientManager from '../utils/GitHubClientManager'
-import {ScopePhaseAreaAddGitHub_meeting$key} from '../__generated__/ScopePhaseAreaAddGitHub_meeting.graphql'
 import GitHubSVG from './GitHubSVG'
 import RaisedButton from './RaisedButton'
 
@@ -29,6 +28,7 @@ const StyledLink = styled('span')({
 })
 
 const AddGitHubButton = styled(RaisedButton)({
+  gap: 8,
   whiteSpace: 'pre-wrap'
 })
 interface Props {

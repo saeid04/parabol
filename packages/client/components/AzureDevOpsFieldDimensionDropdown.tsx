@@ -1,9 +1,9 @@
 import styled from '@emotion/styled'
 import {ExpandMore} from '@mui/icons-material'
 import graphql from 'babel-plugin-relay/macro'
-import React from 'react'
 import {useFragment} from 'react-relay'
 import {PALETTE} from '~/styles/paletteV3'
+import type {AzureDevOpsFieldDimensionDropdown_stage$key} from '../__generated__/AzureDevOpsFieldDimensionDropdown_stage.graphql'
 import {MenuPosition} from '../hooks/useCoords'
 import useMenu from '../hooks/useMenu'
 import {SprintPokerDefaults} from '../types/constEnums'
@@ -13,7 +13,6 @@ import {
   azureDevOpsRemainingWorkWorkItems,
   azureDevOpsStoryPointWorkItems
 } from '../utils/AzureDevOpsWorkItemFields'
-import {AzureDevOpsFieldDimensionDropdown_stage$key} from '../__generated__/AzureDevOpsFieldDimensionDropdown_stage.graphql'
 import AzureDevOpsFieldMenu from './AzureDevOpsFieldMenu'
 import PlainButton from './PlainButton/PlainButton'
 

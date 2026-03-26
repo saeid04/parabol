@@ -1,0 +1,123 @@
+import base64url from 'base64url'
+import {createHash} from 'crypto'
+import {GraphQLError} from 'graphql'
+import mime from 'mime-types'
+import {checkFileMimeType} from '../../../../client/shared/utils/checkFileMimeType'
+import {
+  MAX_FILE_SIZE_FREE,
+  MAX_FILE_SIZE_PAID,
+  MAX_IMAGE_SIZE,
+  MAX_USER_UPLOAD_BYTES_FREE,
+  MAX_USER_UPLOAD_BYTES_PAID
+} from '../../../../client/utils/constants'
+import type AuthToken from '../../../database/types/AuthToken'
+import getFileStoreManager from '../../../fileStorage/getFileStoreManager'
+import getKysely from '../../../postgres/getKysely'
+import {getUserId, isTeamMember, isUserInOrg} from '../../../utils/authorization'
+import {CipherId} from '../../../utils/CipherId'
+import {compressImage} from '../../../utils/compressImage'
+import type {DataLoaderWorker} from '../../graphql'
+import type {AssetScopeEnum, MutationResolvers} from '../resolverTypes'
+
+export const incrementUserBytesUploaded = async (userId: string, sizeInBytes: number) => {
+  const pg = getKysely()
+  await pg
+    .insertInto('UserDetail')
+    .values({id: userId, bytesUploaded: sizeInBytes})
+    .onConflict((oc) =>
+      oc.column('id').doUpdateSet((eb) => ({
+        bytesUploaded: eb('UserDetail.bytesUploaded', '+', sizeInBytes)
+      }))
+    )
+    .execute()
+}
+export const validateScope = async (
+  authToken: AuthToken,
+  scope: AssetScopeEnum,
+  scopeKey: string,
+  dataLoader: DataLoaderWorker
+) => {
+  const viewerId = getUserId(authToken)
+  let scopeCode = scopeKey
+  if (scope === 'User' && scopeKey !== viewerId) {
+    return {error: {message: 'scopeKey must match your viewerId'}}
+  } else if (scope === 'Team' && !isTeamMember(authToken, scopeKey)) {
+    return {error: {message: 'scopeKey must match one of your teams'}}
+  } else if (scope === 'Organization') {
+    const inOrg = await isUserInOrg(viewerId, scopeKey, dataLoader)
+    if (!inOrg) {
+      return {error: {message: 'scopeKey must match one of your organizations'}}
+    }
+  } else if (scope === 'Page') {
+    const [pageId, pageCode] = CipherId.fromClient(scopeKey)
+    scopeCode = `${pageCode}`
+    const pageAccess = await dataLoader
+      .get('pageAccessByPageIdUserId')
+      .load({pageId, userId: viewerId})
+    if (!pageAccess || pageAccess === 'viewer') {
+      return {error: {message: 'You must be a page commentor or higher to use the page scope'}}
+    }
+  }
+  return scopeCode
+}
+
+const uploadUserAsset: MutationResolvers['uploadUserAsset'] = async (
+  _,
+  {file, scope, scopeKey},
+  {authToken, dataLoader}
+) => {
+  // VALIDATION
+  const viewerId = getUserId(authToken)
+  const [scopeCode, userDetails, viewerTier] = await Promise.all([
+    validateScope(authToken, scope, scopeKey, dataLoader),
+    dataLoader.get('userDetails').load(viewerId),
+    dataLoader.get('highestTierForUserId').load(viewerId)
+  ])
+  const maxSize = viewerTier === 'starter' ? MAX_USER_UPLOAD_BYTES_FREE : MAX_USER_UPLOAD_BYTES_PAID
+  if (BigInt(userDetails?.bytesUploaded || 0) > BigInt(maxSize)) {
+    return {error: {message: `Upload limit reached. Please contact sales`}}
+  }
+  if (typeof scopeCode !== 'string') return scopeCode
+
+  const contentType = file.type
+  const buffer = Buffer.from<ArrayBufferLike>(await file.arrayBuffer())
+  const ext = mime.extension(contentType)
+  if (!ext) {
+    return {
+      error: {message: `Unable to determine extension for ${contentType}`}
+    }
+  }
+  const mimeError = checkFileMimeType(new Uint8Array(buffer), contentType)
+  if (mimeError) throw new GraphQLError(mimeError)
+  const isImage = file.type.includes('image')
+  let fileBuffer = buffer
+  let fileExtension = ext
+  if (isImage) {
+    const res = await compressImage(buffer, ext)
+    fileBuffer = res.buffer
+    fileExtension = res.extension
+    if (fileBuffer.byteLength > MAX_IMAGE_SIZE) {
+      return {error: {message: `Max image size is ${MAX_IMAGE_SIZE} bytes`}}
+    }
+  } else {
+    const maxSize = viewerTier === 'starter' ? MAX_FILE_SIZE_FREE : MAX_FILE_SIZE_PAID
+    if (buffer.byteLength > maxSize) {
+      return {error: {message: `Max file size is ${maxSize} bytes`}}
+    }
+  }
+  const hashName = base64url.fromBase64(createHash('sha256').update(fileBuffer).digest('base64'))
+  // RESOLUTION
+  const manager = getFileStoreManager()
+  const [url] = await Promise.all([
+    manager.putUserFile(fileBuffer, `${scope}/${scopeCode}/assets/${hashName}.${fileExtension}`),
+    incrementUserBytesUploaded(viewerId, fileBuffer.byteLength)
+  ])
+  return {
+    url,
+    name: file.name || hashName,
+    type: file.type || '',
+    size: fileBuffer.byteLength
+  }
+}
+
+export default uploadUserAsset

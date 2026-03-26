@@ -1,19 +1,16 @@
 import {SprintPokerDefaults, SubscriptionChannel} from 'parabol-client/types/constEnums'
-import getRethink from '../../../database/rethinkDriver'
-import MeetingPoker from '../../../database/types/MeetingPoker'
 import JiraServerRestManager from '../../../integrations/jiraServer/JiraServerRestManager'
-import {IntegrationProviderJiraServer} from '../../../postgres/queries/getIntegrationProvidersByIds'
-import upsertJiraServerDimensionFieldMap from '../../../postgres/queries/upsertJiraServerDimensionFieldMap'
+import getKysely from '../../../postgres/getKysely'
+import type {IntegrationProviderJiraServer} from '../../../postgres/types/IntegrationProvider'
 import {getUserId, isTeamMember} from '../../../utils/authorization'
 import publish from '../../../utils/publish'
-import {MutationResolvers} from '../resolverTypes'
+import type {MutationResolvers} from '../resolverTypes'
 
 const updateJiraServerDimensionField: MutationResolvers['updateJiraServerDimensionField'] = async (
   _source,
   {dimensionName, issueType, fieldName, projectId, meetingId},
   {authToken, dataLoader, socketId: mutatorId}
 ) => {
-  const r = await getRethink()
   const operationId = dataLoader.share()
   const viewerId = getUserId(authToken)
   const subOptions = {mutatorId, operationId}
@@ -23,7 +20,10 @@ const updateJiraServerDimensionField: MutationResolvers['updateJiraServerDimensi
   if (!meeting) {
     return {error: {message: 'Invalid meetingId'}}
   }
-  const {teamId, templateRefId} = meeting as MeetingPoker
+  if (meeting.meetingType !== 'poker') {
+    return {error: {message: 'Not a poker meeting'}}
+  }
+  const {teamId, templateRefId} = meeting
   if (!isTeamMember(authToken, teamId)) {
     return {error: {message: 'Not on team'}}
   }
@@ -38,15 +38,19 @@ const updateJiraServerDimensionField: MutationResolvers['updateJiraServerDimensi
   const data = {teamId, meetingId}
 
   const auth = await dataLoader
-    .get('teamMemberIntegrationAuths')
+    .get('teamMemberIntegrationAuthsByServiceTeamAndUserId')
     .load({service: 'jiraServer', teamId, userId: viewerId})
   if (!auth) {
     return {error: {message: 'Not authenticated with JiraServer'}}
   }
 
-  const existingDimensionField = await dataLoader
-    .get('jiraServerDimensionFieldMap')
-    .load({providerId: auth.providerId, projectId, issueType: issueType, teamId, dimensionName})
+  const existingDimensionField = await dataLoader.get('jiraServerDimensionFieldMap').load({
+    providerId: auth.providerId,
+    projectId,
+    issueType: issueType,
+    teamId,
+    dimensionName
+  })
   if (existingDimensionField?.fieldName === fieldName) return data
 
   let fieldId: string
@@ -87,7 +91,19 @@ const updateJiraServerDimensionField: MutationResolvers['updateJiraServerDimensi
   if (existingDimensionField) {
     Object.assign(existingDimensionField, newField)
   }
-  await upsertJiraServerDimensionFieldMap(newField)
+  await getKysely()
+    .insertInto('JiraServerDimensionFieldMap')
+    .values(newField)
+    .onConflict((oc) =>
+      oc
+        .columns(['providerId', 'teamId', 'projectId', 'issueType', 'dimensionName'])
+        .doUpdateSet((eb) => ({
+          fieldId: eb.ref('excluded.fieldId'),
+          fieldName: eb.ref('excluded.fieldName'),
+          fieldType: eb.ref('excluded.fieldType')
+        }))
+    )
+    .execute()
 
   publish(SubscriptionChannel.TEAM, teamId, 'UpdateDimensionFieldSuccess', data, subOptions)
   return data

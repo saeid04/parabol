@@ -1,13 +1,15 @@
 import styled from '@emotion/styled'
+import {DragDropContext, Draggable, Droppable, type DropResult} from '@hello-pangea/dnd'
 import {ThumbUp} from '@mui/icons-material'
 import graphql from 'babel-plugin-relay/macro'
-import React from 'react'
-import {DragDropContext, Draggable, Droppable, DropResult} from 'react-beautiful-dnd'
-import {createFragmentContainer} from 'react-relay'
+import {useFragment} from 'react-relay'
+import type {
+  RetroSidebarDiscussSection_meeting$data,
+  RetroSidebarDiscussSection_meeting$key
+} from '~/__generated__/RetroSidebarDiscussSection_meeting.graphql'
 import useAtmosphere from '~/hooks/useAtmosphere'
-import useGotoStageId from '~/hooks/useGotoStageId'
-import {DeepNonNullable} from '~/types/generics'
-import {RetroSidebarDiscussSection_meeting} from '~/__generated__/RetroSidebarDiscussSection_meeting.graphql'
+import type useGotoStageId from '~/hooks/useGotoStageId'
+import type {DeepNonNullable} from '~/types/generics'
 import DragDiscussionTopicMutation from '../mutations/DragDiscussionTopicMutation'
 import {navItemRaised} from '../styles/elevation'
 import {PALETTE} from '../styles/paletteV3'
@@ -22,7 +24,7 @@ const lineHeight = NavSidebar.SUB_LINE_HEIGHT
 interface Props {
   gotoStageId: ReturnType<typeof useGotoStageId>
   handleMenuClick: () => void
-  meeting: RetroSidebarDiscussSection_meeting
+  meeting: RetroSidebarDiscussSection_meeting$key
 }
 
 const VoteTally = styled('div')<{isUnsyncedFacilitatorStage: boolean | null}>(
@@ -56,11 +58,31 @@ const ScrollWrapper = styled('div')({
   height: '100%'
 })
 
-type NonNullPhase = DeepNonNullable<RetroSidebarDiscussSection_meeting['phases'][0]>
+type NonNullPhase = DeepNonNullable<RetroSidebarDiscussSection_meeting$data['phases'][0]>
 
 const RetroSidebarDiscussSection = (props: Props) => {
   const atmosphere = useAtmosphere()
-  const {gotoStageId, handleMenuClick, meeting} = props
+  const {gotoStageId, handleMenuClick, meeting: meetingRef} = props
+  const meeting = useFragment(
+    graphql`
+      fragment RetroSidebarDiscussSection_meeting on RetrospectiveMeeting {
+        id
+        endedAt
+        localStage {
+          id
+        }
+        facilitatorStageId
+        # load up the localPhase
+        phases {
+          ...RetroSidebarDiscussSectionDiscussPhase @relay(mask: false)
+        }
+        localStage {
+          id
+        }
+      }
+    `,
+    meetingRef
+  )
   const {localStage, facilitatorStageId, id: meetingId, phases, endedAt} = meeting
   const discussPhase = phases.find(({phaseType}) => phaseType === 'discuss')
   // assert that the discuss phase and its stages are non-null
@@ -103,7 +125,9 @@ const RetroSidebarDiscussSection = (props: Props) => {
   }
 
   const handleClick = (id: string) => {
-    gotoStageId(id).catch()
+    gotoStageId(id).catch(() => {
+      /*ignore*/
+    })
     handleMenuClick()
   }
   return (
@@ -116,7 +140,15 @@ const RetroSidebarDiscussSection = (props: Props) => {
                 {stages.map((stage, idx) => {
                   const {reflectionGroup} = stage
                   if (!reflectionGroup) return null
-                  const {title, voteCount} = reflectionGroup
+                  const {title, voteCount, reflections} = reflectionGroup
+                  const reflectionColors = reflections.map(({prompt}) => prompt.groupColor)
+                  const colors = [...new Set(reflectionColors)]
+                    .sort(
+                      (a, b) =>
+                        reflectionColors.filter((v) => v === b).length -
+                        reflectionColors.filter((v) => v === a).length
+                    )
+                    .slice(0, 3)
                   // the local user is at another stage than the facilitator stage
                   const isUnsyncedFacilitatorStage = !inSync && stage.id === facilitatorStageId
                   const voteMeta = (
@@ -151,7 +183,38 @@ const RetroSidebarDiscussSection = (props: Props) => {
                               isDisabled={!stage.isNavigable}
                               isUnsyncedFacilitatorStage={isUnsyncedFacilitatorStage}
                             >
-                              {title!}
+                              <div className='flex w-full items-center space-x-0.5'>
+                                <div>
+                                  {colors.map((color, idx) => {
+                                    const DOT_SIZE = 8
+                                    const TOTAL_HEIGHT = 18
+                                    const DESIRED_VISIBLE = 4 // how much of each lower dot shows
+
+                                    const visible =
+                                      colors.length > 1
+                                        ? Math.min(
+                                            DESIRED_VISIBLE,
+                                            (TOTAL_HEIGHT - DOT_SIZE) / (colors.length - 1)
+                                          )
+                                        : 0
+
+                                    const overlap = DOT_SIZE - visible
+
+                                    return (
+                                      <div
+                                        key={idx}
+                                        style={{
+                                          backgroundColor: color,
+                                          marginTop: idx === 0 ? 0 : -overlap,
+                                          zIndex: colors.length - idx
+                                        }}
+                                        className='relative h-2 w-2 rounded-full'
+                                      />
+                                    )
+                                  })}
+                                </div>
+                                <div>{title!}</div>
+                              </div>
                             </MeetingSubnavItem>
                           </DraggableMeetingSubnavItem>
                         )
@@ -179,28 +242,15 @@ graphql`
       reflectionGroup {
         title
         voteCount
+        reflections {
+          prompt {
+            groupColor
+          }
+        }
       }
       sortOrder
     }
   }
 `
 
-export default createFragmentContainer(RetroSidebarDiscussSection, {
-  meeting: graphql`
-    fragment RetroSidebarDiscussSection_meeting on RetrospectiveMeeting {
-      id
-      endedAt
-      localStage {
-        id
-      }
-      facilitatorStageId
-      # load up the localPhase
-      phases {
-        ...RetroSidebarDiscussSectionDiscussPhase @relay(mask: false)
-      }
-      localStage {
-        id
-      }
-    }
-  `
-})
+export default RetroSidebarDiscussSection

@@ -7,7 +7,7 @@ interface Phase {
     isNavigable: boolean
     isNavigableByFacilitator: boolean
     isComplete: boolean
-    readyCount?: number
+    readyUserIds?: readonly string[]
   }[]
 }
 
@@ -17,10 +17,11 @@ const getSidebarItemStage = <T extends readonly Phase[]>(
   facilitatorStageId: string
 ) => {
   const stageRes = findStageById(phases, facilitatorStageId)
-  if (!stageRes) return undefined
-  const {stage, phase} = stageRes
-  if (phase.phaseType === name) {
-    return stage
+  if (stageRes) {
+    const {stage, phase} = stageRes
+    if (phase.phaseType === name) {
+      return stage
+    }
   }
   const itemPhase = phases.find(({phaseType}) => phaseType === name)
   return itemPhase && itemPhase.stages[0]

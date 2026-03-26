@@ -1,10 +1,10 @@
 import {SubscriptionChannel} from 'parabol-client/types/constEnums'
-import MeetingPoker from '../../../database/types/MeetingPoker'
-import upsertGitLabDimensionFieldMap from '../../../postgres/queries/upsertGitLabDimensionFieldMap'
-import {isTeamMember} from '../../../utils/authorization'
-import publish from '../../../utils/publish'
-import {MutationResolvers} from '../resolverTypes'
+import getKysely from '../../../postgres/getKysely'
 import {getUserId} from './../../../utils/authorization'
+import {isTeamMember} from '../../../utils/authorization'
+import {Logger} from '../../../utils/Logger'
+import publish from '../../../utils/publish'
+import type {MutationResolvers} from '../resolverTypes'
 
 const updateGitLabDimensionField: MutationResolvers['updateGitLabDimensionField'] = async (
   _source,
@@ -19,7 +19,10 @@ const updateGitLabDimensionField: MutationResolvers['updateGitLabDimensionField'
   if (!meeting) {
     return {error: {message: 'Invalid meetingId'}}
   }
-  const {teamId, templateRefId} = meeting as MeetingPoker
+  if (meeting.meetingType !== 'poker') {
+    return {error: {message: 'Not a poker meeting'}}
+  }
+  const {teamId, templateRefId} = meeting
   if (!isTeamMember(authToken, teamId)) {
     return {error: {message: 'Not on team'}}
   }
@@ -31,16 +34,24 @@ const updateGitLabDimensionField: MutationResolvers['updateGitLabDimensionField'
   }
   const viewerId = getUserId(authToken)
   const gitlabAuth = await dataLoader.get('freshGitlabAuth').load({teamId, userId: viewerId})
-  if (!gitlabAuth.providerId) return {error: {message: 'Invalid dimension name'}}
+  if (!gitlabAuth?.providerId) return {error: {message: 'Invalid dimension name'}}
 
   // TODO validate labelTemplate
 
   // RESOLUTION
   try {
     const {providerId} = gitlabAuth
-    await upsertGitLabDimensionFieldMap(teamId, dimensionName, projectId, providerId, labelTemplate)
+    await getKysely()
+      .insertInto('GitLabDimensionFieldMap')
+      .values({teamId, dimensionName, projectId, providerId, labelTemplate})
+      .onConflict((oc) =>
+        oc.columns(['teamId', 'dimensionName', 'projectId', 'providerId']).doUpdateSet((eb) => ({
+          labelTemplate: eb.ref('excluded.labelTemplate')
+        }))
+      )
+      .execute()
   } catch (e) {
-    console.log(e)
+    Logger.log(e)
   }
 
   const data = {meetingId, teamId}

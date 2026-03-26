@@ -1,54 +1,68 @@
 import graphql from 'babel-plugin-relay/macro'
-import React, {useEffect} from 'react'
-import {createFragmentContainer} from 'react-relay'
-import {RouteComponentProps, withRouter} from 'react-router'
-import useAtmosphere from '../hooks/useAtmosphere'
-import useRouter from '../hooks/useRouter'
+import {useEffect, useRef} from 'react'
+import {useFragment} from 'react-relay'
+import {useParams} from 'react-router'
+import type {InvitationLinkDialog_massInvitation$key} from '../__generated__/InvitationLinkDialog_massInvitation.graphql'
+import useDocumentTitle from '../hooks/useDocumentTitle'
+import useMetaTagContent from '../hooks/useMetaTagContent'
 import {LocalStorageKey} from '../types/constEnums'
-import {InvitationLinkDialog_massInvitation} from '../__generated__/InvitationLinkDialog_massInvitation.graphql'
 import InvitationLinkAuthentication from './InvitationLinkAuthentication'
 import InvitationLinkErrorExpired from './InvitationLinkErrorExpired'
+import {useIsAuthenticated} from './IsAuthenticatedProvider'
 import TeamInvitationAccept from './TeamInvitationAccept'
 import TeamInvitationErrorNotFound from './TeamInvitationErrorNotFound'
 
-interface Props extends RouteComponentProps<{token: string}> {
-  massInvitation: InvitationLinkDialog_massInvitation
+interface Props {
+  massInvitation: InvitationLinkDialog_massInvitation$key
 }
 
 const InvitationLinkDialog = (props: Props) => {
-  const atmosphere = useAtmosphere()
-  const {match} = useRouter<{token: string}>()
-  const {params} = match
-  const {token} = params
+  const isLoggedIn = useIsAuthenticated()
+  // if they log in, then accepting team invite will get triggered via login flow
+  const isInitiallyLoggedInRef = useRef(isLoggedIn)
+  const {token} = useParams()
   useEffect(() => {
-    window.localStorage.setItem(LocalStorageKey.INVITATION_TOKEN, token)
+    if (token) {
+      window.localStorage.setItem(LocalStorageKey.INVITATION_TOKEN, token)
+    }
   }, [token])
-  const {massInvitation} = props
+  const {massInvitation: massInvitationRef} = props
+  const massInvitation = useFragment(
+    graphql`
+      fragment InvitationLinkDialog_massInvitation on MassInvitationPayload {
+        ...InvitationLinkErrorExpired_massInvitation
+        errorType
+        inviterName
+        teamName
+      }
+    `,
+    massInvitationRef
+  )
   if (!massInvitation) {
     // rate limit reached or other server error
     return <TeamInvitationErrorNotFound isMassInvite />
   }
   const {errorType, teamName} = massInvitation
+  const pageTitle = teamName ? `${teamName} | Parabol` : 'Join | Parabol'
+  const pageName = teamName ? `Join ${teamName}` : 'Join Parabol'
+  const metaCopy = teamName
+    ? `Join ${teamName} on Parabol, the essential tool for making meetings efficient or replacing them with structured, asynchronous collaboration.`
+    : `Join Parabol, the essential tool for making meetings efficient or replacing them with structured, asynchronous collaboration.`
+  // biome-ignore lint/correctness/useHookAtTopLevel: legacy
+  useDocumentTitle(pageTitle, pageName)
+  // biome-ignore lint/correctness/useHookAtTopLevel: legacy
+  useMetaTagContent(metaCopy)
+
   switch (errorType) {
     case 'notFound':
       return <TeamInvitationErrorNotFound isMassInvite />
     case 'expired':
       return <InvitationLinkErrorExpired massInvitation={massInvitation} />
   }
-  const {authToken} = atmosphere
-  if (authToken) {
-    return <TeamInvitationAccept invitationToken={token} />
+  if (isInitiallyLoggedInRef.current) {
+    return <TeamInvitationAccept invitationToken={token!} />
   }
-  return <InvitationLinkAuthentication teamName={teamName!} invitationToken={token} />
+  return <InvitationLinkAuthentication teamName={teamName!} invitationToken={token!} />
 }
 
-export default createFragmentContainer(withRouter(InvitationLinkDialog), {
-  massInvitation: graphql`
-    fragment InvitationLinkDialog_massInvitation on MassInvitationPayload {
-      ...InvitationLinkErrorExpired_massInvitation
-      errorType
-      inviterName
-      teamName
-    }
-  `
-})
+export default InvitationLinkDialog

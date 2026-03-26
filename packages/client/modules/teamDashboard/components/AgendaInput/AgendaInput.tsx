@@ -1,8 +1,10 @@
 import styled from '@emotion/styled'
 import {Add} from '@mui/icons-material'
 import graphql from 'babel-plugin-relay/macro'
-import React, {useRef} from 'react'
-import {createFragmentContainer} from 'react-relay'
+import type * as React from 'react'
+import {useRef} from 'react'
+import {useFragment} from 'react-relay'
+import type {AgendaInput_team$key} from '../../../../__generated__/AgendaInput_team.graphql'
 import useAtmosphere from '../../../../hooks/useAtmosphere'
 import useAtmosphereListener from '../../../../hooks/useAtmosphereListener'
 import {MenuPosition} from '../../../../hooks/useCoords'
@@ -11,13 +13,12 @@ import useHotkey from '../../../../hooks/useHotkey'
 import useMutationProps from '../../../../hooks/useMutationProps'
 import useTooltip from '../../../../hooks/useTooltip'
 import AddAgendaItemMutation from '../../../../mutations/AddAgendaItemMutation'
+import {positionAfter} from '../../../../shared/sortOrder'
 import makeFieldColorPalette from '../../../../styles/helpers/makeFieldColorPalette'
 import makePlaceholderStyles from '../../../../styles/helpers/makePlaceholderStyles'
 import {PALETTE} from '../../../../styles/paletteV3'
 import ui from '../../../../styles/ui'
-import getNextSortOrder from '../../../../utils/getNextSortOrder'
 import toTeamMemberId from '../../../../utils/relay/toTeamMemberId'
-import {AgendaInput_team} from '../../../../__generated__/AgendaInput_team.graphql'
 
 const AgendaInputBlock = styled('div')({
   padding: `8px 0`,
@@ -60,7 +61,9 @@ const InputField = styled('input')<{disabled: boolean}>(
     return (
       !disabled && {
         cursor: 'text',
-        ...makeFieldColorPalette('cool', true, {backgroundColor: 'transparent'})
+        ...makeFieldColorPalette('cool', true, {
+          backgroundColor: 'transparent'
+        })
       }
     )
   }
@@ -78,7 +81,7 @@ const StyledIcon = styled(Add)({
 interface Props {
   className?: string
   disabled: boolean
-  team: AgendaInput_team
+  team: AgendaInput_team$key
 }
 
 const AgendaInput = (props: Props) => {
@@ -101,7 +104,18 @@ const AgendaInput = (props: Props) => {
   const {onCompleted, onError, submitMutation, submitting} = useMutationProps()
   const {newItem} = fields
   const {resetValue, value} = newItem
-  const {className, disabled, team} = props
+  const {className, disabled, team: teamRef} = props
+  const team = useFragment(
+    graphql`
+      fragment AgendaInput_team on Team {
+        id
+        agendaItems {
+          sortOrder
+        }
+      }
+    `,
+    teamRef
+  )
   const {id: teamId, agendaItems} = team
 
   const handleSubmit = (e: React.FormEvent) => {
@@ -112,7 +126,7 @@ const AgendaInput = (props: Props) => {
     const newAgendaItem = {
       content,
       pinned: false,
-      sortOrder: getNextSortOrder(agendaItems),
+      sortOrder: positionAfter(agendaItems.at(-1)?.sortOrder ?? ''),
       teamId,
       teamMemberId: toTeamMemberId(teamId, atmosphere.viewerId)
     }
@@ -168,13 +182,4 @@ const AgendaInput = (props: Props) => {
   )
 }
 
-export default createFragmentContainer(AgendaInput, {
-  team: graphql`
-    fragment AgendaInput_team on Team {
-      id
-      agendaItems {
-        sortOrder
-      }
-    }
-  `
-})
+export default AgendaInput

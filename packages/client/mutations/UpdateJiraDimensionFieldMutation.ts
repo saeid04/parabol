@@ -1,11 +1,11 @@
 import graphql from 'babel-plugin-relay/macro'
 import {commitMutation} from 'react-relay'
-import {DiscriminateProxy} from '../types/generics'
-import {StandardMutation} from '../types/relayMutations'
+import type {JiraFieldMenu_stage$data} from '../__generated__/JiraFieldMenu_stage.graphql'
+import type {PokerMeeting_meeting$data} from '../__generated__/PokerMeeting_meeting.graphql'
+import type {UpdateJiraDimensionFieldMutation as TUpdateJiraDimensionFieldMutation} from '../__generated__/UpdateJiraDimensionFieldMutation.graphql'
+import type {DiscriminateProxy} from '../types/generics'
+import type {StandardMutation} from '../types/relayMutations'
 import createProxyRecord from '../utils/relay/createProxyRecord'
-import {JiraFieldMenu_stage} from '../__generated__/JiraFieldMenu_stage.graphql'
-import {PokerMeeting_meeting} from '../__generated__/PokerMeeting_meeting.graphql'
-import {UpdateJiraDimensionFieldMutation as TUpdateJiraDimensionFieldMutation} from '../__generated__/UpdateJiraDimensionFieldMutation.graphql'
 
 graphql`
   fragment UpdateJiraDimensionFieldMutation_team on UpdateDimensionFieldSuccess {
@@ -57,12 +57,12 @@ const UpdateJiraDimensionFieldMutation: StandardMutation<TUpdateJiraDimensionFie
     variables,
     optimisticUpdater: (store) => {
       const {meetingId, dimensionName, fieldId} = variables
-      const meeting = store.get<PokerMeeting_meeting>(meetingId)
+      const meeting = store.get<PokerMeeting_meeting$data>(meetingId)
       if (!meeting) return
       // handle meeting records
       const phases = meeting.getLinkedRecords('phases')
       const estimatePhase = phases.find((phase) => phase.getValue('phaseType') === 'ESTIMATE')!
-      const stages = estimatePhase.getLinkedRecords<JiraFieldMenu_stage[]>('stages')
+      const stages = estimatePhase.getLinkedRecords<JiraFieldMenu_stage$data[]>('stages')
       stages.forEach((stage) => {
         const dimensionRef = stage.getLinkedRecord('dimensionRef')
         const dimensionRefName = dimensionRef.getValue('name')

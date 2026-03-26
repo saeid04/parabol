@@ -1,18 +1,20 @@
 import styled from '@emotion/styled'
 import graphql from 'babel-plugin-relay/macro'
-import React from 'react'
-import {createFragmentContainer} from 'react-relay'
+import {useFragment} from 'react-relay'
+import type {EditableTemplateScaleValueLabel_scale$key} from '~/__generated__/EditableTemplateScaleValueLabel_scale.graphql'
+import type {EditableTemplateScaleValueLabel_scaleValue$key} from '~/__generated__/EditableTemplateScaleValueLabel_scaleValue.graphql'
 import UpdatePokerTemplateScaleValueMutation from '~/mutations/UpdatePokerTemplateScaleValueMutation'
 import {PALETTE} from '~/styles/paletteV3'
-import {EditableTemplateScaleValueLabel_scale} from '~/__generated__/EditableTemplateScaleValueLabel_scale.graphql'
-import {EditableTemplateScaleValueLabel_scaleValue} from '~/__generated__/EditableTemplateScaleValueLabel_scaleValue.graphql'
 import EditableText from '../../../components/EditableText'
 import useAtmosphere from '../../../hooks/useAtmosphere'
 import useMutationProps from '../../../hooks/useMutationProps'
+import {Threshold} from '../../../types/constEnums'
 import isSpecialPokerLabel from '../../../utils/isSpecialPokerLabel'
 import Legitity from '../../../validation/Legitity'
 
-const StyledEditableText = styled(EditableText)<{disabled: boolean | undefined}>(({disabled}) => ({
+const StyledEditableText = styled(EditableText)<{
+  disabled: boolean | undefined
+}>(({disabled}) => ({
   fontFamily: PALETTE.SLATE_700,
   fontSize: 14,
   lineHeight: '24px',
@@ -22,12 +24,35 @@ const StyledEditableText = styled(EditableText)<{disabled: boolean | undefined}>
 
 interface Props {
   isHover: boolean
-  scale: EditableTemplateScaleValueLabel_scale
-  scaleValue: EditableTemplateScaleValueLabel_scaleValue
+  scale: EditableTemplateScaleValueLabel_scale$key
+  scaleValue: EditableTemplateScaleValueLabel_scaleValue$key
 }
 
 const EditableTemplateScaleValueLabel = (props: Props) => {
-  const {isHover, scaleValue, scale} = props
+  const {isHover, scaleValue: scaleValueRef, scale: scaleRef} = props
+  const scale = useFragment(
+    graphql`
+      fragment EditableTemplateScaleValueLabel_scale on TemplateScale {
+        id
+        values {
+          id
+          label
+          color
+        }
+      }
+    `,
+    scaleRef
+  )
+  const scaleValue = useFragment(
+    graphql`
+      fragment EditableTemplateScaleValueLabel_scaleValue on TemplateScaleValue {
+        id
+        label
+        color
+      }
+    `,
+    scaleValueRef
+  )
   const {id: scaleId} = scale
   const {id: scaleValueId, label, color} = scaleValue
   const atmosphere = useAtmosphere()
@@ -52,7 +77,10 @@ const EditableTemplateScaleValueLabel = (props: Props) => {
     return new Legitity(value)
       .trim()
       .required('Please enter a value')
-      .max(2, 'Value cannot be longer than 2 characters')
+      .max(
+        Threshold.POKER_SCALE_VALUE_MAX_LENGTH,
+        `Value cannot be longer than ${Threshold.POKER_SCALE_VALUE_MAX_LENGTH} characters`
+      )
       .test((mVal) => {
         const isDupe = mVal
           ? scale.values.find(
@@ -89,22 +117,4 @@ const EditableTemplateScaleValueLabel = (props: Props) => {
   )
 }
 
-export default createFragmentContainer(EditableTemplateScaleValueLabel, {
-  scale: graphql`
-    fragment EditableTemplateScaleValueLabel_scale on TemplateScale {
-      id
-      values {
-        id
-        label
-        color
-      }
-    }
-  `,
-  scaleValue: graphql`
-    fragment EditableTemplateScaleValueLabel_scaleValue on TemplateScaleValue {
-      id
-      label
-      color
-    }
-  `
-})
+export default EditableTemplateScaleValueLabel

@@ -1,17 +1,25 @@
 const tsJestPresets = require('ts-jest/presets')
 
 module.exports = {
-  preset: 'ts-jest',
   testEnvironment: 'node',
-  globals: {
-    'ts-jest': {
-      diagnostics: false
-    }
-  },
   transform: {
-    '\\.(gql|graphql)$': 'jest-transform-graphql',
-    ...tsJestPresets.jsWithBabel.transform
+    '\\.(gql|graphql)$': './__tests__/jest-transform-graphql-shim.js',
+    '^.+\\.(t|j)sx?$': [
+      '@swc/jest',
+      {
+        jsc: {
+          transform: {
+            react: {
+              runtime: 'automatic'
+            },
+            // abstract classes will lose their default values when compiled with SWC
+            useDefineForClassFields: false
+          }
+        }
+      }
+    ]
   },
+  transformIgnorePatterns: ['/marked\.esm\.js/'],
   modulePaths: ['<rootDir>/packages/'],
   moduleNameMapper: {
     'server/(.*)': ['<rootDir>/$1'],
@@ -21,5 +29,6 @@ module.exports = {
   testRegex: '/__tests__/.*.test\\.ts?$',
   setupFilesAfterEnv: ['./__tests__/setup.ts'],
   globalSetup: './__tests__/globalSetup.ts',
-  globalTeardown: './__tests__/globalTeardown.ts'
+  globalTeardown: './__tests__/globalTeardown.ts',
+  clearMocks: true
 }

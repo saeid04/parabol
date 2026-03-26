@@ -1,0 +1,58 @@
+import {GraphQLError} from 'graphql'
+import {getUserId} from '../../../utils/authorization'
+import {CipherId} from '../../../utils/CipherId'
+import isValid from '../../isValid'
+import type {ReqResolvers} from './ReqResolvers'
+
+// team is captured in PagePartial so it's not needed here
+const Page: Omit<ReqResolvers<'Page'>, 'team'> = {
+  access: ({id}) => ({id}),
+  parentPage: async ({parentPageId}, _args, {authToken, dataLoader}) => {
+    if (!parentPageId) return null
+    const [parentPage, access] = await Promise.all([
+      dataLoader.get('pages').load(parentPageId),
+      dataLoader.get('pageAccessByPageIdUserId').load({userId: authToken.sub, pageId: parentPageId})
+    ])
+    if (!parentPage) throw new GraphQLError('Parent page not found')
+    return {
+      ...parentPage,
+      __typename: access ? 'Page' : 'PagePreview'
+    }
+  },
+  parentPageId: ({parentPageId}) => (parentPageId ? CipherId.toClient(parentPageId, 'page') : null),
+  userSortOrder: async ({id: pageId, userSortOrder}, _args, {authToken, dataLoader}) => {
+    if (userSortOrder) return userSortOrder
+    const viewerId = getUserId(authToken)
+    const sortOrder = await dataLoader.get('pageUserSortOrder').load({pageId, userId: viewerId})
+    return sortOrder || '!'
+  },
+  ancestorIds: ({ancestorIds}) => ancestorIds.map((id) => CipherId.toClient(id, 'page')),
+  ancestors: async ({ancestorIds}, _args, {authToken, dataLoader}) => {
+    const accessKeys = ancestorIds.map((pageId) => ({
+      pageId,
+      userId: authToken.sub
+    }))
+    const [pages, accesses] = await Promise.all([
+      dataLoader.get('pages').loadMany(ancestorIds),
+      dataLoader.get('pageAccessByPageIdUserId').loadMany(accessKeys)
+    ])
+    const validPages = pages.filter(isValid)
+    if (validPages.length < pages.length) {
+      throw new GraphQLError('Page not found')
+    }
+    return validPages.map((page, idx) => {
+      const access = accesses[idx] instanceof Error ? null : accesses[idx]
+      return {
+        ...page,
+        __typename: access ? 'Page' : 'PagePreview'
+      }
+    })
+  },
+  deletedByUser: async ({deletedBy}, _args, {dataLoader}) => {
+    if (!deletedBy) return null
+    const user = await dataLoader.get('users').loadNonNull(deletedBy)
+    return user
+  }
+}
+
+export default Page

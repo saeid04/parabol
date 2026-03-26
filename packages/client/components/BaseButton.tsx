@@ -1,8 +1,9 @@
 import styled from '@emotion/styled'
-import React, {forwardRef, ReactNode, Ref, useState} from 'react'
-import {Elevation} from '../styles/elevation'
+import type * as React from 'react'
+import {forwardRef, type ReactNode, type Ref, useState} from 'react'
+import type {Elevation} from '../styles/elevation'
 import ui from '../styles/ui'
-import PlainButton, {PlainButtonProps} from './PlainButton/PlainButton'
+import PlainButton, {type PlainButtonProps} from './PlainButton/PlainButton'
 
 interface Root {
   disabled: boolean

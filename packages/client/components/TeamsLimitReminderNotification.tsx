@@ -1,13 +1,13 @@
 import graphql from 'babel-plugin-relay/macro'
-import React, {useEffect} from 'react'
+import {useEffect} from 'react'
 import {useFragment} from 'react-relay'
-import useRouter from '~/hooks/useRouter'
+import {useNavigate} from 'react-router'
+import type {TeamsLimitReminderNotification_notification$key} from '~/__generated__/TeamsLimitReminderNotification_notification.graphql'
 import defaultOrgAvatar from '~/styles/theme/images/avatar-organization.svg'
-import {TeamsLimitReminderNotification_notification$key} from '~/__generated__/TeamsLimitReminderNotification_notification.graphql'
 import useAtmosphere from '../hooks/useAtmosphere'
-import SendClientSegmentEventMutation from '../mutations/SendClientSegmentEventMutation'
 import {Threshold} from '../types/constEnums'
 import makeDateString from '../utils/makeDateString'
+import SendClientSideEvent from '../utils/SendClientSideEvent'
 import NotificationAction from './NotificationAction'
 import NotificationTemplate from './NotificationTemplate'
 
@@ -31,21 +31,21 @@ const TeamsLimitReminderNotification = (props: Props) => {
     `,
     notificationRef
   )
-  const {history} = useRouter()
+  const navigate = useNavigate()
   const {orgId, orgName, orgPicture, scheduledLockAt} = notification
 
   useEffect(() => {
-    SendClientSegmentEventMutation(atmosphere, 'Upgrade CTA Viewed', {
+    SendClientSideEvent(atmosphere, 'Upgrade CTA Viewed', {
       upgradeCTALocation: 'teamsLimitReminderNotification',
       orgId
     })
   }, [])
 
   const onActionClick = () => {
-    SendClientSegmentEventMutation(atmosphere, 'Upgrade CTA Clicked', {
+    SendClientSideEvent(atmosphere, 'Upgrade CTA Clicked', {
       upgradeCTALocation: 'teamsLimitReminderNotification'
     })
-    history.push(`/me/organizations/${orgId}`)
+    navigate(`/me/organizations/${orgId}`)
   }
 
   return (

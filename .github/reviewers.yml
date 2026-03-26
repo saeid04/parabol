@@ -1,41 +1,38 @@
 reviewers:
   groups:
-    developers:
-      - jmtaber129
-      - igorlesnenko
-      - nickoferral
-      - BartoszJarocki
+    reviewers:
     maintainers:
       - mattkrick
       - Dschoordsch
-    data:
-      - tianrunhe
-      - tghanken
     designers:
       - ackernaut
-      - enriquesanchez
+    devops:
+      - rafaelromcar-parabol
     none:
 
   per_author:
-    developers:
+    reviewers:
       - none
     maintainers:
       - none
-    data:
-      - none
     designers:
+      - none
+    devops:
       - none
 
   defaults:
-    - developers
+    - maintainers
 
 files:
-  '**/migrations/**':
-    - data
-  '**/analytics/**':
-    - data
+  "docker/**":
+    - devops
+  ".env.example":
+    - devops
+  "release-please-config.json":
+    - devops
 options:
   ignore_draft: true
   ignored_keywords:
     - WIP
+    - chore(release)
   number_of_reviewers: 1

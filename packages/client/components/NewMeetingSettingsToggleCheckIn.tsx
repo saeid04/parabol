@@ -1,8 +1,7 @@
 import styled from '@emotion/styled'
 import graphql from 'babel-plugin-relay/macro'
-import React from 'react'
 import {useFragment} from 'react-relay'
-import {NewMeetingSettingsToggleCheckIn_settings$key} from '~/__generated__/NewMeetingSettingsToggleCheckIn_settings.graphql'
+import type {NewMeetingSettingsToggleCheckIn_settings$key} from '~/__generated__/NewMeetingSettingsToggleCheckIn_settings.graphql'
 import useAtmosphere from '../hooks/useAtmosphere'
 import useMutationProps from '../hooks/useMutationProps'
 import SetMeetingSettingsMutation from '../mutations/SetMeetingSettingsMutation'
@@ -37,14 +36,16 @@ const Label = styled('div')({
 })
 
 const StyledCheckbox = styled(Checkbox)<{active: boolean}>(({active}) => ({
-  color: active ? PALETTE.SKY_500 : PALETTE.SLATE_700,
-  svg: {
-    fontSize: 28
-  },
-  width: 28,
-  height: 28,
-  textAlign: 'center',
-  userSelect: 'none'
+  '&&': {
+    color: active ? PALETTE.SKY_500 : PALETTE.SLATE_700,
+    svg: {
+      fontSize: 28
+    },
+    width: 28,
+    height: 28,
+    textAlign: 'center',
+    userSelect: 'none'
+  }
 }))
 
 interface Props {

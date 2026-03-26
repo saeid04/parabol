@@ -1,8 +1,9 @@
 import styled from '@emotion/styled'
 import {ExpandMore} from '@mui/icons-material'
 import graphql from 'babel-plugin-relay/macro'
-import React, {FormEvent, useEffect, useRef, useState} from 'react'
+import {type FormEvent, useEffect, useRef, useState} from 'react'
 import {useFragment} from 'react-relay'
+import type {NewAzureIssueInput_viewer$key} from '~/__generated__/NewAzureIssueInput_viewer.graphql'
 import useAtmosphere from '~/hooks/useAtmosphere'
 import {MenuPosition} from '~/hooks/useCoords'
 import useMenu from '~/hooks/useMenu'
@@ -10,14 +11,14 @@ import useMutationProps from '~/hooks/useMutationProps'
 import CreateTaskMutation from '~/mutations/CreateTaskMutation'
 import AzureDevOpsProjectId from '~/shared/gqlIds/AzureDevOpsProjectId'
 import {PALETTE} from '~/styles/paletteV3'
-import {NewAzureIssueInput_viewer$key} from '~/__generated__/NewAzureIssueInput_viewer.graphql'
+import type {CreateTaskMutation as TCreateTaskMutation} from '../__generated__/CreateTaskMutation.graphql'
 import useForm from '../hooks/useForm'
 import {PortalStatus} from '../hooks/usePortal'
+import useTimedState from '../hooks/useTimedState'
 import UpdatePokerScopeMutation from '../mutations/UpdatePokerScopeMutation'
-import {CompletedHandler} from '../types/relayMutations'
-import convertToTaskContent from '../utils/draftjs/convertToTaskContent'
+import {plaintextToTipTap} from '../shared/tiptap/plaintextToTipTap'
+import type {CompletedHandler} from '../types/relayMutations'
 import Legitity from '../validation/Legitity'
-import {CreateTaskMutationResponse} from '../__generated__/CreateTaskMutation.graphql'
 import Checkbox from './Checkbox'
 import NewAzureIssueMenu from './NewAzureIssueMenu'
 import PlainButton from './PlainButton/PlainButton'
@@ -137,6 +138,12 @@ const NewAzureIssueInput = (props: Props) => {
   const projects = teamMember?.integrations?.azureDevOps.projects ?? []
   const atmosphere = useAtmosphere()
   const {onCompleted, onError} = useMutationProps()
+  const [createTaskError, setCreateTaskError] = useTimedState()
+  useEffect(() => {
+    if (isEditing) {
+      setCreateTaskError(undefined)
+    }
+  }, [isEditing])
   const [selectedProjectName, setSelectedProjectName] = useState(projects[0]?.name ?? '')
   const {fields, onChange, validateField, setDirtyField} = useForm({
     newIssue: {
@@ -180,7 +187,7 @@ const NewAzureIssueInput = (props: Props) => {
       teamId,
       userId,
       meetingId,
-      content: convertToTaskContent(`${newIssueTitle} #archived`),
+      content: JSON.stringify(plaintextToTipTap(newIssueTitle, {taskTags: ['archived']})),
       plaintextContent: newIssueTitle,
       status: 'active' as const,
       integration: {
@@ -188,8 +195,13 @@ const NewAzureIssueInput = (props: Props) => {
         serviceProjectHash
       }
     }
-    const handleCompleted: CompletedHandler<CreateTaskMutationResponse> = (res) => {
-      const integrationHash = res.createTask?.task?.integrationHash ?? null
+    const handleCompleted: CompletedHandler<TCreateTaskMutation['response']> = (res) => {
+      const {error, task} = res.createTask
+      if (error) {
+        setCreateTaskError(error.message)
+      }
+      if (error || !task) return
+      const {integrationHash} = task
       if (!integrationHash) return
       const pokerScopeVariables = {
         meetingId,
@@ -210,6 +222,17 @@ const NewAzureIssueInput = (props: Props) => {
     CreateTaskMutation(atmosphere, {newTask}, {onError, onCompleted: handleCompleted})
   }
 
+  if (createTaskError) {
+    return (
+      <Item>
+        <Checkbox active disabled />
+        <Issue>
+          <Error>{createTaskError}</Error>
+          <StyledLink>{selectedProjectName}</StyledLink>
+        </Issue>
+      </Item>
+    )
+  }
   if (!isEditing) return null
   return (
     <>

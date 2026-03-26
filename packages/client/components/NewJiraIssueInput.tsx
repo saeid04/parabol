@@ -1,24 +1,25 @@
 import styled from '@emotion/styled'
 import {ExpandMore} from '@mui/icons-material'
 import graphql from 'babel-plugin-relay/macro'
-import React, {FormEvent, useEffect, useRef, useState} from 'react'
+import {type FormEvent, useEffect, useRef, useState} from 'react'
 import {useFragment} from 'react-relay'
 import useAtmosphere from '~/hooks/useAtmosphere'
 import {MenuPosition} from '~/hooks/useCoords'
 import useMenu from '~/hooks/useMenu'
 import useMutationProps from '~/hooks/useMutationProps'
 import {PALETTE} from '~/styles/paletteV3'
+import type {NewJiraIssueInput_meeting$key} from '../__generated__/NewJiraIssueInput_meeting.graphql'
+import type {NewJiraIssueInput_viewer$key} from '../__generated__/NewJiraIssueInput_viewer.graphql'
 import useForm from '../hooks/useForm'
 import {PortalStatus} from '../hooks/usePortal'
+import useTimedState from '../hooks/useTimedState'
 import CreateTaskMutation from '../mutations/CreateTaskMutation'
 import UpdatePokerScopeMutation from '../mutations/UpdatePokerScopeMutation'
 import JiraIssueId from '../shared/gqlIds/JiraIssueId'
 import JiraProjectId from '../shared/gqlIds/JiraProjectId'
-import {CompletedHandler} from '../types/relayMutations'
-import convertToTaskContent from '../utils/draftjs/convertToTaskContent'
+import {plaintextToTipTap} from '../shared/tiptap/plaintextToTipTap'
+import type {CompletedHandler} from '../types/relayMutations'
 import Legitity from '../validation/Legitity'
-import {NewJiraIssueInput_meeting$key} from '../__generated__/NewJiraIssueInput_meeting.graphql'
-import {NewJiraIssueInput_viewer$key} from '../__generated__/NewJiraIssueInput_viewer.graphql'
 import Checkbox from './Checkbox'
 import NewJiraIssueMenu from './NewJiraIssueMenu'
 import PlainButton from './PlainButton/PlainButton'
@@ -149,6 +150,12 @@ const NewJiraIssueInput = (props: Props) => {
   const {integrations} = teamMember!
   const atmosphere = useAtmosphere()
   const {onCompleted, onError} = useMutationProps()
+  const [createTaskError, setCreateTaskError] = useTimedState()
+  useEffect(() => {
+    if (isEditing) {
+      setCreateTaskError(undefined)
+    }
+  }, [isEditing])
   const projects = integrations.atlassian?.projects
   const firstProject = projects?.find((project) => project.key)
   const cloudId = firstProject?.cloudId
@@ -192,7 +199,7 @@ const NewJiraIssueInput = (props: Props) => {
       teamId,
       userId,
       meetingId,
-      content: convertToTaskContent(`${newIssueTitle} #archived`),
+      content: JSON.stringify(plaintextToTipTap(newIssueTitle, {taskTags: ['archived']})),
       plaintextContent: newIssueTitle,
       status: 'active' as const,
       integration: {
@@ -201,7 +208,12 @@ const NewJiraIssueInput = (props: Props) => {
       }
     }
     const handleCompleted: CompletedHandler = (res) => {
-      const integration = res.createTask?.task?.integration ?? null
+      const {error, task} = res.createTask
+      if (error) {
+        setCreateTaskError(error.message)
+      }
+      if (error || !task) return
+      const {integration} = task
       if (!integration) return
       const {issueKey} = integration
       const pokerScopeVariables = {
@@ -227,6 +239,17 @@ const NewJiraIssueInput = (props: Props) => {
     setSelectedProjectKey(projectKey)
   }
 
+  if (createTaskError) {
+    return (
+      <Item>
+        <Checkbox active disabled />
+        <Issue>
+          <Error>{createTaskError}</Error>
+          <StyledLink>{selectedProjectKey}</StyledLink>
+        </Issue>
+      </Item>
+    )
+  }
   if (!isEditing) return null
   return (
     <>

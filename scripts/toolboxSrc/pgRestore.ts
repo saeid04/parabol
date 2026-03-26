@@ -4,6 +4,7 @@ import path from 'path'
 import {promisify} from 'util'
 import getPg from '../../packages/server/postgres/getPg'
 import getPgConfig from '../../packages/server/postgres/getPgConfig'
+import {Logger} from '../../packages/server/utils/Logger'
 import getProjectRoot from '../webpack/utils/getProjectRoot'
 
 async function pgRestore() {
@@ -22,7 +23,7 @@ async function pgRestore() {
   const requiredFiles = [SCHEMA_ROOT, DATA_ROOT]
   for (const file of requiredFiles) {
     if (!fs.existsSync(file)) {
-      console.log(`${file} does not exist`)
+      Logger.log(`${file} does not exist`)
       return
     }
   }

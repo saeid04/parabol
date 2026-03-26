@@ -1,30 +1,29 @@
 import graphql from 'babel-plugin-relay/macro'
-import ReactGA from 'react-ga4'
 import {commitMutation} from 'react-relay'
-import handleSuccessfulLogin from '~/utils/handleSuccessfulLogin'
-import {HistoryLocalHandler, StandardMutation} from '../types/relayMutations'
-import {LoginWithGoogleMutation as TLoginWithGoogleMutation} from '../__generated__/LoginWithGoogleMutation.graphql'
+import {handleSuccessfulLogin} from '~/utils/handleSuccessfulLogin'
+import type {LoginWithGoogleMutation as TLoginWithGoogleMutation} from '../__generated__/LoginWithGoogleMutation.graphql'
+import type {NavigateLocalHandler, StandardMutation} from '../types/relayMutations'
 import {handleAcceptTeamInvitationErrors} from './AcceptTeamInvitationMutation'
 import handleAuthenticationRedirect from './handlers/handleAuthenticationRedirect'
 
 const mutation = graphql`
   mutation LoginWithGoogleMutation(
     $code: ID!
-    $invitationToken: ID! = ""
-    $segmentId: ID
+    $invitationToken: ID!
+    $pseudoId: ID
     $isInvitation: Boolean!
+    $params: String!
   ) {
-    loginWithGoogle(code: $code, segmentId: $segmentId, invitationToken: $invitationToken) {
+    loginWithGoogle(
+      code: $code
+      pseudoId: $pseudoId
+      invitationToken: $invitationToken
+      params: $params
+    ) {
       error {
         message
       }
-      authToken
-      isNewUser
-      user {
-        tms
-        isPatient0
-        ...UserAnalyticsFrag @relay(mask: false)
-      }
+      ...handleSuccessfulLogin_UserLogInPayload @relay(mask: false)
     }
     # Validation occurs statically https://github.com/graphql/graphql-js/issues/1334
     # A default value is necessary even in the case of @include(if: false)
@@ -33,10 +32,10 @@ const mutation = graphql`
     }
   }
 `
-const LoginWithGoogleMutation: StandardMutation<TLoginWithGoogleMutation, HistoryLocalHandler> = (
+const LoginWithGoogleMutation: StandardMutation<TLoginWithGoogleMutation, NavigateLocalHandler> = (
   atmosphere,
   variables,
-  {onError, onCompleted, history}
+  {onError, onCompleted, navigate}
 ) => {
   return commitMutation<TLoginWithGoogleMutation>(atmosphere, {
     mutation,
@@ -45,16 +44,17 @@ const LoginWithGoogleMutation: StandardMutation<TLoginWithGoogleMutation, Histor
     onCompleted: (res, errors) => {
       const {acceptTeamInvitation, loginWithGoogle} = res
       onCompleted({loginWithGoogle}, errors)
-      const {error: uiError, isNewUser, user} = loginWithGoogle
+      const {error: uiError} = loginWithGoogle
       handleAcceptTeamInvitationErrors(atmosphere, acceptTeamInvitation)
       if (!uiError && !errors) {
-        if (isNewUser) {
-          ReactGA.event('sign_up', {isPatient0: user!.isPatient0})
-        }
-        handleSuccessfulLogin(loginWithGoogle)
-        const authToken = acceptTeamInvitation?.authToken ?? loginWithGoogle.authToken
-        atmosphere.setAuthToken(authToken)
-        handleAuthenticationRedirect(acceptTeamInvitation, {atmosphere, history})
+        handleSuccessfulLogin(atmosphere, loginWithGoogle)
+        const redirectPath = '/meetings'
+
+        handleAuthenticationRedirect(acceptTeamInvitation, {
+          atmosphere,
+          navigate,
+          redirectPath
+        })
       }
     }
   })

@@ -2,12 +2,11 @@ import LockedEmail from 'parabol-client/modules/email/components/LimitsEmails/Lo
 import SevenDayWarningEmail from 'parabol-client/modules/email/components/LimitsEmails/SevenDayWarningEmail'
 import ThirtyDayWarningEmail from 'parabol-client/modules/email/components/LimitsEmails/ThirtyDayWarningEmail'
 import {PALETTE} from 'parabol-client/styles/paletteV3'
-import React from 'react'
 import ReactDOMServer from 'react-dom/server'
 import {Threshold} from '../../client/types/constEnums'
 import makeAppURL from '../../client/utils/makeAppURL'
 import appOrigin from '../appOrigin'
-import {TeamLimitsEmailType} from '../billing/helpers/sendTeamsLimitEmail'
+import type {TeamLimitsEmailType} from '../billing/helpers/sendTeamsLimitEmail'
 import {analytics} from '../utils/analytics/analytics'
 import emailTemplate from './emailTemplate'
 
@@ -63,6 +62,7 @@ const textOnlySummary = (props: Props) => {
 
 interface Props {
   userId: string
+  email: string
   preferredName: string
   orgId: string
   orgName: string
@@ -70,13 +70,13 @@ interface Props {
 }
 
 const teamLimitsEmailCreator = (props: Props) => {
-  const {userId, preferredName, orgId, emailType, orgName} = props
+  const {userId, email, preferredName, orgId, emailType, orgName} = props
   const Email =
     emailType === 'locked'
       ? LockedEmail
       : emailType === 'sevenDayWarning'
-      ? SevenDayWarningEmail
-      : ThirtyDayWarningEmail
+        ? SevenDayWarningEmail
+        : ThirtyDayWarningEmail
   const bodyContent = ReactDOMServer.renderToStaticMarkup(
     <Email preferredName={preferredName} orgId={orgId} orgName={orgName} appOrigin={appOrigin} />
   )
@@ -85,8 +85,8 @@ const teamLimitsEmailCreator = (props: Props) => {
     emailType === 'locked'
       ? `Parabol Account Deactivated`
       : emailType === 'sevenDayWarning'
-      ? `Parabol Account - Action Required`
-      : `Parabol Account - Team Limit Reached`
+        ? `Parabol Account - Action Required`
+        : `Parabol Account - Team Limit Reached`
 
   const html = emailTemplate({
     bodyContent,
@@ -95,7 +95,7 @@ const teamLimitsEmailCreator = (props: Props) => {
     bgColor: PALETTE.SLATE_200
   })
 
-  analytics.notificationEmailSent(userId, orgId, emailType)
+  analytics.notificationEmailSent({id: userId, email}, orgId, emailType)
 
   return {
     subject,

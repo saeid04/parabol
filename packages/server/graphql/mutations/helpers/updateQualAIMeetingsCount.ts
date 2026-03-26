@@ -1,5 +1,5 @@
-import updateTeamByTeamId from '../../../postgres/queries/updateTeamByTeamId'
-import {DataLoaderWorker} from '../../graphql'
+import getKysely from '../../../postgres/getKysely'
+import type {DataLoaderWorker} from '../../graphql'
 
 const updateQualAIMeetingsCount = async (
   meetingId: string,
@@ -10,14 +10,14 @@ const updateQualAIMeetingsCount = async (
     dataLoader.get('meetingMembersByMeetingId').load(meetingId),
     dataLoader.get('teams').load(teamId),
     dataLoader.get('retroReflectionsByMeetingId').load(meetingId),
-    dataLoader.get('newMeetings').load(meetingId)
+    dataLoader.get('newMeetings').loadNonNull(meetingId)
   ])
   if (meetingMembers.length < 3 || !team || !meeting.summary || reflections.length < 5) return
   const {qualAIMeetingsCount} = team
   const updates = {
     qualAIMeetingsCount: qualAIMeetingsCount + 1
   }
-  await updateTeamByTeamId(updates, teamId)
+  await getKysely().updateTable('Team').set(updates).where('id', '=', teamId).execute()
   team.qualAIMeetingsCount = qualAIMeetingsCount + 1
 }
 

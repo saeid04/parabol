@@ -1,59 +1,60 @@
-import styled from '@emotion/styled'
+import type {Editor} from '@tiptap/core'
 import graphql from 'babel-plugin-relay/macro'
-import {ContentState, convertToRaw} from 'draft-js'
-import React, {memo, useEffect, useRef, useState} from 'react'
-import {createFragmentContainer} from 'react-relay'
+import {memo, useEffect, useRef, useState} from 'react'
+import {useFragment} from 'react-relay'
+import type {OutcomeCardContainer_task$key} from '~/__generated__/OutcomeCardContainer_task.graphql'
+import type {AreaEnum, TaskStatusEnum} from '~/__generated__/UpdateTaskMutation.graphql'
 import useClickAway from '~/hooks/useClickAway'
 import useScrollIntoView from '~/hooks/useScrollIntoVIew'
 import SetTaskHighlightMutation from '~/mutations/SetTaskHighlightMutation'
-import {OutcomeCardContainer_task} from '~/__generated__/OutcomeCardContainer_task.graphql'
-import {AreaEnum, TaskStatusEnum} from '~/__generated__/UpdateTaskMutation.graphql'
+import {cn} from '~/ui/cn'
 import useAtmosphere from '../../../../hooks/useAtmosphere'
-import useEditorState from '../../../../hooks/useEditorState'
 import useTaskChildFocus from '../../../../hooks/useTaskChildFocus'
-import DeleteTaskMutation from '../../../../mutations/DeleteTaskMutation'
-import UpdateTaskMutation from '../../../../mutations/UpdateTaskMutation'
-import convertToTaskContent from '../../../../utils/draftjs/convertToTaskContent'
-import isAndroid from '../../../../utils/draftjs/isAndroid'
 import OutcomeCard from '../../components/OutcomeCard/OutcomeCard'
-
-const Wrapper = styled('div')({
-  outline: 'none'
-})
 
 interface Props {
   area: AreaEnum
-  contentState: ContentState
+  editor: Editor
   className?: string
   isAgenda: boolean | undefined
   isDraggingOver: TaskStatusEnum | undefined
-  task: OutcomeCardContainer_task
+  task: OutcomeCardContainer_task$key
   clearIsCreatingNewTask?: () => void
-  dataCy: string
   isViewerMeetingSection?: boolean
   meetingId?: string
+  handleCardUpdate: () => void
 }
 
 const OutcomeCardContainer = memo((props: Props) => {
   const {
-    contentState,
+    editor,
     className,
     isDraggingOver,
-    task,
+    task: taskRef,
     area,
     isAgenda,
-    dataCy,
     isViewerMeetingSection,
-    meetingId
+    meetingId,
+    handleCardUpdate
   } = props
-  const {id: taskId, content} = task
+  const task = useFragment(
+    graphql`
+      fragment OutcomeCardContainer_task on Task @argumentDefinitions(meetingId: {type: "ID"}) {
+        editors {
+          userId
+        }
+        id
+        ...OutcomeCard_task @arguments(meetingId: $meetingId)
+      }
+    `,
+    taskRef
+  )
+  const {id: taskId} = task
   const atmosphere = useAtmosphere()
   const ref = useRef<HTMLDivElement>(null)
   const [isTaskHovered, setIsTaskHovered] = useState(false)
-  const editorRef = useRef<HTMLTextAreaElement>(null)
 
-  const [editorState, setEditorState] = useEditorState(content)
-  const {useTaskChild, isTaskFocused} = useTaskChildFocus(taskId)
+  const {useTaskChild, isTaskFocused, addTaskChild, removeTaskChild} = useTaskChildFocus(taskId)
 
   const isHighlighted = isTaskHovered || !!isDraggingOver
   useEffect(() => {
@@ -66,79 +67,32 @@ const OutcomeCardContainer = memo((props: Props) => {
     })
   }, [isHighlighted])
 
-  const handleCardUpdate = () => {
-    const isFocused = isTaskFocused()
-    if (isAndroid) {
-      const editorEl = editorRef.current
-      if (!editorEl || editorEl.type !== 'textarea') return
-      const {value} = editorEl
-      if (!value && !isFocused) {
-        DeleteTaskMutation(atmosphere, {taskId})
-      } else {
-        const initialContentState = editorState.getCurrentContent()
-        const initialText = initialContentState.getPlainText()
-        if (initialText === value) return
-        const updatedTask = {
-          id: taskId,
-          content: convertToTaskContent(value)
-        }
-        UpdateTaskMutation(atmosphere, {updatedTask, area}, {})
-      }
-      return
-    }
-    const nextContentState = editorState.getCurrentContent()
-    const hasText = nextContentState.hasText()
-    if (!hasText && !isFocused) {
-      DeleteTaskMutation(atmosphere, {taskId})
-    } else {
-      const content = JSON.stringify(convertToRaw(nextContentState))
-      const initialContent = JSON.stringify(convertToRaw(contentState))
-      if (content === initialContent) return
-      const updatedTask = {
-        id: taskId,
-        content
-      }
-      UpdateTaskMutation(atmosphere, {updatedTask, area}, {})
-    }
-  }
-  useScrollIntoView(ref, !contentState.hasText())
+  useScrollIntoView(ref, editor.isEmpty)
   useClickAway(ref, () => setIsTaskHovered(false))
   return (
-    <Wrapper
+    <div
       tabIndex={-1}
-      className={className}
+      className={cn('outline-none', className)}
       onMouseEnter={() => setIsTaskHovered(true)}
       onMouseLeave={() => setIsTaskHovered(false)}
       onMouseOver={() => setIsTaskHovered(true)}
       ref={ref}
     >
       <OutcomeCard
-        dataCy={`${dataCy}-card`}
         area={area}
-        editorRef={editorRef}
-        editorState={editorState}
+        editor={editor}
         handleCardUpdate={handleCardUpdate}
         isTaskFocused={isTaskFocused()}
         isTaskHovered={isTaskHovered}
         isAgenda={!!isAgenda}
         isDraggingOver={isDraggingOver}
         task={task}
-        setEditorState={setEditorState}
         useTaskChild={useTaskChild}
+        addTaskChild={addTaskChild}
+        removeTaskChild={removeTaskChild}
       />
-    </Wrapper>
+    </div>
   )
 })
 
-export default createFragmentContainer(OutcomeCardContainer, {
-  task: graphql`
-    fragment OutcomeCardContainer_task on Task @argumentDefinitions(meetingId: {type: "ID"}) {
-      editors {
-        userId
-      }
-      content
-      id
-      ...OutcomeCard_task @arguments(meetingId: $meetingId)
-    }
-  `
-})
+export default OutcomeCardContainer

@@ -1,9 +1,8 @@
 import {buttonShadow} from 'parabol-client/styles/elevation'
 import {PALETTE} from 'parabol-client/styles/paletteV3'
 import {FONT_FAMILY} from 'parabol-client/styles/typographyV2'
-import React from 'react'
 import AnchorIfEmail from './AnchorIfEmail'
-import {MeetingSummaryReferrer} from './MeetingSummaryEmail'
+import type {MeetingSummaryReferrer} from './MeetingSummaryEmail'
 
 interface Props {
   referrer: MeetingSummaryReferrer
@@ -35,7 +34,7 @@ const SummarySheetCTA = (props: Props) => {
   const {isDemo, referrer, teamDashUrl} = props
   if (isDemo) return null
   return (
-    <tr>
+    <tr className='lg:hidden print:hidden'>
       <td align={'center'} style={buttonCellStyle}>
         <AnchorIfEmail
           isEmail={referrer === 'email'}

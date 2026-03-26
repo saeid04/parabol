@@ -2,18 +2,20 @@
  * Creates a reflection for the retrospective meeting.
  *
  */
+import {generateJSON} from '@tiptap/core'
 import graphql from 'babel-plugin-relay/macro'
 import {commitMutation} from 'react-relay'
-import {CreateReflectionMutation_meeting} from '~/__generated__/CreateReflectionMutation_meeting.graphql'
-import {SharedUpdater, StandardMutation} from '../types/relayMutations'
-import makeEmptyStr from '../utils/draftjs/makeEmptyStr'
+import type {CreateReflectionMutation_meeting$data} from '~/__generated__/CreateReflectionMutation_meeting.graphql'
+import type {CreateReflectionMutation as TCreateReflectionMutation} from '../__generated__/CreateReflectionMutation.graphql'
+import {serverTipTapExtensions} from '../shared/tiptap/serverTipTapExtensions'
+import type {SharedUpdater, StandardMutation} from '../types/relayMutations'
 import clientTempId from '../utils/relay/clientTempId'
 import createProxyRecord from '../utils/relay/createProxyRecord'
-import {CreateReflectionMutation as TCreateReflectionMutation} from '../__generated__/CreateReflectionMutation.graphql'
 import handleAddReflectionGroups from './handlers/handleAddReflectionGroups'
 
 graphql`
   fragment CreateReflectionMutation_meeting on CreateReflectionPayload {
+    reflectionId
     reflectionGroup {
       meetingId
       sortOrder
@@ -43,10 +45,9 @@ const mutation = graphql`
   }
 `
 
-export const createReflectionMeetingUpdater: SharedUpdater<CreateReflectionMutation_meeting> = (
-  payload,
-  {store}
-) => {
+export const createReflectionMeetingUpdater: SharedUpdater<
+  CreateReflectionMutation_meeting$data
+> = (payload, {store}) => {
   const reflectionGroup = payload.getLinkedRecord('reflectionGroup')
   handleAddReflectionGroups(reflectionGroup, store)
 }
@@ -73,7 +74,7 @@ const CreateReflectionMutation: StandardMutation<TCreateReflectionMutation> = (
       const nowISO = new Date().toJSON()
       const optimisticReflection = {
         id: clientTempId(),
-        content: input.content || makeEmptyStr(),
+        content: input.content || JSON.stringify(generateJSON('<p></p>', serverTipTapExtensions)),
         createdAt: nowISO,
         creatorId: viewerId,
         isActive: true,

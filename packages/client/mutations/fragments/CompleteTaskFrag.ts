@@ -1,4 +1,5 @@
 import graphql from 'babel-plugin-relay/macro'
+
 graphql`
   fragment CompleteTaskFrag on Task {
     id
@@ -14,7 +15,7 @@ graphql`
     integration {
       __typename
       ... on _xGitHubIssue {
-        url
+        ghUrl: url
       }
       ... on JiraIssue {
         cloudId

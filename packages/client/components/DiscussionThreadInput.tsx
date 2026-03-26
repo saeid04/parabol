@@ -1,102 +1,66 @@
-import styled from '@emotion/styled'
 import graphql from 'babel-plugin-relay/macro'
-import {ContentState, convertToRaw, EditorState} from 'draft-js'
-import React, {forwardRef, RefObject, useEffect, useState} from 'react'
+import {useEffect, useRef, useState} from 'react'
 import {commitLocalUpdate, useFragment} from 'react-relay'
+import type {DiscussionThreadInput_discussion$key} from '~/__generated__/DiscussionThreadInput_discussion.graphql'
+import type {DiscussionThreadInput_viewer$key} from '~/__generated__/DiscussionThreadInput_viewer.graphql'
 import useAtmosphere from '~/hooks/useAtmosphere'
 import useMutationProps from '~/hooks/useMutationProps'
-import useReplyEditorState from '~/hooks/useReplyEditorState'
 import AddCommentMutation from '~/mutations/AddCommentMutation'
-import EditCommentingMutation from '~/mutations/EditCommentingMutation'
-import {Elevation} from '~/styles/elevation'
 import {SORT_STEP} from '~/utils/constants'
 import dndNoise from '~/utils/dndNoise'
-import {convertStateToRaw} from '~/utils/draftjs/convertToTaskContent'
-import isAndroid from '~/utils/draftjs/isAndroid'
-import {DiscussionThreadInput_discussion$key} from '~/__generated__/DiscussionThreadInput_discussion.graphql'
-import {DiscussionThreadInput_viewer$key} from '~/__generated__/DiscussionThreadInput_viewer.graphql'
-import {useBeforeUnload} from '../hooks/useBeforeUnload'
+import useClickAway from '../hooks/useClickAway'
+import useEventCallback from '../hooks/useEventCallback'
 import useInitialLocalState from '../hooks/useInitialLocalState'
+import {useTipTapCommentEditor} from '../hooks/useTipTapCommentEditor'
+import {useTipTapTypingStatus} from '../hooks/useTipTapTypingStatus'
 import CreateTaskMutation from '../mutations/CreateTaskMutation'
-import {PALETTE} from '../styles/paletteV3'
+import {plaintextToTipTap} from '../shared/tiptap/plaintextToTipTap'
 import anonymousAvatar from '../styles/theme/images/anonymous-avatar.svg'
-import {isViewerTypingInTask} from '../utils/viewerTypingUtils'
 import AddPollButton from './AddPollButton'
 import AddTaskButton from './AddTaskButton'
 import Avatar from './Avatar/Avatar'
-import {DiscussionThreadables} from './DiscussionThreadList'
+import type {DiscussionThreadables} from './DiscussionThreadList'
 import {createLocalPoll} from './Poll/local/newPoll'
 import SendCommentButton from './SendCommentButton'
-import CommentEditor from './TaskEditor/CommentEditor'
-import {ReplyMention, SetReplyMention} from './ThreadedItem'
+import {TipTapEditor} from './TipTapEditor/TipTapEditor'
 
-const Wrapper = styled('div')<{isReply: boolean; isDisabled: boolean}>(({isDisabled, isReply}) => ({
-  display: 'flex',
-  flexDirection: 'column',
-  borderRadius: isReply ? '4px 0 0 4px' : undefined,
-  boxShadow: isReply ? Elevation.Z2 : Elevation.DISCUSSION_INPUT,
-  opacity: isDisabled ? 0.5 : undefined,
-  marginLeft: isReply ? -12 : undefined,
-  marginTop: isReply ? 8 : undefined,
-  pointerEvents: isDisabled ? 'none' : undefined,
-  // required for the shadow to overlay draft-js in the task cards
-  zIndex: 0
-}))
-
-const CommentContainer = styled('div')({
-  display: 'flex',
-  flex: 1,
-  padding: 4
-})
-
-const CommentAvatar = styled(Avatar)({
-  margin: 8,
-  transition: 'all 150ms'
-})
-
-const EditorWrap = styled('div')({
-  flex: 1,
-  margin: '14px 0',
-  overflowWrap: 'break-word',
-  // width below the required size does not have effect
-  width: 0
-})
-
-const ActionsContainer = styled('div')({
-  display: 'flex',
-  justifyContent: 'center',
-  alignItems: 'center',
-  borderTop: `1px solid ${PALETTE.SLATE_200}`,
-  padding: 6
+const makeReplyTo = ({id, preferredName}: {id: string; preferredName: string}) => ({
+  type: 'doc',
+  content: [
+    {
+      type: 'paragraph',
+      content: [
+        {
+          type: 'mention',
+          attrs: {
+            id,
+            label: preferredName
+          }
+        },
+        {
+          text: ' ',
+          type: 'text'
+        }
+      ]
+    }
+  ]
 })
 
 interface Props {
   allowedThreadables: DiscussionThreadables[]
-  editorRef: RefObject<HTMLTextAreaElement>
   getMaxSortOrder: () => number
   discussion: DiscussionThreadInput_discussion$key
   viewer: DiscussionThreadInput_viewer$key
-  onSubmitCommentSuccess?: () => void
-  threadParentId?: string
   isReply?: boolean
   isDisabled?: boolean
-  setReplyMention?: SetReplyMention
-  replyMention?: ReplyMention
-  dataCy: string
   isCreatingPoll?: boolean
 }
 
-const DiscussionThreadInput = forwardRef((props: Props, ref: any) => {
+const DiscussionThreadInput = (props: Props) => {
   const {
     allowedThreadables,
-    editorRef,
     getMaxSortOrder,
     discussion: discussionRef,
-    onSubmitCommentSuccess,
-    threadParentId,
-    replyMention,
-    setReplyMention,
-    dataCy,
     viewer: viewerRef,
     isCreatingPoll
   } = props
@@ -113,9 +77,19 @@ const DiscussionThreadInput = forwardRef((props: Props, ref: any) => {
       fragment DiscussionThreadInput_discussion on Discussion {
         id
         meetingId
-        teamId
         isAnonymousComment
-        discussionTopicType
+        editingTaskId
+        team {
+          id
+        }
+        replyingTo {
+          id
+          createdByUser {
+            id
+            preferredName
+          }
+          threadParentId
+        }
       }
     `,
     discussionRef
@@ -123,48 +97,53 @@ const DiscussionThreadInput = forwardRef((props: Props, ref: any) => {
   const {picture} = viewer
   const isReply = !!props.isReply
   const isDisabled = !!props.isDisabled
-  const {id: discussionId, meetingId, isAnonymousComment, teamId, discussionTopicType} = discussion
-  const [editorState, setEditorState] = useReplyEditorState(replyMention, setReplyMention)
+  const {
+    id: discussionId,
+    editingTaskId,
+    meetingId,
+    isAnonymousComment,
+    team,
+    replyingTo
+  } = discussion
+  const {id: teamId} = team
   const atmosphere = useAtmosphere()
-  const {submitting, onError, onCompleted, submitMutation} = useMutationProps()
-  const [isCommenting, setIsCommenting] = useState(false)
-  const [isCreatingTask, setIsCreatingTask] = useState(false)
-  const placeholder = isAnonymousComment ? 'Comment anonymously' : 'Comment publicly'
-  const [lastTypedTimestamp, setLastTypedTimestamp] = useState<Date>()
-  const allowTasks = allowedThreadables.includes('task')
-  const allowComments = allowedThreadables.includes('comment')
-  const allowPolls = !__PRODUCTION__ // TODO: change to "allowedThreadables.includes('poll')" once feature is done
-  useInitialLocalState(discussionId, 'isAnonymousComment', false)
-  useInitialLocalState(discussionId, 'replyingToCommentId', '')
-  useBeforeUnload(() => {
-    EditCommentingMutation(
-      atmosphere,
-      {
-        isCommenting: false,
-        discussionId
-      },
-      {onError, onCompleted}
-    )
+  const clearReplyingTo = useEventCallback(() => {
+    if (!isReply) return
+    commitLocalUpdate(atmosphere, (store) => {
+      store
+        .getRoot()
+        .getLinkedRecord('viewer')
+        ?.getLinkedRecord('discussion', {id: discussionId})
+        ?.setValue(null, 'replyingTo')
+    })
+  })
+  const {viewerId} = atmosphere
+  const [initialContent] = useState(() => {
+    return replyingTo?.createdByUser && replyingTo.createdByUser.id !== viewerId
+      ? JSON.stringify(makeReplyTo(replyingTo.createdByUser))
+      : JSON.stringify(plaintextToTipTap(''))
   })
 
-  useEffect(() => {
-    const inactiveCommenting = setTimeout(() => {
-      if (isCommenting) {
-        EditCommentingMutation(
-          atmosphere,
-          {
-            isCommenting: false,
-            discussionId
-          },
-          {onError, onCompleted}
-        )
-        setIsCommenting(false)
-      }
-    }, 5000)
-    return () => {
-      clearTimeout(inactiveCommenting)
-    }
-  }, [lastTypedTimestamp])
+  const allowTasks = allowedThreadables.includes('task')
+  const allowComments = allowedThreadables.includes('comment')
+  const allowPolls = false // TODO: change to "allowedThreadables.includes('poll')" once feature is done
+  const onSubmit = useEventCallback(() => {
+    if (submitting || !editor || editor.isEmpty) return
+    addComment(JSON.stringify(editor.getJSON()))
+  })
+  const {editor} = useTipTapCommentEditor(initialContent, {
+    readOnly: !allowComments,
+    atmosphere,
+    teamId,
+    placeholder: isAnonymousComment ? 'Comment anonymously' : 'Comment publicly',
+    onEnter: onSubmit,
+    onEscape: clearReplyingTo
+  })
+
+  useTipTapTypingStatus(editor, discussionId, isAnonymousComment)
+  const {submitting, onError, onCompleted, submitMutation} = useMutationProps()
+
+  useInitialLocalState(discussionId, 'isAnonymousComment', false)
 
   const toggleAnonymous = () => {
     commitLocalUpdate(atmosphere, (store) => {
@@ -175,97 +154,35 @@ const DiscussionThreadInput = forwardRef((props: Props, ref: any) => {
       if (!discussion) return
       discussion.setValue(!discussion.getValue('isAnonymousComment'), 'isAnonymousComment')
     })
-    editorRef.current?.focus()
+    editor?.commands.focus('end')
   }
 
-  const ensureHasText = (value: string) => value.trim().length
-  const getCurrentText = () => {
-    const editorEl = editorRef.current
-    if (isAndroid) {
-      if (!editorEl || editorEl.type !== 'textarea') return ''
-      return editorEl.value
-    }
-
-    return editorState.getCurrentContent().getPlainText()
-  }
-  const hasText = ensureHasText(getCurrentText())
-  const commentSubmitState = hasText ? 'typing' : 'idle'
+  const commentSubmitState = editor?.isEmpty ? 'idle' : 'typing'
 
   const addComment = (rawContent: string) => {
     submitMutation()
+    const threadParentId = replyingTo?.threadParentId ?? replyingTo?.id
     const comment = {
       content: rawContent,
       isAnonymous: isAnonymousComment,
       discussionId,
       threadParentId,
-      threadSortOrder: getMaxSortOrder() + SORT_STEP + dndNoise()
+      threadSortOrder: getMaxSortOrder() + SORT_STEP
     }
     AddCommentMutation(atmosphere, {comment}, {onError, onCompleted})
-    // move focus to end is very important! otherwise ghost chars appear
-    setEditorState(
-      EditorState.moveFocusToEnd(
-        EditorState.push(editorState, ContentState.createFromText(''), 'remove-range')
-      )
-    )
-    onSubmitCommentSuccess?.()
+    editor?.commands.clearOnSubmit()
+    clearReplyingTo()
   }
-
-  const ensureCommenting = () => {
-    const timestamp = new Date()
-    setLastTypedTimestamp(timestamp)
-    if (isAnonymousComment || isCommenting) return
-    EditCommentingMutation(
-      atmosphere,
-      {
-        isCommenting: true,
-        discussionId
-      },
-      {onError, onCompleted}
-    )
-    setIsCommenting(true)
-  }
-
-  const ensureNotCommenting = () => {
-    if (isAnonymousComment || !isCommenting) return
-    EditCommentingMutation(
-      atmosphere,
-      {
-        isCommenting: false,
-        discussionId
-      },
-      {onError, onCompleted}
-    )
-    setIsCommenting(false)
-  }
-
-  const onSubmit = () => {
-    if (submitting) return
-    ensureNotCommenting()
-    const editorEl = editorRef.current
-    if (isAndroid) {
-      if (!editorEl || editorEl.type !== 'textarea') return
-      const {value} = editorEl
-      if (!ensureHasText(value)) return
-      const text = value.trim()
-      const contentState = ContentState.createFromText(text)
-      const rawText = convertStateToRaw(contentState)
-      addComment(rawText)
-      return
-    }
-    const content = editorState.getCurrentContent()
-    if (!ensureHasText(content.getPlainText())) return
-    addComment(JSON.stringify(convertToRaw(content)))
-  }
-
   const addTask = () => {
     const {viewerId} = atmosphere
+    const threadParentId = replyingTo?.threadParentId ?? replyingTo?.id
     const newTask = {
       status: 'active',
       sortOrder: dndNoise(),
       discussionId,
       meetingId,
       threadParentId,
-      threadSortOrder: getMaxSortOrder() + SORT_STEP + dndNoise(),
+      threadSortOrder: getMaxSortOrder() + SORT_STEP,
       userId: viewerId,
       teamId
     } as const
@@ -277,68 +194,41 @@ const DiscussionThreadInput = forwardRef((props: Props, ref: any) => {
     createLocalPoll(atmosphere, discussionId, threadSortOrder)
   }
 
-  useEffect(() => {
-    const focusListener = () => {
-      setIsCreatingTask(isViewerTypingInTask())
-    }
-
-    document.addEventListener('blur', focusListener, true)
-    document.addEventListener('focus', focusListener, true)
-    return () => {
-      document.removeEventListener('blur', focusListener, true)
-      document.removeEventListener('focus', focusListener, true)
-    }
-  }, [])
-
   const isActionsContainerVisible = allowTasks || allowPolls
-  const isActionsContainerDisabled = isCreatingTask || isCreatingPoll
+  const isActionsContainerDisabled = !!editingTaskId || isCreatingPoll
   const avatar = isAnonymousComment ? anonymousAvatar : picture
+  const inputBottomRef = useRef<HTMLDivElement>(null)
+  useEffect(() => {
+    containerRef.current?.scrollIntoView({
+      behavior: 'smooth',
+      block: 'center'
+    })
+    editor?.commands.focus('end')
+  }, [discussionId, editor])
+  const containerRef = useRef<HTMLDivElement>(null)
+  useClickAway(containerRef, clearReplyingTo)
+  if (!editor) return null
   return (
-    <Wrapper data-cy={`${dataCy}-wrapper`} ref={ref} isReply={isReply} isDisabled={isDisabled}>
-      <CommentContainer>
-        <CommentAvatar size={32} picture={avatar} onClick={toggleAnonymous} />
-        <EditorWrap>
-          <CommentEditor
-            dataCy={`${dataCy}`}
-            editorRef={editorRef}
-            editorState={editorState}
-            ensureCommenting={ensureCommenting}
-            onBlur={ensureNotCommenting}
-            onSubmit={onSubmit}
-            placeholder={placeholder}
-            setEditorState={setEditorState}
-            teamId={teamId}
-            readOnly={!allowComments}
-            discussionId={discussion.id}
-            autofocus={discussionTopicType === 'teamPromptResponse'}
-          />
-        </EditorWrap>
-        <SendCommentButton
-          dataCy={`${dataCy}`}
-          commentSubmitState={commentSubmitState}
-          onSubmit={onSubmit}
-        />
-      </CommentContainer>
+    <div
+      className='data-[reply=true]:-ml-3 z-0 flex flex-col shadow-discussion-input data-disabled:pointer-events-none data-[reply=true]:mt-2 data-[reply=true]:rounded-t data-disabled:opacity-50 data-[reply=true]:shadow-discussion-thread'
+      data-disabled={isDisabled ? '' : undefined}
+      data-reply={isReply}
+      ref={containerRef}
+    >
+      <div className='flex items-center justify-center p-1'>
+        <Avatar picture={avatar} onClick={toggleAnonymous} className='m-2 h-8 w-8 transition-all' />
+        <TipTapEditor className='flex max-h-80 grow overflow-auto leading-4' editor={editor} />
+        <SendCommentButton commentSubmitState={commentSubmitState} onSubmit={onSubmit} />
+      </div>
       {isActionsContainerVisible && (
-        <ActionsContainer>
-          {allowTasks && (
-            <AddTaskButton
-              dataCy={`${dataCy}-task`}
-              onClick={addTask}
-              disabled={isActionsContainerDisabled}
-            />
-          )}
-          {allowPolls && (
-            <AddPollButton
-              dataCy={`${dataCy}-poll`}
-              onClick={addPoll}
-              disabled={isActionsContainerDisabled}
-            />
-          )}
-        </ActionsContainer>
+        <div className='flex items-center justify-center border-t-[1px] border-t-slate-200 border-solid py-1'>
+          {allowTasks && <AddTaskButton onClick={addTask} disabled={isActionsContainerDisabled} />}
+          {allowPolls && <AddPollButton onClick={addPoll} disabled={isActionsContainerDisabled} />}
+        </div>
       )}
-    </Wrapper>
+      <div ref={inputBottomRef}></div>
+    </div>
   )
-})
+}
 
 export default DiscussionThreadInput

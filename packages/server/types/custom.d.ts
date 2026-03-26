@@ -1,3 +1,6 @@
+import type ScheduledJobMeetingStageTimeLimit from '../database/types/ScheduledJobMetingStageTimeLimit'
+import type ScheduledTeamLimitsJob from '../database/types/ScheduledTeamLimitsJob'
+
 export interface OAuth2Success {
   access_token: string
   token_type: string
@@ -17,3 +20,4 @@ export interface OAuth2Error {
   error_description?: string
   error_uri?: string
 }
+export type ScheduledJobUnion = ScheduledJobMeetingStageTimeLimit | ScheduledTeamLimitsJob

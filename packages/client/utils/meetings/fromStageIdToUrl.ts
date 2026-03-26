@@ -1,6 +1,6 @@
 import graphql from 'babel-plugin-relay/macro'
 import {readInlineData} from 'relay-runtime'
-import {
+import type {
   fromStageIdToUrl_meeting$key,
   NewMeetingPhaseTypeEnum
 } from '~/__generated__/fromStageIdToUrl_meeting.graphql'
@@ -11,6 +11,7 @@ import {phaseTypeToSlug} from './lookups'
 
 const phaseIsMultiStage = {
   checkin: true,
+  TEAM_HEALTH: false,
   reflect: false,
   group: false,
   vote: false,

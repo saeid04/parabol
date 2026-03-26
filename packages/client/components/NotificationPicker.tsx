@@ -1,13 +1,13 @@
 import graphql from 'babel-plugin-relay/macro'
-import React, {Suspense} from 'react'
-import {createFragmentContainer} from 'react-relay'
-import lazyPreload, {LazyExoticPreload} from '~/utils/lazyPreload'
-import {
+import {Suspense} from 'react'
+import {useFragment} from 'react-relay'
+import type {
   NotificationEnum,
-  NotificationPicker_notification
+  NotificationPicker_notification$key
 } from '~/__generated__/NotificationPicker_notification.graphql'
+import lazyPreload, {type LazyPreloadedComponent} from '~/utils/lazyPreload'
 
-const typePicker: Record<NotificationEnum, LazyExoticPreload<any>> = {
+const typePicker: Record<NotificationEnum, LazyPreloadedComponent> = {
   DISCUSSION_MENTIONED: lazyPreload(
     () => import(/* webpackChunkName: 'DiscussionMentioned' */ './DiscussionMentioned')
   ),
@@ -19,16 +19,26 @@ const typePicker: Record<NotificationEnum, LazyExoticPreload<any>> = {
   PROMOTE_TO_BILLING_LEADER: lazyPreload(
     () => import(/* webpackChunkName: 'PromoteToBillingLeader' */ './PromoteToBillingLeader')
   ),
+  TEAMS_LIMIT_REMINDER: lazyPreload(
+    () =>
+      import(
+        /* webpackChunkName: 'TeamsLimitReminderNotification' */ './TeamsLimitReminderNotification'
+      )
+  ),
   TEAMS_LIMIT_EXCEEDED: lazyPreload(
     () =>
       import(
         /* webpackChunkName: 'TeamsLimitExceededNotification' */ './TeamsLimitExceededNotification'
       )
   ),
-  TEAMS_LIMIT_REMINDER: lazyPreload(
+  PROMPT_TO_JOIN_ORG: lazyPreload(
+    () =>
+      import(/* webpackChunkName: 'PromptToJoinOrgNotification' */ './PromptToJoinOrgNotification')
+  ),
+  REQUEST_TO_JOIN_ORG: lazyPreload(
     () =>
       import(
-        /* webpackChunkName: 'TeamsLimitReminderNotification' */ './TeamsLimitReminderNotification'
+        /* webpackChunkName: 'RequestToJoinOrgNotification' */ './RequestToJoinOrgNotification'
       )
   ),
   TEAM_ARCHIVED: lazyPreload(() => import(/* webpackChunkName: 'TeamArchived' */ './TeamArchived')),
@@ -41,19 +51,52 @@ const typePicker: Record<NotificationEnum, LazyExoticPreload<any>> = {
   RESPONSE_MENTIONED: lazyPreload(
     () => import(/* webpackChunkName: 'ResponseMentioned' */ './ResponseMentioned')
   ),
+  MENTIONED: lazyPreload(() => import(/* webpackChunkName: 'Mentioned' */ './Mentioned')),
   RESPONSE_REPLIED: lazyPreload(
     () => import(/* webpackChunkName: 'ResponseReplied' */ './ResponseReplied')
+  ),
+  PAGE_ACCESS_GRANTED: lazyPreload(
+    () => import(/* webpackChunkName: 'PageAccessGranted' */ './PageAccessGranted')
+  ),
+  PAGE_ACCESS_REQUESTED: lazyPreload(
+    () => import(/* webpackChunkName: 'PageAccessRequested' */ './PageAccessRequested')
   )
 }
 
 interface Props {
-  notification: NotificationPicker_notification
+  notification: NotificationPicker_notification$key
 }
 
 const NotificationPicker = (props: Props) => {
-  const {notification} = props
+  const {notification: notificationRef} = props
+  const notification = useFragment(
+    graphql`
+      fragment NotificationPicker_notification on Notification {
+        type
+        id
+        ...DiscussionMentioned_notification
+        ...KickedOut_notification
+        ...PaymentRejected_notification
+        ...TaskInvolves_notification
+        ...PromoteToBillingLeader_notification
+        ...TeamArchived_notification
+        ...TeamInvitationNotification_notification
+        ...MeetingStageTimeLimitEnd_notification
+        ...ResponseMentioned_notification
+        ...Mentioned_notification
+        ...ResponseReplied_notification
+        ...TeamsLimitReminderNotification_notification
+        ...TeamsLimitExceededNotification_notification
+        ...PromptToJoinOrgNotification_notification
+        ...RequestToJoinOrgNotification_notification
+        ...PageAccessGranted_notification
+        ...PageAccessRequested_notification
+      }
+    `,
+    notificationRef
+  )
   const {type} = notification
-  const SpecificNotification = typePicker[type]
+  const SpecificNotification = typePicker[type]!
   return (
     <Suspense fallback={''}>
       <SpecificNotification notification={notification} />
@@ -61,23 +104,4 @@ const NotificationPicker = (props: Props) => {
   )
 }
 
-export default createFragmentContainer(NotificationPicker, {
-  notification: graphql`
-    fragment NotificationPicker_notification on Notification {
-      type
-      id
-      ...DiscussionMentioned_notification
-      ...KickedOut_notification
-      ...PaymentRejected_notification
-      ...TaskInvolves_notification
-      ...PromoteToBillingLeader_notification
-      ...TeamArchived_notification
-      ...TeamInvitationNotification_notification
-      ...MeetingStageTimeLimitEnd_notification
-      ...ResponseMentioned_notification
-      ...ResponseReplied_notification
-      ...TeamsLimitExceededNotification_notification
-      ...TeamsLimitReminderNotification_notification
-    }
-  `
-})
+export default NotificationPicker

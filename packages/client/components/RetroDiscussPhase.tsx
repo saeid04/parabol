@@ -1,22 +1,21 @@
+import {datadogRum} from '@datadog/browser-rum'
 import styled from '@emotion/styled'
 import {ThumbUp} from '@mui/icons-material'
-import * as Sentry from '@sentry/browser'
 import graphql from 'babel-plugin-relay/macro'
-import React from 'react'
-import {createFragmentContainer} from 'react-relay'
+import {useFragment} from 'react-relay'
+import type {RetroDiscussPhase_meeting$key} from '~/__generated__/RetroDiscussPhase_meeting.graphql'
 import useBreakpoint from '~/hooks/useBreakpoint'
 import useCallbackRef from '~/hooks/useCallbackRef'
-import {RetroDiscussPhase_meeting} from '~/__generated__/RetroDiscussPhase_meeting.graphql'
 import EditorHelpModalContainer from '../containers/EditorHelpModalContainer/EditorHelpModalContainer'
 import {PALETTE} from '../styles/paletteV3'
 import {Breakpoint} from '../types/constEnums'
 import {phaseLabelLookup} from '../utils/meetings/lookups'
 import plural from '../utils/plural'
-import {DiscussionThreadables, Header as DiscussionThreadHeader} from './DiscussionThreadList'
+import type {DiscussionThreadables} from './DiscussionThreadList'
 import DiscussionThreadListEmptyState from './DiscussionThreadListEmptyState'
+import DiscussionThreadListEmptyTranscriptState from './DiscussionThreadListEmptyTranscriptState'
 import DiscussionThreadRoot from './DiscussionThreadRoot'
 import DiscussPhaseReflectionGrid from './DiscussPhaseReflectionGrid'
-import DiscussPhaseSqueeze from './DiscussPhaseSqueeze'
 import LabelHeading from './LabelHeading/LabelHeading'
 import MeetingContent from './MeetingContent'
 import MeetingHeaderAndPhase from './MeetingHeaderAndPhase'
@@ -25,10 +24,12 @@ import PhaseHeaderDescription from './PhaseHeaderDescription'
 import PhaseHeaderTitle from './PhaseHeaderTitle'
 import PhaseWrapper from './PhaseWrapper'
 import ReflectionGroup from './ReflectionGroup/ReflectionGroup'
-import {RetroMeetingPhaseProps} from './RetroMeeting'
+import RetroDiscussionThreadHeader from './RetroDiscussionThreadHeader'
+import type {RetroMeetingPhaseProps} from './RetroMeeting'
 import StageTimerDisplay from './StageTimerDisplay'
+
 interface Props extends RetroMeetingPhaseProps {
-  meeting: RetroDiscussPhase_meeting
+  meeting: RetroDiscussPhase_meeting$key
 }
 
 const maxWidth = '114rem'
@@ -135,9 +136,48 @@ const ColumnInner = styled('div')<{isDesktop: boolean}>(({isDesktop}) => ({
 }))
 
 const RetroDiscussPhase = (props: Props) => {
-  const {avatarGroup, toggleSidebar, meeting} = props
+  const {avatarGroup, toggleSidebar, meeting: meetingRef} = props
+  const meeting = useFragment(
+    graphql`
+      fragment RetroDiscussPhase_meeting on RetrospectiveMeeting {
+        ...DiscussPhaseReflectionGrid_meeting
+        ...StageTimerControl_meeting
+        ...ReflectionGroup_meeting
+        ...StageTimerDisplay_meeting
+        ...DiscussionThreadListEmptyTranscriptState_meeting
+        id
+        endedAt
+        showTranscription
+        transcription {
+          speaker
+          words
+        }
+        organization {
+          ...RetroDiscussionThreadHeader_organization
+        }
+        showSidebar
+        phases {
+          stages {
+            ...RetroDiscussPhase_stage @relay(mask: false)
+          }
+        }
+        localStage {
+          ...RetroDiscussPhase_stage @relay(mask: false)
+        }
+      }
+    `,
+    meetingRef
+  )
   const [callbackRef, phaseRef] = useCallbackRef()
-  const {endedAt, localStage, showSidebar, organization} = meeting
+  const {
+    id: meetingId,
+    endedAt,
+    localStage,
+    showSidebar,
+    organization,
+    showTranscription,
+    transcription
+  } = meeting
   const {reflectionGroup, discussionId} = localStage
   const isDesktop = useBreakpoint(Breakpoint.SINGLE_REFLECTION_COLUMN)
   const title = reflectionGroup?.title ?? ''
@@ -156,17 +196,11 @@ const RetroDiscussPhase = (props: Props) => {
 
   const reflections = reflectionGroup.reflections ?? []
   if (!reflectionGroup.reflections) {
-    // this shouldn't ever happen, yet
-    // https://sentry.io/organizations/parabol/issues/1322927523/?environment=client&project=107196&query=is%3Aunresolved
     const errObj = {id: reflectionGroup.id} as any
-    if (reflectionGroup.hasOwnProperty('reflections')) {
-      errObj.reflections = reflections
-    }
-    Sentry.captureException(new Error(`NO REFLECTIONS ${JSON.stringify(errObj)}`))
+    datadogRum.addError(new Error(`NO REFLECTIONS ${JSON.stringify(errObj)}`))
   }
   return (
     <MeetingContent ref={callbackRef}>
-      <DiscussPhaseSqueeze meeting={meeting} organization={organization} />
       <MeetingHeaderAndPhase hideBottomBar={!!endedAt}>
         <MeetingTopBar
           avatarGroup={avatarGroup}
@@ -212,14 +246,28 @@ const RetroDiscussPhase = (props: Props) => {
                   allowedThreadables={allowedThreadables}
                   meetingContentRef={phaseRef}
                   discussionId={discussionId!}
+                  showTranscription={showTranscription}
+                  transcription={transcription}
                   header={
-                    <DiscussionThreadHeader>{'Discussion & Takeaway Tasks'}</DiscussionThreadHeader>
+                    <RetroDiscussionThreadHeader
+                      meetingId={meetingId}
+                      showTranscription={showTranscription}
+                      organizationRef={organization}
+                    />
                   }
                   emptyState={
-                    <DiscussionThreadListEmptyState
-                      allowTasks={true}
-                      isReadOnly={allowedThreadables.length === 0}
-                    />
+                    showTranscription ? (
+                      <DiscussionThreadListEmptyTranscriptState
+                        allowTasks={true}
+                        isReadOnly={allowedThreadables.length === 0}
+                        meetingRef={meeting}
+                      />
+                    ) : (
+                      <DiscussionThreadListEmptyState
+                        allowTasks={true}
+                        isReadOnly={allowedThreadables.length === 0}
+                      />
+                    )
                   }
                 />
               </ThreadColumn>
@@ -250,27 +298,4 @@ graphql`
   }
 `
 
-export default createFragmentContainer(RetroDiscussPhase, {
-  meeting: graphql`
-    fragment RetroDiscussPhase_meeting on RetrospectiveMeeting {
-      ...DiscussPhaseReflectionGrid_meeting
-      ...DiscussPhaseSqueeze_meeting
-      ...StageTimerControl_meeting
-      ...ReflectionGroup_meeting
-      ...StageTimerDisplay_meeting
-      endedAt
-      organization {
-        ...DiscussPhaseSqueeze_organization
-      }
-      showSidebar
-      phases {
-        stages {
-          ...RetroDiscussPhase_stage @relay(mask: false)
-        }
-      }
-      localStage {
-        ...RetroDiscussPhase_stage @relay(mask: false)
-      }
-    }
-  `
-})
+export default RetroDiscussPhase

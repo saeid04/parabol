@@ -1,9 +1,8 @@
 import graphql from 'babel-plugin-relay/macro'
-import React from 'react'
-import {createFragmentContainer} from 'react-relay'
-import {ActionSidebarPhaseListItemChildren_meeting} from '~/__generated__/ActionSidebarPhaseListItemChildren_meeting.graphql'
-import useGotoStageId from '../hooks/useGotoStageId'
-import {NewMeetingPhaseTypeEnum} from '../__generated__/ActionSidebarAgendaItemsSection_meeting.graphql'
+import {useFragment} from 'react-relay'
+import type {ActionSidebarPhaseListItemChildren_meeting$key} from '~/__generated__/ActionSidebarPhaseListItemChildren_meeting.graphql'
+import type {NewMeetingPhaseTypeEnum} from '../__generated__/ActionSidebarAgendaItemsSection_meeting.graphql'
+import type useGotoStageId from '../hooks/useGotoStageId'
 import ActionSidebarAgendaItemsSection from './ActionSidebarAgendaItemsSection'
 import MeetingSidebarTeamMemberStageItems from './MeetingSidebarTeamMemberStageItems'
 
@@ -11,13 +10,22 @@ interface Props {
   gotoStageId: ReturnType<typeof useGotoStageId>
   handleMenuClick: () => void
   phaseType: NewMeetingPhaseTypeEnum
-  meeting: ActionSidebarPhaseListItemChildren_meeting
+  meeting: ActionSidebarPhaseListItemChildren_meeting$key
 }
 
 const teamMemberPhases: NewMeetingPhaseTypeEnum[] = ['checkin', 'updates']
 
 const ActionSidebarPhaseListItemChildren = (props: Props) => {
-  const {gotoStageId, handleMenuClick, phaseType, meeting} = props
+  const {gotoStageId, handleMenuClick, phaseType, meeting: meetingRef} = props
+  const meeting = useFragment(
+    graphql`
+      fragment ActionSidebarPhaseListItemChildren_meeting on ActionMeeting {
+        ...MeetingSidebarTeamMemberStageItems_meeting
+        ...ActionSidebarAgendaItemsSection_meeting
+      }
+    `,
+    meetingRef
+  )
   if (teamMemberPhases.includes(phaseType)) {
     return (
       <MeetingSidebarTeamMemberStageItems
@@ -40,11 +48,4 @@ const ActionSidebarPhaseListItemChildren = (props: Props) => {
   return null
 }
 
-export default createFragmentContainer(ActionSidebarPhaseListItemChildren, {
-  meeting: graphql`
-    fragment ActionSidebarPhaseListItemChildren_meeting on ActionMeeting {
-      ...MeetingSidebarTeamMemberStageItems_meeting
-      ...ActionSidebarAgendaItemsSection_meeting
-    }
-  `
-})
+export default ActionSidebarPhaseListItemChildren

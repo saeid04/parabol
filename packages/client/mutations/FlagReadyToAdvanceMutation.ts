@@ -1,16 +1,13 @@
 import graphql from 'babel-plugin-relay/macro'
 import {commitMutation} from 'react-relay'
-import {SimpleMutation} from '../types/relayMutations'
-import {
-  FlagReadyToAdvanceMutation as TFlagReadyToAdvanceMutation,
-  FlagReadyToAdvanceMutationResponse
-} from '../__generated__/FlagReadyToAdvanceMutation.graphql'
+import type {FlagReadyToAdvanceMutation as TFlagReadyToAdvanceMutation} from '../__generated__/FlagReadyToAdvanceMutation.graphql'
+import type {SimpleMutation} from '../types/relayMutations'
 
 graphql`
   fragment FlagReadyToAdvanceMutation_meeting on FlagReadyToAdvanceSuccess {
     stage {
       isViewerReady
-      readyCount
+      readyUserIds
     }
   }
 `
@@ -29,7 +26,7 @@ const mutation = graphql`
 `
 
 type Stage = NonNullable<
-  NonNullable<FlagReadyToAdvanceMutationResponse['flagReadyToAdvance']>['stage']
+  NonNullable<TFlagReadyToAdvanceMutation['response']['flagReadyToAdvance']>['stage']
 >
 
 const FlagReadyToAdvanceMutation: SimpleMutation<TFlagReadyToAdvanceMutation> = (
@@ -42,11 +39,14 @@ const FlagReadyToAdvanceMutation: SimpleMutation<TFlagReadyToAdvanceMutation> = 
     optimisticUpdater: (store) => {
       const {stageId, isReady} = variables
       const stage = store.get<Stage>(stageId)
-      if (!stage) return
-      const currentCount = stage.getValue('readyCount')
-      const diff = isReady ? 1 : -1
-      const nextCount = currentCount + diff
-      stage.setValue(nextCount, 'readyCount')
+      const viewer = store.getRoot().getLinkedRecord('viewer')
+      if (!stage || !viewer) return
+      const viewerId = viewer.getDataID()
+      const readyUserIds = stage.getValue('readyUserIds') ?? []
+      const nextReadyUserIds = isReady
+        ? [...readyUserIds, viewerId]
+        : readyUserIds.filter((userId) => userId !== viewerId)
+      stage.setValue(nextReadyUserIds, 'readyUserIds')
       stage.setValue(isReady, 'isReady')
     }
   })

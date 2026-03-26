@@ -1,16 +1,8 @@
-import Redis from 'ioredis'
-import SubscriptionIterator, {
-  SubscriptionListener,
-  SubscriptionTransform
-} from './SubscriptionIterator'
+import type Redis from 'ioredis'
+import SubscriptionIterator, {type SubscriptionListener} from './SubscriptionIterator'
 
 interface ListenersByChannel {
   [channel: string]: SubscriptionListener[]
-}
-
-interface SubscribeOptions {
-  onCompleted?: () => void
-  transform?: SubscriptionTransform
 }
 
 export default class GraphQLRedisPubSub {
@@ -36,19 +28,21 @@ export default class GraphQLRedisPubSub {
     return this.publisher.publish(channel, JSON.stringify(payload))
   }
 
-  subscribe = (channels: string[], options: SubscribeOptions = {}) => {
-    this.subscriber.subscribe(...channels)
+  subscribe = async (channels: string[], onCompleted?: () => void) => {
+    if (channels.length > 0) {
+      await this.subscriber.subscribe(...channels)
+    }
     const onStart = (listener: SubscriptionListener) => {
       channels.forEach((channel) => {
         this.listenersByChannel[channel] = this.listenersByChannel[channel] || []
         this.listenersByChannel[channel]!.push(listener)
       })
     }
-    const onCompleted = (listener: SubscriptionListener) => {
-      options?.onCompleted?.()
+    const onCompletedHandler = (listener: SubscriptionListener) => {
+      onCompleted?.()
       this.unsubscribe(channels, listener)
     }
-    return new SubscriptionIterator({onStart, onCompleted, transform: options?.transform})
+    return new SubscriptionIterator({onStart, onCompleted: onCompletedHandler})
   }
 
   unsubscribe = (channels: string[], listener: SubscriptionListener) => {

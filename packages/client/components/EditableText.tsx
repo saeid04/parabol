@@ -1,21 +1,22 @@
 import styled from '@emotion/styled'
 import {Edit} from '@mui/icons-material'
-import React, {forwardRef, useEffect, useRef, useState} from 'react'
+import type * as React from 'react'
+import {forwardRef, useEffect, useRef, useState} from 'react'
 import TextAreaAutoSize from 'react-textarea-autosize'
 import {PALETTE} from '../styles/paletteV3'
 import {FONT_FAMILY} from '../styles/typographyV2'
-import Legitity from '../validation/Legitity'
+import type Legitity from '../validation/Legitity'
 
 const StaticBlock = styled('div')<{disabled: boolean | undefined}>(({disabled}) => ({
   alignItems: 'center',
   cursor: disabled ? 'default' : 'pointer',
-  display: 'flex',
+  display: 'inline-flex',
+  gap: '4px',
   fontFamily: FONT_FAMILY.SANS_SERIF,
   fontSize: 'inherit',
   fontWeight: 'inherit',
   lineHeight: 'inherit',
   outline: disabled ? 'none' : undefined,
-  width: '100%',
   ':hover': {
     opacity: disabled ? undefined : 0.5
   }
@@ -45,13 +46,26 @@ const Input = styled('input')({
   backgroundColor: 'transparent',
   border: 0,
   color: PALETTE.SLATE_700,
-  display: 'block',
+  display: 'inline-block',
   fontSize: 'inherit',
   fontWeight: 'inherit',
   lineHeight: 'inherit',
   outline: 'none',
-  padding: 0,
-  width: 'auto'
+  padding: '0 2px', // Add small padding to prevent text touching edges
+  width: 'auto',
+  minWidth: '50px'
+  // Remove transition to make width changes immediate
+})
+
+const HiddenSpan = styled('span')({
+  position: 'absolute',
+  visibility: 'hidden',
+  height: 0,
+  whiteSpace: 'pre',
+  fontSize: 'inherit',
+  fontWeight: 'inherit',
+  fontFamily: 'inherit',
+  lineHeight: 'inherit'
 })
 
 const TextArea = styled(TextAreaAutoSize)({
@@ -68,10 +82,15 @@ const TextArea = styled(TextAreaAutoSize)({
   width: '100%'
 })
 
-const Form = styled('form')({
-  display: 'flex',
-  flexDirection: 'column'
-})
+const Form = styled('form')<{isWrap?: boolean}>(({isWrap}) => ({
+  border: 0,
+  display: isWrap ? 'flex' : 'inline-flex',
+  width: isWrap ? '100%' : undefined,
+  alignItems: 'center',
+  margin: 0,
+  padding: 0,
+  position: 'relative'
+}))
 
 interface Props {
   autoFocus?: boolean
@@ -88,7 +107,7 @@ interface Props {
   onEditingChange?: (isEditing: boolean) => void
 }
 
-const EditableText = forwardRef((props: Props, ref: any) => {
+const EditableText = forwardRef((props: Props, ref: React.Ref<HTMLDivElement>) => {
   const {
     initialValue,
     error,
@@ -107,16 +126,34 @@ const EditableText = forwardRef((props: Props, ref: any) => {
   const inputRef = useRef<HTMLInputElement | HTMLTextAreaElement>(null)
   const [autoFocus, setAutoFocus] = useState(autoFocusProp)
   const [value, setValue] = useState(initialValue)
+  const [inputWidth, setInputWidth] = useState(0)
+  const spanRef = useRef<HTMLSpanElement>(null)
+
+  const calculateWidth = () => {
+    if (spanRef.current) {
+      const width = spanRef.current.offsetWidth
+      setInputWidth(width + 4)
+    }
+  }
+
+  const setEditing = (isEditing: boolean) => {
+    setIsEditing(isEditing)
+    if (isEditing) {
+      // Pre-calculate width when entering edit mode
+      setTimeout(calculateWidth, 0)
+    }
+    setAutoFocus(false)
+    onEditingChange?.(isEditing)
+  }
+
   useEffect(() => {
     if (isEditing) return
     setValue(initialValue)
   }, [initialValue])
 
-  const setEditing = (isEditing: boolean) => {
-    setIsEditing(isEditing)
-    setAutoFocus(false)
-    onEditingChange?.(isEditing)
-  }
+  useEffect(() => {
+    calculateWidth()
+  }, [value])
 
   const onChange = (e: React.ChangeEvent<HTMLInputElement | HTMLTextAreaElement>) => {
     const nextValue = e.target.value || ''
@@ -163,21 +200,38 @@ const EditableText = forwardRef((props: Props, ref: any) => {
 
   const showEditing = (error || isEditing || autoFocus) && !disabled
   if (showEditing) {
-    const inProps = {
+    const commonProps = {
       autoFocus: true,
-      ref: inputRef as any,
       maxLength,
       onBlur: onSubmit,
       onChange: onChange,
       onFocus: onFocus,
       onKeyDown: onKeyDown,
       placeholder,
-      value
-    } as const
+      value,
+      ref: inputRef as any
+    }
+
     return (
       <div className={className} ref={ref}>
-        <Form onSubmit={onSubmit}>
-          {isWrap ? <TextArea {...inProps} maxRows={3} /> : <Input {...inProps} />}
+        <Form
+          isWrap={isWrap}
+          onSubmit={onSubmit}
+          onKeyDown={(e) => {
+            if (e.key === 'Enter' && !e.shiftKey) {
+              e.preventDefault()
+              onSubmit(e)
+            }
+          }}
+        >
+          {isWrap ? (
+            <TextArea {...commonProps} maxRows={3} style={{width: undefined}} />
+          ) : (
+            <>
+              <Input {...commonProps} style={{width: !inputWidth ? 'auto' : `${inputWidth}px`}} />
+              <HiddenSpan ref={spanRef}>{value || placeholder}</HiddenSpan>
+            </>
+          )}
           {error && <Error>{error}</Error>}
         </Form>
       </div>
@@ -188,9 +242,20 @@ const EditableText = forwardRef((props: Props, ref: any) => {
     <div className={className} ref={ref}>
       <StaticBlock
         disabled={disabled}
+        role='button'
         tabIndex={0}
         onFocus={() => setEditing(true)}
-        onClick={() => setEditing(true)}
+        onPointerDown={(e) => {
+          if (e.button !== 0) return
+          e.preventDefault()
+          setEditing(true)
+        }}
+        onKeyDown={(e) => {
+          if (e.key === 'Enter' || e.key === ' ') {
+            e.preventDefault()
+            setEditing(true)
+          }
+        }}
       >
         {showPlaceholder && <Placeholder>{placeholder}</Placeholder>}
         {value && <StaticValue>{value}</StaticValue>}

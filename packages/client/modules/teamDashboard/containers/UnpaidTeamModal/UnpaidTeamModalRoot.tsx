@@ -1,9 +1,9 @@
-import React, {Suspense} from 'react'
-import useQueryLoaderNow from '../../../../hooks/useQueryLoaderNow'
-import {renderLoader} from '../../../../utils/relay/renderLoader'
+import {Suspense} from 'react'
 import unpaidTeamModalQuery, {
-  UnpaidTeamModalQuery
+  type UnpaidTeamModalQuery
 } from '../../../../__generated__/UnpaidTeamModalQuery.graphql'
+import useQueryLoaderNow from '../../../../hooks/useQueryLoaderNow'
+import {Loader} from '../../../../utils/relay/renderLoader'
 import UnpaidTeamModal from '../../components/UnpaidTeamModal/UnpaidTeamModal'
 
 interface Props {
@@ -14,9 +14,7 @@ const UnpaidTeamModalRoot = (props: Props) => {
   const {teamId} = props
   const queryRef = useQueryLoaderNow<UnpaidTeamModalQuery>(unpaidTeamModalQuery, {teamId})
   return (
-    <Suspense fallback={renderLoader()}>
-      {queryRef && <UnpaidTeamModal queryRef={queryRef} />}
-    </Suspense>
+    <Suspense fallback={<Loader />}>{queryRef && <UnpaidTeamModal queryRef={queryRef} />}</Suspense>
   )
 }
 

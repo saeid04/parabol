@@ -1,38 +1,30 @@
-import getRethink from '../../database/rethinkDriver'
-import updateTeamByOrgId from '../../postgres/queries/updateTeamByOrgId'
+import {sql} from 'kysely'
+import getKysely from '../../postgres/getKysely'
+import {Logger} from '../../utils/Logger'
 import {getStripeManager} from '../../utils/stripe'
 
 const terminateSubscription = async (orgId: string) => {
-  const r = await getRethink()
-  const now = new Date()
+  const pg = getKysely()
   // flag teams as unpaid
-  const [rethinkResult] = await Promise.all([
-    r({
-      stripeSubscriptionId: r
-        .table('Organization')
-        .get(orgId)
-        .update(
-          {
-            // periodEnd should always be redundant, but useful for testing purposes
-            periodEnd: now,
-            stripeSubscriptionId: null
-          },
-          {returnChanges: true}
-        )('changes')(0)('old_val')
-        .default(null) as unknown as string
-    }).run(),
-    updateTeamByOrgId({isPaid: false}, orgId)
-  ])
-  const {stripeSubscriptionId} = rethinkResult
+  const organization = await pg
+    .with('OldOrg', (qc) =>
+      qc.selectFrom('Organization').select('stripeSubscriptionId').where('id', '=', orgId)
+    )
+    .updateTable('Organization')
+    .set({periodEnd: sql`CURRENT_TIMESTAMP`, stripeSubscriptionId: null})
+    .where('id', '=', orgId)
+    .returning((qc) =>
+      qc.selectFrom('OldOrg').select('stripeSubscriptionId').as('stripeSubscriptionId')
+    )
+    .executeTakeFirstOrThrow()
+  const {stripeSubscriptionId} = organization
 
-  // stripe already does this for us (per account settings) but we do it here so we don't have to wait an hour
-  // if this function is called by a paymentFailed hook, then the sub may not exist, so catch and release
   if (stripeSubscriptionId) {
     const manager = getStripeManager()
     try {
       await manager.deleteSubscription(stripeSubscriptionId)
     } catch (e) {
-      // noop
+      Logger.error(`cannot delete subscription ${stripeSubscriptionId}`, e)
     }
   }
   return stripeSubscriptionId

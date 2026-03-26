@@ -1,8 +1,6 @@
 # Parabol Hardened Container for Platform One Iron Bank
 
 [![Slack Status](https://slackin.parabol.co/badge.svg)](https://slackin.parabol.co/)
-[![CircleCI](https://circleci.com/gh/ParabolInc/parabol.svg?style=svg)](https://circleci.com/gh/ParabolInc/parabol)
-[![StackShare](https://img.shields.io/badge/tech-stack-0690fa.svg?style=flat)](https://stackshare.io/parabol-inc/parabol-multiplayer-web-app)
 
 ## Overview
 
@@ -28,25 +26,25 @@ For all matters, please contact: support@parabol.co
 
 ## Stack Information
 
-| Concern                | Solution                                                       |
-| ---------------------- | -------------------------------------------------------------- |
-| Server                 | [Node](https://nodejs.org/)                                    |
-| Server Framework       | [uWebSockts.js](https://github.com/uNetworking/uWebSockets.js) |
-| Database (Legacy)      | [RethinkDB](https://www.rethinkdb.com/)                        |
-| Database               | [PostgreSQL](https://www.postgresql.org/)                      |
-| PubSub & Cache         | [Redis](https://redis.io)                                      |
-| Data Transport         | [GraphQL](https://github.com/graphql/graphql-js)               |
-| Real-time Connectivity | [trebuchet](https://github.com/mattkrick/trebuchet-client)     |
-| Client Cache           | [Relay](https://facebook.github.io/relay/)                     |
-| UI Framework           | [React](https://facebook.github.io/react/)                     |
-| Styling                | [Emotion](https://emotion.sh/)                                 |
+| Concern                | Solution                                                        |
+| ---------------------- | --------------------------------------------------------------- |
+| Server                 | [Node](https://nodejs.org/)                                     |
+| Server Framework       | [μWebSockets.js](https://github.com/uNetworking/uWebSockets.js) |
+| Database               | [PostgreSQL](https://www.postgresql.org/)                       |
+| PubSub & Cache         | [Valkey](https://valkey.io)                                       |
+| Data Transport         | [GraphQL](https://github.com/graphql/graphql-js)                |
+| Real-time Connectivity | [graphql-ws](https://github.com/enisdenjo/graphql-ws)           |
+| Client Cache           | [Relay](https://facebook.github.io/relay/)                      |
+| UI Framework           | [React](https://facebook.github.io/react/)                      |
+| Styling (Legacy)       | [Emotion](https://emotion.sh/)                                  |
+| Styling                | [Tailwind CSS](https://tailwindcss.com/)                        |
 
 ## Setup
 
 ### Prerequisites
 
 - [Node](https://nodejs.org/en/download/)
-- [Yarn](https://classic.yarnpkg.com/en/docs/cli/install/)
+- [pnpm](https://pnpm.io/)
 - [Docker Compose](https://docs.docker.com/compose/install/)
 - [Watchman](https://facebook.github.io/watchman/docs/install.html) (Development only)
 
@@ -56,26 +54,21 @@ For all matters, please contact: support@parabol.co
 $ git clone https://github.com/ParabolInc/parabol.git
 $ cd parabol
 $ cp .env.example .env # Add your own vars here
-$ yarn
-$ yarn db:start
-$ yarn dev
+$ pnpm
+$ pnpm db:start
+$ pnpm dev
 ```
 
 By default, the app will run at: http://localhost:3000/
 
-If `yarn db:start` failed and `localhost:5050` isn't working, a docker
+If `pnpm db:start` failed and `localhost:5050` isn't working, a docker
 container, volume or image may be corrupted and need to be pruned.
 
 Build for production and start application:
 
 ```bash
-$ yarn && yarn build && yarn start
+$ pnpm && pnpm build && pnpm start
 ```
-
-### RethinkDB
-
-- Migrations are stored in `packages/server/database/migrations`
-- RethinkDB Dashboard is at [http://localhost:8080](http://localhost:8080)
 
 ### PostgreSQL
 
@@ -84,7 +77,7 @@ $ yarn && yarn build && yarn start
 - Click "Add New Server" and fill out the forms with your `.env` values
 
   - General.name = POSTGRES_DB
-  - Connection.host = 'postgres' (hardcoded from docker-compose dev.yml, not from .env!)
+  - Connection.host = 'postgres' (hardcoded from docker-compose `docker/stacks/development/docker-compose.yml`, not from .env!)
   - Connection.username = POSTGRES_USER
   - Connection.password = POSTGRES_PASSWORD
   - Connection.maintenanceDatabase = POSTGRES_DB

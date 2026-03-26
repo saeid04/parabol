@@ -1,12 +1,14 @@
-import DataLoader from 'dataloader'
-import * as primaryKeyLoaderMakers from './primaryKeyLoaderMakers'
-import RootDataLoader from './RootDataLoader'
+import type DataLoader from 'dataloader'
+import type NullableDataLoader from './NullableDataLoader'
+import type * as primaryKeyLoaderMakers from './primaryKeyLoaderMakers'
+import type RootDataLoader from './RootDataLoader'
+import type {RegisterDependsOn} from './RootDataLoader'
 import UpdatableCacheDataLoader from './UpdatableCacheDataLoader'
 
 type LoaderMakers = typeof primaryKeyLoaderMakers
 type LoaderKeys = keyof LoaderMakers
 type Loader<LoaderName extends LoaderKeys> = ReturnType<LoaderMakers[LoaderName]>
-type LoaderType<LoaderName extends LoaderKeys> = Loader<LoaderName> extends DataLoader<
+type LoaderType<LoaderName extends LoaderKeys> = Loader<LoaderName> extends NullableDataLoader<
   any,
   infer T,
   any
@@ -21,21 +23,20 @@ type LoaderType<LoaderName extends LoaderKeys> = Loader<LoaderName> extends Data
  * When an item is loaded via this loader, the primary loader will be primed with the result as well.
  * It reflects a one to many relationship, i.e. for each key passed, an array will be returned.
  */
+
 export function foreignKeyLoaderMaker<
   LoaderName extends LoaderKeys,
-  KeyName extends keyof LoaderType<LoaderName>
+  T extends LoaderType<LoaderName>,
+  KeyName extends keyof T
 >(
   primaryLoaderKey: LoaderName,
   foreignKey: KeyName,
-  fetchFn: (
-    keys: readonly LoaderType<LoaderName>[KeyName][]
-  ) => Promise<(LoaderType<LoaderName> & {id: string | number})[]>
+  fetchFn: (keys: readonly T[KeyName][]) => Promise<(T & {id?: string | number})[]>
 ) {
-  type T = LoaderType<LoaderName>
-  type PrimaryKeyT = string | number
   type KeyValue = T[KeyName]
-  return (parent: RootDataLoader) => {
-    const primaryLoader = parent.get(primaryLoaderKey) as DataLoader<PrimaryKeyT, T, PrimaryKeyT>
+  return (parent: RootDataLoader, dependsOn: RegisterDependsOn) => {
+    dependsOn(primaryLoaderKey)
+    const primaryLoader = parent.get(primaryLoaderKey) as DataLoader<any, T, any>
     return new UpdatableCacheDataLoader<KeyValue, T[], KeyValue>(
       async (ids) => {
         const items = await fetchFn(ids)

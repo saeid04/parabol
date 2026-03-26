@@ -1,15 +1,14 @@
 import graphql from 'babel-plugin-relay/macro'
-import React from 'react'
 import {useFragment} from 'react-relay'
 import useAtmosphere from '~/hooks/useAtmosphere'
+import type {AzureDevOpsProviderRow_viewer$key} from '../../../../__generated__/AzureDevOpsProviderRow_viewer.graphql'
 import AzureDevOpsConfigMenu from '../../../../components/AzureDevOpsConfigMenu'
 import AzureDevOpsProviderLogo from '../../../../components/AzureDevOpsProviderLogo'
 import {MenuPosition} from '../../../../hooks/useCoords'
 import useMenu from '../../../../hooks/useMenu'
-import useMutationProps, {MenuMutationProps} from '../../../../hooks/useMutationProps'
+import useMutationProps, {type MenuMutationProps} from '../../../../hooks/useMutationProps'
 import {Providers} from '../../../../types/constEnums'
 import AzureDevOpsClientManager from '../../../../utils/AzureDevOpsClientManager'
-import {AzureDevOpsProviderRow_viewer$key} from '../../../../__generated__/AzureDevOpsProviderRow_viewer.graphql'
 import ProviderRow from './ProviderRow'
 
 interface Props {
@@ -53,8 +52,13 @@ const AzureDevOpsProviderRow = (props: Props) => {
     viewerRef
   )
   const atmosphere = useAtmosphere()
-  const {submitting, submitMutation, onError, onCompleted} = useMutationProps()
-  const mutationProps = {submitting, submitMutation, onError, onCompleted} as MenuMutationProps
+  const {submitting, submitMutation, error, onError, onCompleted} = useMutationProps()
+  const mutationProps = {
+    submitting,
+    submitMutation,
+    onError,
+    onCompleted
+  } as MenuMutationProps
   const {teamMember} = viewer
   const {integrations} = teamMember!
   const {azureDevOps} = integrations
@@ -79,6 +83,7 @@ const AzureDevOpsProviderRow = (props: Props) => {
         providerName={Providers.AZUREDEVOPS_NAME}
         providerDescription={Providers.AZUREDEVOPS_DESC}
         providerLogo={<AzureDevOpsProviderLogo />}
+        error={error?.message}
       />
       {menuPortal(
         <AzureDevOpsConfigMenu

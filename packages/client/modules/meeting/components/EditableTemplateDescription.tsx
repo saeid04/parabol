@@ -1,5 +1,4 @@
 import styled from '@emotion/styled'
-import React from 'react'
 import EditableText from '../../../components/EditableText'
 import useAtmosphere from '../../../hooks/useAtmosphere'
 import useMutationProps from '../../../hooks/useMutationProps'
@@ -42,7 +41,9 @@ const EditableTemplateDescription = (props: Props) => {
   const validate = (rawValue: string) => {
     const res = legitify(rawValue)
     if (res.error) {
-      onError(new Error(res.error))
+      if (error?.message !== res.error) {
+        onError(new Error(res.error))
+      }
     } else {
       onCompleted()
     }
@@ -55,6 +56,7 @@ const EditableTemplateDescription = (props: Props) => {
 
   return (
     <EditableSubText
+      isWrap
       disabled={!isOwner}
       error={error?.message}
       hideIcon

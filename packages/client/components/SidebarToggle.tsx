@@ -1,7 +1,6 @@
 import styled from '@emotion/styled'
-import React from 'react'
 import {PALETTE} from '../styles/paletteV3'
-import {BaseButtonProps} from './BaseButton'
+import type {BaseButtonProps} from './BaseButton'
 import IconButton from './IconButton'
 
 const StyledButton = styled(IconButton)({

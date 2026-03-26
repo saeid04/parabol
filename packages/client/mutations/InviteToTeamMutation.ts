@@ -1,15 +1,15 @@
 import graphql from 'babel-plugin-relay/macro'
 import {commitMutation} from 'react-relay'
 import {matchPath} from 'react-router'
-import {
+import type {InviteToTeamMutation as TInviteToTeamMutation} from '../__generated__/InviteToTeamMutation.graphql'
+import type {InviteToTeamMutation_notification$data} from '../__generated__/InviteToTeamMutation_notification.graphql'
+import type {
   LocalHandlers,
   OnNextHandler,
-  OnNextHistoryContext,
+  OnNextNavigateContext,
   SharedUpdater,
   StandardMutation
 } from '../types/relayMutations'
-import {InviteToTeamMutation as TInviteToTeamMutation} from '../__generated__/InviteToTeamMutation.graphql'
-import {InviteToTeamMutation_notification} from '../__generated__/InviteToTeamMutation_notification.graphql'
 import AcceptTeamInvitationMutation from './AcceptTeamInvitationMutation'
 import handleAddNotifications from './handlers/handleAddNotifications'
 import handleRemoveSuggestedActions from './handlers/handleRemoveSuggestedActions'
@@ -48,8 +48,8 @@ const mutation = graphql`
 `
 
 const popInvitationReceivedToast = (
-  notification: InviteToTeamMutation_notification['teamInvitationNotification'] | null,
-  {atmosphere, history}: OnNextHistoryContext
+  notification: InviteToTeamMutation_notification$data['teamInvitationNotification'] | null,
+  {atmosphere, navigate}: OnNextNavigateContext
 ) => {
   if (!notification) return
   const {
@@ -67,27 +67,26 @@ const popInvitationReceivedToast = (
     action: {
       label: 'Accept!',
       callback: () => {
-        AcceptTeamInvitationMutation(atmosphere, {invitationToken, notificationId}, {history})
+        AcceptTeamInvitationMutation(atmosphere, {invitationToken, notificationId}, {navigate})
       }
     }
   })
 }
 
-export const inviteToTeamNotificationUpdater: SharedUpdater<InviteToTeamMutation_notification> = (
-  payload,
-  {store}
-) => {
+export const inviteToTeamNotificationUpdater: SharedUpdater<
+  InviteToTeamMutation_notification$data
+> = (payload, {store}) => {
   const teamInvitationNotification = payload.getLinkedRecord('teamInvitationNotification')
   handleAddNotifications(teamInvitationNotification, store)
 }
 
 export const inviteToTeamNotificationOnNext: OnNextHandler<
-  InviteToTeamMutation_notification,
-  OnNextHistoryContext
-> = (payload, {atmosphere, history}) => {
+  InviteToTeamMutation_notification$data,
+  OnNextNavigateContext
+> = (payload, {atmosphere, navigate}) => {
   const {teamInvitationNotification} = payload
   if (!teamInvitationNotification) return
-  const isWaiting = !!matchPath(window.location.pathname, {path: `/invitation-required`})
+  const isWaiting = !!matchPath('/invitation-required', window.location.pathname)
   if (isWaiting) {
     const search = new URLSearchParams(window.location.search)
     const meetingId = search.get('meetingId')
@@ -96,10 +95,13 @@ export const inviteToTeamNotificationOnNext: OnNextHandler<
     AcceptTeamInvitationMutation(
       atmosphere,
       {invitationToken, notificationId},
-      {history, meetingId}
+      {navigate, meetingId}
     )
   } else {
-    popInvitationReceivedToast(teamInvitationNotification, {atmosphere, history})
+    popInvitationReceivedToast(teamInvitationNotification, {
+      atmosphere,
+      navigate
+    })
   }
 }
 

@@ -1,19 +1,19 @@
 import styled from '@emotion/styled'
 import graphql from 'babel-plugin-relay/macro'
-import React, {useEffect} from 'react'
-import {PreloadedQuery, usePreloadedQuery} from 'react-relay'
+import {useEffect} from 'react'
+import {type PreloadedQuery, usePreloadedQuery} from 'react-relay'
+import {useNavigate} from 'react-router'
+import type {UnpaidTeamModalQuery} from '../../../../__generated__/UnpaidTeamModalQuery.graphql'
 import DashModal from '../../../../components/Dashboard/DashModal'
 import DialogContent from '../../../../components/DialogContent'
 import DialogTitle from '../../../../components/DialogTitle'
 import IconLabel from '../../../../components/IconLabel'
 import PrimaryButton from '../../../../components/PrimaryButton'
 import useAtmosphere from '../../../../hooks/useAtmosphere'
-import useRouter from '../../../../hooks/useRouter'
-import SendClientSegmentEventMutation from '../../../../mutations/SendClientSegmentEventMutation'
+import type {UpgradeCTALocationEnumType} from '../../../../shared/UpgradeCTALocationEnumType'
 import {PALETTE} from '../../../../styles/paletteV3'
 import {ExternalLinks, Threshold} from '../../../../types/constEnums'
-import {UpgradeCTALocationEnum} from '../../../../__generated__/SendClientSegmentEventMutation.graphql'
-import {UnpaidTeamModalQuery} from '../../../../__generated__/UnpaidTeamModalQuery.graphql'
+import SendClientSideEvent from '../../../../utils/SendClientSideEvent'
 
 const StyledButton = styled(PrimaryButton)({
   margin: '1.5rem auto 0'
@@ -39,15 +39,17 @@ const query = graphql`
   query UnpaidTeamModalQuery($teamId: ID!) {
     viewer {
       team(teamId: $teamId) {
-        lockMessageHTML
         organization {
           id
           lockedAt
+          unpaidMessageHTML
           name
           billingLeaders {
-            id
-            preferredName
-            email
+            user {
+              id
+              preferredName
+              email
+            }
           }
           creditCard {
             brand
@@ -62,18 +64,16 @@ const query = graphql`
 
 const UnpaidTeamModal = (props: Props) => {
   const {queryRef} = props
-  const data = usePreloadedQuery<UnpaidTeamModalQuery>(query, queryRef, {
-    UNSTABLE_renderPolicy: 'full'
-  })
+  const data = usePreloadedQuery<UnpaidTeamModalQuery>(query, queryRef)
   const {viewer} = data
   const atmosphere = useAtmosphere()
-  const {history} = useRouter()
+  const navigate = useNavigate()
   const {viewerId} = atmosphere
   const {team} = viewer
 
   useEffect(() => {
     if (team?.organization.lockedAt) {
-      SendClientSegmentEventMutation(atmosphere, 'Upgrade CTA Viewed', {
+      SendClientSideEvent(atmosphere, 'Upgrade CTA Viewed', {
         upgradeCTALocation: 'organizationLockedModal',
         orgId: team.organization.id
       })
@@ -81,21 +81,22 @@ const UnpaidTeamModal = (props: Props) => {
   }, [])
 
   if (!team) return null
-  const {name: teamName, organization, lockMessageHTML} = team
+  const {name: teamName, organization} = team
 
-  const {name: organizationName} = organization
+  const {name: organizationName, unpaidMessageHTML} = organization
 
   const {id: orgId, billingLeaders, name: orgName} = organization
   const [firstBillingLeader] = billingLeaders
-  const billingLeaderName = firstBillingLeader?.preferredName ?? 'Unknown'
-  const email = firstBillingLeader?.email ?? 'Unknown'
-  const isALeader = billingLeaders.findIndex((leader) => leader.id === viewerId) !== -1
+  const {user: firstBillingLeaderUser} = firstBillingLeader ?? {}
+  const billingLeaderName = firstBillingLeaderUser?.preferredName ?? 'Unknown'
+  const email = firstBillingLeaderUser?.email ?? 'Unknown'
+  const isALeader = billingLeaders.findIndex((leader) => leader.user.id === viewerId) !== -1
 
-  const goToBilling = (upgradeCTALocation: UpgradeCTALocationEnum) => {
-    SendClientSegmentEventMutation(atmosphere, 'Upgrade CTA Clicked', {
+  const goToBilling = (upgradeCTALocation: UpgradeCTALocationEnumType) => {
+    SendClientSideEvent(atmosphere, 'Upgrade CTA Clicked', {
       upgradeCTALocation
     })
-    history.push(`/me/organizations/${orgId}`)
+    navigate(`/me/organizations/${orgId}`)
   }
 
   if (organization.lockedAt) {
@@ -128,10 +129,10 @@ const UnpaidTeamModal = (props: Props) => {
     )
   }
 
-  if (lockMessageHTML) {
+  if (unpaidMessageHTML) {
     return (
       <DashModal>
-        <div dangerouslySetInnerHTML={{__html: lockMessageHTML}} />
+        <div dangerouslySetInnerHTML={{__html: unpaidMessageHTML}} />
       </DashModal>
     )
   }

@@ -1,7 +1,7 @@
 import graphql from 'babel-plugin-relay/macro'
 import {commitMutation} from 'react-relay'
-import {StandardMutation} from '../types/relayMutations'
-import {DismissNewFeatureMutation as TDismissNewFeatureMutation} from '../__generated__/DismissNewFeatureMutation.graphql'
+import type {DismissNewFeatureMutation as TDismissNewFeatureMutation} from '../__generated__/DismissNewFeatureMutation.graphql'
+import type {StandardMutation} from '../types/relayMutations'
 
 const mutation = graphql`
   mutation DismissNewFeatureMutation {
@@ -22,12 +22,12 @@ const DismissNewFeatureMutation: StandardMutation<TDismissNewFeatureMutation> = 
     mutation,
     variables,
     updater: (store) => {
-      const viewer = store.getRoot().getLinkedRecord('viewer')!
-      viewer.setValue(null, 'newFeature')
+      const viewer = store.getRoot().getLinkedRecord('viewer')
+      viewer?.setValue(null, 'newFeature')
     },
     optimisticUpdater: (store) => {
-      const viewer = store.getRoot().getLinkedRecord('viewer')!
-      viewer.setValue(null, 'newFeature')
+      const viewer = store.getRoot().getLinkedRecord('viewer')
+      viewer?.setValue(null, 'newFeature')
     },
     onError,
     onCompleted

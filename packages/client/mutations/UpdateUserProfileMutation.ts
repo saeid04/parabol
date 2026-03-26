@@ -1,17 +1,13 @@
 import graphql from 'babel-plugin-relay/macro'
 import {commitMutation} from 'react-relay'
-import {StandardMutation} from '../types/relayMutations'
-import {UpdateUserProfileMutation as TUpdateUserProfileMutation} from '../__generated__/UpdateUserProfileMutation.graphql'
+import type {UpdateUserProfileMutation as TUpdateUserProfileMutation} from '../__generated__/UpdateUserProfileMutation.graphql'
+import type {StandardMutation} from '../types/relayMutations'
 
 graphql`
   fragment UpdateUserProfileMutation_team on UpdateUserProfilePayload {
-    teamMembers {
+    user {
+      id
       preferredName
-      picture
-      user {
-        picture
-        preferredName
-      }
     }
   }
 `
@@ -40,13 +36,10 @@ const UpdateUserProfileMutation: StandardMutation<TUpdateUserProfileMutation> = 
       const viewer = store.get(viewerId)
       if (!viewer) return
       const {updatedUser} = variables
-      const {picture, preferredName} = updatedUser
+      const {preferredName} = updatedUser
       if (viewer) {
         if (preferredName) {
           viewer.setValue(preferredName, 'preferredName')
-        }
-        if (picture) {
-          viewer.setValue(picture, 'picture')
         }
       }
     },

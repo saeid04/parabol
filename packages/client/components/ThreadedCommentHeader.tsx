@@ -1,20 +1,23 @@
 import styled from '@emotion/styled'
 import graphql from 'babel-plugin-relay/macro'
-import React from 'react'
-import {createFragmentContainer} from 'react-relay'
+import {useFragment} from 'react-relay'
+import type {
+  ThreadedCommentHeader_comment$data,
+  ThreadedCommentHeader_comment$key
+} from '~/__generated__/ThreadedCommentHeader_comment.graphql'
 import {PALETTE} from '~/styles/paletteV3'
 import relativeDate from '~/utils/date/relativeDate'
-import {ThreadedCommentHeader_comment} from '~/__generated__/ThreadedCommentHeader_comment.graphql'
+import {PARABOL_AI_USER_ID} from '../utils/constants'
 import CommentAuthorOptionsButton from './CommentAuthorOptionsButton'
 import AddReactjiButton from './ReflectionCard/AddReactjiButton'
 import ThreadedItemHeaderDescription from './ThreadedItemHeaderDescription'
 import ThreadedReplyButton from './ThreadedReplyButton'
 
-const HeaderActions = styled('div')<{isViewerComment: boolean}>(({isViewerComment}) => ({
+const HeaderActions = styled('div')<{isEditable: boolean}>(({isEditable}) => ({
   color: PALETTE.SLATE_600,
   display: 'flex',
   fontWeight: 600,
-  paddingRight: !isViewerComment ? 32 : 8
+  paddingRight: !isEditable ? 32 : 8
 }))
 
 const AddReactji = styled(AddReactjiButton)({
@@ -23,15 +26,14 @@ const AddReactji = styled(AddReactjiButton)({
 })
 
 interface Props {
-  comment: ThreadedCommentHeader_comment
+  comment: ThreadedCommentHeader_comment$key
   editComment: () => void
   onToggleReactji: (emojiId: string) => void
   onReply: () => void
-  dataCy: string
   meetingId: string
 }
 
-const getName = (comment: ThreadedCommentHeader_comment) => {
+const getName = (comment: ThreadedCommentHeader_comment$data) => {
   const {isActive, createdByUserNullable, isViewerComment} = comment
   if (!isActive) return 'Message Deleted'
   if (createdByUserNullable?.preferredName) return createdByUserNullable.preferredName
@@ -39,23 +41,49 @@ const getName = (comment: ThreadedCommentHeader_comment) => {
 }
 
 const ThreadedCommentHeader = (props: Props) => {
-  const {comment, onReply, editComment, onToggleReactji, dataCy, meetingId} = props
-  const {id: commentId, isActive, isViewerComment, reactjis, updatedAt} = comment
+  const {comment: commentRef, onReply, editComment, onToggleReactji, meetingId} = props
+  const comment = useFragment(
+    graphql`
+      fragment ThreadedCommentHeader_comment on Comment {
+        id
+        createdByUserNullable: createdByUser {
+          id
+          preferredName
+        }
+        isActive
+        isViewerComment
+        reactjis {
+          id
+        }
+        updatedAt
+      }
+    `,
+    commentRef
+  )
+  const {
+    id: commentId,
+    isActive,
+    isViewerComment,
+    reactjis,
+    updatedAt,
+    createdByUserNullable
+  } = comment
+  const isAIComment = createdByUserNullable?.id === PARABOL_AI_USER_ID
   const name = getName(comment)
   const hasReactjis = reactjis.length > 0
+  const isEditable = isViewerComment || isAIComment
   return (
     <ThreadedItemHeaderDescription title={name} subTitle={relativeDate(updatedAt)}>
       {isActive && (
-        <HeaderActions isViewerComment={isViewerComment}>
+        <HeaderActions isEditable={isEditable}>
           {!hasReactjis && (
             <>
               <AddReactji onToggle={onToggleReactji} />
-              <ThreadedReplyButton dataCy={`${dataCy}`} onReply={onReply} />
+              <ThreadedReplyButton onReply={onReply} />
             </>
           )}
-          {isViewerComment && (
+          {isEditable && (
             <CommentAuthorOptionsButton
-              dataCy={`${dataCy}`}
               editComment={editComment}
               commentId={commentId}
               meetingId={meetingId}
@@ -67,19 +95,4 @@ const ThreadedCommentHeader = (props: Props) => {
   )
 }
 
-export default createFragmentContainer(ThreadedCommentHeader, {
-  comment: graphql`
-    fragment ThreadedCommentHeader_comment on Comment {
-      id
-      createdByUserNullable: createdByUser {
-        preferredName
-      }
-      isActive
-      isViewerComment
-      reactjis {
-        id
-      }
-      updatedAt
-    }
-  `
-})
+export default ThreadedCommentHeader

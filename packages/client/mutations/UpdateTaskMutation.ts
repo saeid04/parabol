@@ -1,18 +1,17 @@
+import {generateText} from '@tiptap/core'
 import graphql from 'babel-plugin-relay/macro'
 import {commitMutation} from 'react-relay'
-import ITask from '../../server/database/types/Task'
-import {
+import type {UpdateTaskMutation as TUpdateTaskMutation} from '../__generated__/UpdateTaskMutation.graphql'
+import type {UpdateTaskMutation_task$data} from '../__generated__/UpdateTaskMutation_task.graphql'
+import {getTagsFromTipTapTask} from '../shared/tiptap/getTagsFromTipTapTask'
+import {serverTipTapExtensions} from '../shared/tiptap/serverTipTapExtensions'
+import type {
   OnNextHandler,
-  OnNextHistoryContext,
+  OnNextNavigateContext,
   OptionalHandlers,
   SharedUpdater,
   StandardMutation
 } from '../types/relayMutations'
-import extractTextFromDraftString from '../utils/draftjs/extractTextFromDraftString'
-import getTagsFromEntityMap from '../utils/draftjs/getTagsFromEntityMap'
-import updateProxyRecord from '../utils/relay/updateProxyRecord'
-import {UpdateTaskMutation as TUpdateTaskMutation} from '../__generated__/UpdateTaskMutation.graphql'
-import {UpdateTaskMutation_task} from '../__generated__/UpdateTaskMutation_task.graphql'
 import handleAddNotifications from './handlers/handleAddNotifications'
 import handleRemoveTasks from './handlers/handleRemoveTasks'
 import handleUpsertTasks from './handlers/handleUpsertTasks'
@@ -32,7 +31,9 @@ graphql`
     addedNotification {
       type
       changeAuthor {
-        preferredName
+        user {
+          preferredName
+        }
       }
       team {
         id
@@ -54,16 +55,20 @@ const mutation = graphql`
   }
 `
 
-export const updateTaskTaskOnNext: OnNextHandler<UpdateTaskMutation_task, OnNextHistoryContext> = (
-  payload,
-  {atmosphere, history}
-) => {
+export const updateTaskTaskOnNext: OnNextHandler<
+  UpdateTaskMutation_task$data,
+  OnNextNavigateContext
+> = (payload, {atmosphere, navigate}) => {
   if (!payload || !payload.addedNotification) return
-  popInvolvementToast(payload.addedNotification, {atmosphere, history})
+  popInvolvementToast(payload.addedNotification, {atmosphere, navigate})
 }
 
-export const updateTaskTaskUpdater: SharedUpdater<UpdateTaskMutation_task> = (payload, {store}) => {
-  const task = payload.getLinkedRecord('task')!
+export const updateTaskTaskUpdater: SharedUpdater<UpdateTaskMutation_task$data> = (
+  payload,
+  {store}
+) => {
+  const task = payload.getLinkedRecord('task')
+  if (!task) return
   handleUpsertTasks(task as any, store as any)
 
   const addedNotification = payload.getLinkedRecord('addedNotification')
@@ -94,7 +99,7 @@ const UpdateTaskMutation: StandardMutation<TUpdateTaskMutation, OptionalHandlers
       const error = payload.getLinkedRecord('error')
       if (error) {
         const {id: taskId} = updatedTask
-        const task = store.get<ITask>(taskId)
+        const task = store.get(taskId)
         if (task) {
           const message = error.getValue('message')
           task.setValue(message, 'error')
@@ -103,24 +108,22 @@ const UpdateTaskMutation: StandardMutation<TUpdateTaskMutation, OptionalHandlers
       updateTaskTaskUpdater(payload, {atmosphere, store: store as any})
     },
     optimisticUpdater: (store) => {
-      const {id, content, userId} = updatedTask
+      const {id, content, userId, status, sortOrder} = updatedTask
       const task = store.get(id)
       if (!task) return
-      const now = new Date()
-      const optimisticTask = {
-        ...updatedTask,
-        updatedAt: now.toJSON()
-      }
-      updateProxyRecord(task, optimisticTask)
+      status && task.setValue(status, 'status')
+      sortOrder && task.setValue(sortOrder, 'sortOrder')
       if (userId) {
         task.setValue(userId, 'userId')
         task.setLinkedRecord(store.get(userId)!, 'user')
       }
       if (content) {
-        const {entityMap} = JSON.parse(content)
-        const nextTags = getTagsFromEntityMap(entityMap)
+        // do not update content because that will cause the editor to rebuild itself
+        // we only want a rebuild if someone else changes the content
+        const contentJSON = JSON.parse(content)
+        const nextTags = getTagsFromTipTapTask(contentJSON)
         task.setValue(nextTags, 'tags')
-        const plaintextContent = extractTextFromDraftString(content)
+        const plaintextContent = generateText(contentJSON, serverTipTapExtensions)
         task.setValue(plaintextContent, 'plaintextContent')
       }
       handleUpsertTasks(task as any, store)

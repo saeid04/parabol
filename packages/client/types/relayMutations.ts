@@ -1,25 +1,26 @@
-import {RouterProps} from 'react-router'
-import {
+import type {NavigateFunction} from 'react-router'
+import type {
   commitMutation,
   MutationParameters,
   RecordProxy,
   RecordSourceSelectorProxy
 } from 'relay-runtime'
-import Atmosphere from '../Atmosphere'
+import type Atmosphere from '../Atmosphere'
 
-export interface CompletedHandler<TResponse = any> {
-  (response: TResponse, errors?: readonly any[] | null): void
-}
+export type NavigateFn = NavigateFunction
 
-export interface ErrorHandler {
-  (error: Error): void
-}
+export type CompletedHandler<TResponse = any> = (
+  response: TResponse,
+  errors?: readonly any[] | null
+) => void
+
+export type ErrorHandler = (error: Error) => void
 
 /* DEPRECATED, use BaseLocalHandlers+ */
 export interface LocalHandlers {
   onError?: ErrorHandler
   onCompleted?: CompletedHandler
-  history?: RouterProps['history']
+  navigate?: NavigateFn
 }
 
 export interface BaseLocalHandlers {
@@ -27,12 +28,12 @@ export interface BaseLocalHandlers {
   onCompleted: CompletedHandler
 }
 
-export interface HistoryLocalHandler extends BaseLocalHandlers {
-  history: RouterProps['history']
+export interface NavigateLocalHandler extends BaseLocalHandlers {
+  navigate: NavigateFn
 }
 
-export interface HistoryMaybeLocalHandler {
-  history: RouterProps['history']
+export interface NavigateMaybeLocalHandler {
+  navigate: NavigateFn
   onError?: ErrorHandler
   onCompleted?: CompletedHandler
 }
@@ -45,33 +46,37 @@ interface UpdaterContext {
   store: RecordSourceSelectorProxy
 }
 
-export interface SharedUpdater<T> {
-  (payload: RecordProxy<Omit<T, ' $refType'>>, context: UpdaterContext): void
-}
+export type SharedUpdater<T> = (
+  payload: RecordProxy<Omit<NonNullable<T>, ' $fragmentType'>>,
+  context: UpdaterContext
+) => void
 
 export interface OnNextBaseContext {
   atmosphere: Atmosphere
 }
 
-export interface OnNextHistoryContext extends OnNextBaseContext {
-  history: RouterProps['history']
+export interface OnNextNavigateContext extends OnNextBaseContext {
+  navigate: NavigateFn
 }
 
 export type OnNextHandler<TSubResponse, C = OnNextBaseContext> = (
-  payload: undefined extends TSubResponse
-    ? Omit<NonNullable<TSubResponse>, ' $refType'> | undefined
-    : Omit<TSubResponse, ' $refType'>,
+  payload: null extends TSubResponse
+    ? Omit<NonNullable<TSubResponse>, ' $fragmentType'> | null
+    : undefined extends TSubResponse
+      ? Omit<NonNullable<TSubResponse>, ' $fragmentType'> | undefined
+      : Omit<TSubResponse, ' $fragmentType'>,
   context: C
 ) => void
 
-export type SimpleMutation<T extends MutationParameters> = {
-  (atmosphere: Atmosphere, variables: T['variables']): ReturnType<typeof commitMutation> | undefined
-}
-export type StandardMutation<T extends MutationParameters, C = BaseLocalHandlers> = {
-  (atmosphere: Atmosphere, variables: T['variables'], localHandlers: C): ReturnType<
-    typeof commitMutation
-  >
-}
+export type SimpleMutation<T extends MutationParameters> = (
+  atmosphere: Atmosphere,
+  variables: T['variables']
+) => ReturnType<typeof commitMutation> | undefined
+export type StandardMutation<T extends MutationParameters, C = BaseLocalHandlers> = (
+  atmosphere: Atmosphere,
+  variables: T['variables'],
+  localHandlers: C
+) => ReturnType<typeof commitMutation>
 
 export type RelayDateHack<T extends {variables: any}, P> = Omit<T, 'variables'> & {
   variables: Omit<T['variables'], keyof P> & P

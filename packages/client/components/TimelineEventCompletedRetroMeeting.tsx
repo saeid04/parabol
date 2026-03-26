@@ -1,18 +1,18 @@
 import styled from '@emotion/styled'
 import graphql from 'babel-plugin-relay/macro'
-import React from 'react'
-import {createFragmentContainer} from 'react-relay'
+import {useFragment} from 'react-relay'
+import type {TimelineEventCompletedRetroMeeting_timelineEvent$key} from '../__generated__/TimelineEventCompletedRetroMeeting_timelineEvent.graphql'
 import useAtmosphere from '../hooks/useAtmosphere'
-import SendClientSegmentEventMutation from '../mutations/SendClientSegmentEventMutation'
+import {GQLID} from '../utils/GQLID'
 import plural from '../utils/plural'
-import {TimelineEventCompletedRetroMeeting_timelineEvent} from '../__generated__/TimelineEventCompletedRetroMeeting_timelineEvent.graphql'
+import SendClientSideEvent from '../utils/SendClientSideEvent'
 import StyledLink from './StyledLink'
+import TimelineEventTitle from './TImelineEventTitle'
 import TimelineEventBody from './TimelineEventBody'
 import TimelineEventCard from './TimelineEventCard'
-import TimelineEventTitle from './TImelineEventTitle'
 
 interface Props {
-  timelineEvent: TimelineEventCompletedRetroMeeting_timelineEvent
+  timelineEvent: TimelineEventCompletedRetroMeeting_timelineEvent$key
 }
 
 const CountItem = styled('span')({
@@ -24,7 +24,36 @@ const Link = styled(StyledLink)({
 })
 
 const TimelineEventCompletedRetroMeeting = (props: Props) => {
-  const {timelineEvent} = props
+  const {timelineEvent: timelineEventRef} = props
+  const timelineEvent = useFragment(
+    graphql`
+      fragment TimelineEventCompletedRetroMeeting_timelineEvent on TimelineEventCompletedRetroMeeting {
+        ...TimelineEventCard_timelineEvent
+        id
+        meeting {
+          id
+          commentCount
+          name
+          reflectionCount
+          taskCount
+          topicCount
+          locked
+          organization {
+            id
+            viewerOrganizationUser {
+              id
+            }
+          }
+          summaryPageId
+        }
+        team {
+          id
+          name
+        }
+      }
+    `,
+    timelineEventRef
+  )
   const {meeting, team} = timelineEvent
   const {
     id: meetingId,
@@ -34,15 +63,18 @@ const TimelineEventCompletedRetroMeeting = (props: Props) => {
     topicCount,
     taskCount,
     locked,
-    organization
+    organization,
+    summaryPageId
   } = meeting
   const {name: teamName} = team
   const {id: orgId, viewerOrganizationUser} = organization
   const canUpgrade = !!viewerOrganizationUser
-
+  const summaryURL = summaryPageId
+    ? `/pages/${GQLID.fromKey(summaryPageId)[0]}`
+    : `/new-summary/${meetingId}`
   const atmosphere = useAtmosphere()
   const onUpgrade = () => {
-    SendClientSegmentEventMutation(atmosphere, 'Upgrade CTA Clicked', {
+    SendClientSideEvent(atmosphere, 'Upgrade CTA Clicked', {
       upgradeCTALocation: 'timelineHistoryLock',
       upgradeTier: 'team',
       meetingId
@@ -89,7 +121,7 @@ const TimelineEventCompletedRetroMeeting = (props: Props) => {
           <>
             <Link to={`/meet/${meetingId}/discuss/1`}>See the discussion</Link>
             {' in your meeting or '}
-            <Link to={`/new-summary/${meetingId}`}>review a summary</Link>
+            <Link to={summaryURL}>review a summary</Link>
           </>
         )}
       </TimelineEventBody>
@@ -97,30 +129,4 @@ const TimelineEventCompletedRetroMeeting = (props: Props) => {
   )
 }
 
-export default createFragmentContainer(TimelineEventCompletedRetroMeeting, {
-  timelineEvent: graphql`
-    fragment TimelineEventCompletedRetroMeeting_timelineEvent on TimelineEventCompletedRetroMeeting {
-      ...TimelineEventCard_timelineEvent
-      id
-      meeting {
-        id
-        commentCount
-        name
-        reflectionCount
-        taskCount
-        topicCount
-        locked
-        organization {
-          id
-          viewerOrganizationUser {
-            id
-          }
-        }
-      }
-      team {
-        id
-        name
-      }
-    }
-  `
-})
+export default TimelineEventCompletedRetroMeeting

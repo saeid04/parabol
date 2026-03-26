@@ -1,54 +1,16 @@
-import styled from '@emotion/styled'
 import {ArrowUpward} from '@mui/icons-material'
-import React from 'react'
-import {PALETTE} from '~/styles/paletteV3'
-import isAndroid from '~/utils/draftjs/isAndroid'
 import {MenuPosition} from '../hooks/useCoords'
 import useTooltip from '../hooks/useTooltip'
-import PlainButton from './PlainButton/PlainButton'
 
 export type CommentSubmitState = 'idle' | 'typing'
-
-const StyledPlainButton = styled(PlainButton, {
-  shouldForwardProp: (prop) => !['commentSubmitState'].includes(prop)
-})<{commentSubmitState: CommentSubmitState}>(({commentSubmitState}) => ({
-  display: 'flex',
-  alignItems: 'center',
-  justifyContent: 'center',
-  backgroundColor: commentSubmitState === 'idle' ? PALETTE.SLATE_200 : PALETTE.SKY_500,
-  transition: 'background-color 0.1s ease',
-  borderRadius: '100%',
-  height: 32,
-  width: 32,
-  margin: 8,
-  ':hover, :focus, :active': {
-    backgroundColor: commentSubmitState === 'idle' ? PALETTE.SLATE_200 : PALETTE.SKY_600
-  },
-  opacity: 1,
-  ':hover,:focus': {
-    opacity: 1
-  }
-}))
-
-const SendIcon = styled(ArrowUpward, {
-  shouldForwardProp: (prop) => !['commentSubmitState'].includes(prop)
-})<{commentSubmitState: CommentSubmitState}>(({commentSubmitState}) => ({
-  opacity: 1,
-  transition: 'color 0.1s ease',
-  color: commentSubmitState === 'idle' ? PALETTE.SLATE_500 : PALETTE.WHITE,
-  height: 20,
-  width: 20,
-  margin: 4
-}))
 
 interface Props {
   commentSubmitState: CommentSubmitState
   onSubmit: () => void
-  dataCy: string
 }
 
 const SendCommentButton = (props: Props) => {
-  const {commentSubmitState, onSubmit, dataCy} = props
+  const {commentSubmitState, onSubmit} = props
   const {
     tooltipPortal,
     openTooltip,
@@ -58,26 +20,22 @@ const SendCommentButton = (props: Props) => {
 
   const isDisabled = commentSubmitState === 'idle'
 
-  const handleTouched = (e: React.TouchEvent) => {
-    if (!isAndroid) return
-    e.preventDefault()
-    onSubmit()
-  }
-
   return (
     <>
-      <StyledPlainButton
-        data-cy={`${dataCy}-send`}
+      <button
+        data-disabled={commentSubmitState === 'idle' ? '' : undefined}
+        className='m-2 flex h-8 w-8 shrink-0 cursor-pointer items-center justify-center rounded-full bg-sky-500 transition-colors hover:bg-sky-600 focus:bg-sky-600 active:bg-sky-600 data-disabled:bg-slate-200'
         onClick={onSubmit}
-        onTouchEnd={handleTouched}
         onMouseEnter={openTooltip}
         onMouseLeave={closeTooltip}
-        commentSubmitState={commentSubmitState}
         disabled={isDisabled}
         ref={tipRef}
       >
-        <SendIcon commentSubmitState={commentSubmitState} />
-      </StyledPlainButton>
+        <ArrowUpward
+          data-disabled={commentSubmitState === 'idle' ? '' : undefined}
+          className='m-1 h-5 w-5 text-white transition-colors data-disabled:text-slate-500'
+        />
+      </button>
       {tooltipPortal(<div>{'Send comment'}</div>)}
     </>
   )

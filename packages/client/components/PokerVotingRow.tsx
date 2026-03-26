@@ -1,19 +1,18 @@
 import styled from '@emotion/styled'
 import graphql from 'babel-plugin-relay/macro'
-import React from 'react'
-import {createFragmentContainer} from 'react-relay'
+import {useFragment} from 'react-relay'
+import type {PokerVotingRow_scaleValue$key} from '../__generated__/PokerVotingRow_scaleValue.graphql'
+import type {PokerVotingRow_scores$key} from '../__generated__/PokerVotingRow_scores.graphql'
 import {PALETTE} from '../styles/paletteV3'
 import {PokerCards} from '../types/constEnums'
-import {PokerVotingRow_scaleValue} from '../__generated__/PokerVotingRow_scaleValue.graphql'
-import {PokerVotingRow_scores} from '../__generated__/PokerVotingRow_scores.graphql'
 import AvatarList from './AvatarList'
 import MiniPokerCard from './MiniPokerCard'
 import PokerVotingNoVotes from './PokerVotingNoVotes'
 import PokerVotingRowBase from './PokerVotingRowBase'
 
 interface Props {
-  scaleValue: PokerVotingRow_scaleValue
-  scores: PokerVotingRow_scores
+  scaleValue: PokerVotingRow_scaleValue$key
+  scores: PokerVotingRow_scores$key
   setFinalScore?: () => void
   isInitialStageRender: boolean
 }
@@ -24,9 +23,29 @@ const MiniCardWrapper = styled('div')({
 })
 
 const PokerVotingRow = (props: Props) => {
-  const {scaleValue, scores, setFinalScore, isInitialStageRender} = props
+  const {scaleValue: scaleValueRef, scores: scoresRef, setFinalScore, isInitialStageRender} = props
+  const scaleValue = useFragment(
+    graphql`
+      fragment PokerVotingRow_scaleValue on TemplateScaleValue {
+        color
+        label
+      }
+    `,
+    scaleValueRef
+  )
+  const scores = useFragment(
+    graphql`
+      fragment PokerVotingRow_scores on EstimateUserScore @relay(plural: true) {
+        user {
+          ...AvatarList_users
+        }
+      }
+    `,
+    scoresRef
+  )
   const {label, color} = scaleValue
-  const users = scores.map(({user}) => user)
+  // filter shouldn't be necessary, but seeing this error pop up in datadog
+  const users = scores.filter(Boolean).map(({user}) => user)
   return (
     <PokerVotingRowBase>
       <MiniCardWrapper>
@@ -45,18 +64,4 @@ const PokerVotingRow = (props: Props) => {
   )
 }
 
-export default createFragmentContainer(PokerVotingRow, {
-  scaleValue: graphql`
-    fragment PokerVotingRow_scaleValue on TemplateScaleValue {
-      color
-      label
-    }
-  `,
-  scores: graphql`
-    fragment PokerVotingRow_scores on EstimateUserScore @relay(plural: true) {
-      user {
-        ...AvatarList_users
-      }
-    }
-  `
-})
+export default PokerVotingRow

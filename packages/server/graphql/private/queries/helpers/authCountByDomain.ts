@@ -1,7 +1,7 @@
 import getPg from '../../../../postgres/getPg'
 
 const domainFilterFields = ['createdAt', 'lastSeenAt'] as const
-type DomainFilterField = typeof domainFilterFields[number]
+type DomainFilterField = (typeof domainFilterFields)[number]
 type DomainTotal = {domain: string; total: number}
 
 const authCountByDomain = async (
@@ -19,6 +19,7 @@ const authCountByDomain = async (
         `SELECT count(*)::float as "total", "domain" from "User"
          WHERE (NOT $1 OR "inactive" = FALSE)
          AND "${filterField}" >= $2
+         AND domain IS NOT NULL
          GROUP BY "domain"
          ORDER BY "total" DESC`,
         [countOnlyActive ?? false, after]
@@ -26,6 +27,7 @@ const authCountByDomain = async (
     : await pg.query<DomainTotal>(
         `SELECT count(*)::float as "total", "domain" from "User"
          WHERE (NOT $1 OR "inactive" = FALSE)
+         AND domain IS NOT NULL
          GROUP BY "domain"
          ORDER BY "total" DESC`,
         [countOnlyActive ?? false]

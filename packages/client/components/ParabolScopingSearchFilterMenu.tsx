@@ -1,12 +1,11 @@
 import styled from '@emotion/styled'
 import graphql from 'babel-plugin-relay/macro'
-import React from 'react'
-import {commitLocalUpdate, createFragmentContainer} from 'react-relay'
+import {commitLocalUpdate, useFragment} from 'react-relay'
 import useAtmosphere from '~/hooks/useAtmosphere'
-import {ParabolSearchQuery} from '~/types/clientSchema'
+import type {ParabolSearchQuery} from '~/types/clientSchema'
 import {taskScopingStatusFilters} from '~/utils/constants'
-import {MenuProps} from '../hooks/useMenu'
-import {ParabolScopingSearchFilterMenu_meeting} from '../__generated__/ParabolScopingSearchFilterMenu_meeting.graphql'
+import type {ParabolScopingSearchFilterMenu_meeting$key} from '../__generated__/ParabolScopingSearchFilterMenu_meeting.graphql'
+import type {MenuProps} from '../hooks/useMenu'
 import Checkbox from './Checkbox'
 import DropdownMenuLabel from './DropdownMenuLabel'
 import Menu from './Menu'
@@ -24,11 +23,23 @@ const FilterLabel = styled(DropdownMenuLabel)({
 
 interface Props {
   menuProps: MenuProps
-  meeting: ParabolScopingSearchFilterMenu_meeting
+  meeting: ParabolScopingSearchFilterMenu_meeting$key
 }
 
 const ParabolScopingSearchFilterMenu = (props: Props) => {
-  const {meeting, menuProps} = props
+  const {meeting: meetingRef, menuProps} = props
+  const meeting = useFragment(
+    graphql`
+      fragment ParabolScopingSearchFilterMenu_meeting on PokerMeeting {
+        id
+        parabolSearchQuery {
+          queryString
+          statusFilters
+        }
+      }
+    `,
+    meetingRef
+  )
   const {portalStatus, isDropdown} = menuProps
   const {parabolSearchQuery, id: meetingId} = meeting
   const {statusFilters} = parabolSearchQuery
@@ -47,7 +58,7 @@ const ParabolScopingSearchFilterMenu = (props: Props) => {
             const meeting = store.get(meetingId)!
             const parabolSearchQuery =
               meeting.getLinkedRecord<ParabolSearchQuery>('parabolSearchQuery')
-            const statusFiltersProxy = parabolSearchQuery.getValue('statusFilters').slice()
+            const statusFiltersProxy = parabolSearchQuery.getValue('statusFilters')?.slice() ?? []
             const keyIdx = statusFiltersProxy.indexOf(status)
             keyIdx !== -1 ? statusFiltersProxy.splice(keyIdx, 1) : statusFiltersProxy.push(status)
             parabolSearchQuery.setValue(statusFiltersProxy, 'statusFilters')
@@ -70,14 +81,4 @@ const ParabolScopingSearchFilterMenu = (props: Props) => {
   )
 }
 
-export default createFragmentContainer(ParabolScopingSearchFilterMenu, {
-  meeting: graphql`
-    fragment ParabolScopingSearchFilterMenu_meeting on PokerMeeting {
-      id
-      parabolSearchQuery {
-        queryString
-        statusFilters
-      }
-    }
-  `
-})
+export default ParabolScopingSearchFilterMenu

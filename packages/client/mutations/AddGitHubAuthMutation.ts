@@ -1,7 +1,7 @@
 import graphql from 'babel-plugin-relay/macro'
 import {commitMutation} from 'react-relay'
-import {StandardMutation} from '../types/relayMutations'
-import {AddGitHubAuthMutation as TAddGitHubAuthMutation} from '../__generated__/AddGitHubAuthMutation.graphql'
+import type {AddGitHubAuthMutation as TAddGitHubAuthMutation} from '../__generated__/AddGitHubAuthMutation.graphql'
+import type {StandardMutation} from '../types/relayMutations'
 
 graphql`
   fragment AddGitHubAuthMutation_team on AddGitHubAuthPayload {
@@ -9,7 +9,7 @@ graphql`
       ...ScopePhaseAreaGitHub_teamMember
       integrations {
         github {
-          ...TaskFooterIntegrateMenuViewerGitHubIntegration
+          ...useIsIntegratedGitHubIntegration
           ...GitHubProviderRowGitHubIntegration
           ...GitHubScopingSearchBarGitHubIntegration
         }

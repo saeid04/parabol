@@ -1,9 +1,9 @@
 import styled from '@emotion/styled'
 import graphql from 'babel-plugin-relay/macro'
-import React from 'react'
-import {createFragmentContainer} from 'react-relay'
+import {useFragment} from 'react-relay'
+import type {TeamInvitationEmailCreateAccount_verifiedInvitation$key} from '../__generated__/TeamInvitationEmailCreateAccount_verifiedInvitation.graphql'
 import useDocumentTitle from '../hooks/useDocumentTitle'
-import {TeamInvitationEmailCreateAccount_verifiedInvitation} from '../__generated__/TeamInvitationEmailCreateAccount_verifiedInvitation.graphql'
+import {AUTH_DIALOG_WIDTH} from './AuthenticationDialog'
 import AuthPrivacyFooter from './AuthPrivacyFooter'
 import DialogContent from './DialogContent'
 import DialogTitle from './DialogTitle'
@@ -13,12 +13,12 @@ import InvitationDialogCopy from './InvitationDialogCopy'
 import InviteDialog from './InviteDialog'
 
 interface Props {
-  verifiedInvitation: TeamInvitationEmailCreateAccount_verifiedInvitation
+  verifiedInvitation: TeamInvitationEmailCreateAccount_verifiedInvitation$key
   invitationToken: string
 }
 
 const StyledDialog = styled(InviteDialog)({
-  maxWidth: 356
+  maxWidth: AUTH_DIALOG_WIDTH
 })
 
 const TeamName = styled('span')({
@@ -27,7 +27,19 @@ const TeamName = styled('span')({
 })
 
 const TeamInvitationEmailCreateAccount = (props: Props) => {
-  const {invitationToken, verifiedInvitation} = props
+  const {invitationToken, verifiedInvitation: verifiedInvitationRef} = props
+  const verifiedInvitation = useFragment(
+    graphql`
+      fragment TeamInvitationEmailCreateAccount_verifiedInvitation on VerifiedInvitationPayload {
+        meetingName
+        teamInvitation {
+          email
+        }
+        teamName
+      }
+    `,
+    verifiedInvitationRef
+  )
   const {meetingName, teamName, teamInvitation} = verifiedInvitation
   useDocumentTitle(`Sign up | Team Invitation`, 'Sign Up')
   if (!teamInvitation) return null
@@ -50,14 +62,4 @@ const TeamInvitationEmailCreateAccount = (props: Props) => {
   )
 }
 
-export default createFragmentContainer(TeamInvitationEmailCreateAccount, {
-  verifiedInvitation: graphql`
-    fragment TeamInvitationEmailCreateAccount_verifiedInvitation on VerifiedInvitationPayload {
-      meetingName
-      teamInvitation {
-        email
-      }
-      teamName
-    }
-  `
-})
+export default TeamInvitationEmailCreateAccount

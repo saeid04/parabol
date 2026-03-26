@@ -1,8 +1,10 @@
-import GenericMeetingPhase from '~/../server/database/types/GenericMeetingPhase'
-import {NewMeetingPhaseTypeEnum} from '~/__generated__/ActionMeeting_meeting.graphql'
+import type {NewMeetingPhaseTypeEnum} from '~/__generated__/ActionMeeting_meeting.graphql'
 
 const unlockAllStagesForPhase = (
-  phases: GenericMeetingPhase[],
+  phases: {
+    phaseType: string
+    stages: {id: string; isNavigable: boolean; isNavigableByFacilitator: boolean}[]
+  }[],
   phaseType: NewMeetingPhaseTypeEnum,
   isForFacilitator: boolean,
   isUnlock = true

@@ -1,47 +1,47 @@
-import getRethink from '../../database/rethinkDriver'
-import Organization from '../../database/types/Organization'
-import segmentIo from '../../utils/segmentIo'
+import type {DataLoaderWorker} from '../../graphql/graphql'
+import type {Organization} from '../../postgres/types'
+import {analytics} from '../../utils/analytics/analytics'
 import {getStripeManager} from '../../utils/stripe'
 
-const sendEnterpriseOverageToSegment = async (organization: Organization) => {
-  const r = await getRethink()
+const sendEnterpriseOverageEvent = async (
+  organization: Organization,
+  dataLoader: DataLoaderWorker
+) => {
   const manager = getStripeManager()
   const {id: orgId, stripeSubscriptionId} = organization
   if (!stripeSubscriptionId) return
-  const [orgUserCount, subscriptionItem] = await Promise.all([
-    r
-      .table('OrganizationUser')
-      .getAll(orgId, {index: 'orgId'})
-      .filter({removedAt: null, inactive: false})
-      .count()
-      .run(),
+  const [orgUsers, activeOrgUsers, subscriptionItem] = await Promise.all([
+    dataLoader.get('organizationUsersByOrgId').load(orgId),
+    dataLoader.get('activeOrganizationUsersByOrgId').load(orgId),
     manager.getSubscriptionItem(stripeSubscriptionId)
   ])
+  const orgUserCount = activeOrgUsers.length
   if (!subscriptionItem) return
 
   const quantity = subscriptionItem.quantity
   if (!quantity) return
   if (orgUserCount > quantity) {
-    const billingLeaderOrgUser = await r
-      .table('OrganizationUser')
-      .getAll(orgId, {index: 'orgId'})
-      .filter({removedAt: null, role: 'BILLING_LEADER'})
-      .nth(0)
-      .run()
+    const billingLeaderOrgUser = orgUsers.find(
+      ({role}) => role && ['BILLING_LEADER', 'ORG_ADMIN'].includes(role)
+    )!
     const {id: userId} = billingLeaderOrgUser
-    segmentIo.track({
-      userId,
-      event: 'Enterprise Over User Limit',
-      properties: {orgId}
-    })
+    const user = await dataLoader.get('users').load(userId)
+    if (user) {
+      analytics.enterpriseOverUserLimit(user, orgId)
+    }
   }
 }
 
-const handleEnterpriseOrgQuantityChanges = async (paidOrgs: Organization[]) => {
+const handleEnterpriseOrgQuantityChanges = async (
+  paidOrgs: Organization[],
+  dataLoader: DataLoaderWorker
+) => {
   const enterpriseOrgs = paidOrgs.filter((org) => org.tier === 'enterprise')
   if (enterpriseOrgs.length === 0) return
   for (const org of enterpriseOrgs) {
-    sendEnterpriseOverageToSegment(org).catch()
+    sendEnterpriseOverageEvent(org, dataLoader).catch(() => {
+      /*ignore*/
+    })
   }
 }
 

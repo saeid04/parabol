@@ -1,13 +1,14 @@
 import styled from '@emotion/styled'
 import graphql from 'babel-plugin-relay/macro'
-import React, {useRef} from 'react'
+import {useRef} from 'react'
 import {useFragment} from 'react-relay'
+import type {MeetingControlBar_meeting$key} from '~/__generated__/MeetingControlBar_meeting.graphql'
 import useAtmosphere from '~/hooks/useAtmosphere'
 import useBreakpoint from '~/hooks/useBreakpoint'
 import {useCovering} from '~/hooks/useControlBarCovers'
 import useDraggableFixture from '~/hooks/useDraggableFixture'
-import useGotoNext from '~/hooks/useGotoNext'
-import useGotoStageId from '~/hooks/useGotoStageId'
+import type useGotoNext from '~/hooks/useGotoNext'
+import type useGotoStageId from '~/hooks/useGotoStageId'
 import useInitialRender from '~/hooks/useInitialRender'
 import useLeft from '~/hooks/useLeft'
 import useTransition, {TransitionStatus} from '~/hooks/useTransition'
@@ -15,10 +16,11 @@ import {PALETTE} from '~/styles/paletteV3'
 import {BezierCurve, Breakpoint, ElementWidth, ZIndex} from '~/types/constEnums'
 import makeMinWidthMediaQuery from '~/utils/makeMinWidthMediaQuery'
 import findStageAfterId from '~/utils/meetings/findStageAfterId'
-import {MeetingControlBar_meeting$key} from '~/__generated__/MeetingControlBar_meeting.graphql'
+import type {NewMeetingPhaseTypeEnum} from '../__generated__/MeetingControlBar_meeting.graphql'
 import useClickConfirmation from '../hooks/useClickConfirmation'
 import {bottomBarShadow, desktopBarShadow} from '../styles/elevation'
-import {NewMeetingPhaseTypeEnum} from '../__generated__/MeetingControlBar_meeting.graphql'
+import showTimerInPhase from '../utils/showTimerInPhase'
+import BottomControlBarMusic from './BottomControlBarMusic'
 import BottomControlBarReady from './BottomControlBarReady'
 import BottomControlBarRejoin from './BottomControlBarRejoin'
 import BottomControlBarTips from './BottomControlBarTips'
@@ -57,7 +59,8 @@ const DEFAULT_TIME_LIMIT = {
   vote: 3,
   discuss: 5,
   ESTIMATE: 5,
-  SCOPE: 3
+  SCOPE: 3,
+  TEAM_HEALTH: 1
 } as Record<NewMeetingPhaseTypeEnum, number>
 
 interface Props {
@@ -106,6 +109,7 @@ const MeetingControlBar = (props: Props) => {
     meetingRef
   )
   const atmosphere = useAtmosphere()
+  const isDesktop = useBreakpoint(Breakpoint.SINGLE_REFLECTION_COLUMN)
   const {viewerId} = atmosphere
   const {
     endedAt,
@@ -123,13 +127,13 @@ const MeetingControlBar = (props: Props) => {
   const {phaseType} = localPhase
   const {id: localStageId, isComplete} = localStage
   const isCheckIn = phaseType === 'checkin'
-  const isRetro = meetingType === 'retrospective'
   const isPoker = meetingType === 'poker'
   const getPossibleButtons = () => {
-    const buttons = ['tips']
+    const buttons = ['music']
+    if (isFacilitating && !isComplete && showTimerInPhase(phaseType)) buttons.push('timer')
+    if (isDesktop) buttons.push('tips')
     if (!isFacilitating && !isCheckIn && !isComplete && !isPoker) buttons.push('ready')
     if (!isFacilitating && localStageId !== facilitatorStageId) buttons.push('rejoin')
-    if (isFacilitating && isRetro && !isCheckIn && !isComplete) buttons.push('timer')
     if ((isFacilitating || isPoker) && findStageAfterId(phases, localStageId)) buttons.push('next')
     if (isFacilitating) buttons.push('end')
     return buttons.map((key) => ({key}))
@@ -138,7 +142,6 @@ const MeetingControlBar = (props: Props) => {
   const [confirmingButton, setConfirmingButton] = useClickConfirmation()
   const cancelConfirm = confirmingButton ? () => setConfirmingButton('') : undefined
   const tranChildren = useTransition(buttons)
-  const isDesktop = useBreakpoint(Breakpoint.SINGLE_REFLECTION_COLUMN)
   const controlBarWidth =
     buttons.length * ElementWidth.CONTROL_BAR_BUTTON + ElementWidth.CONTROL_BAR_PADDING * 2
   const left = useLeft(controlBarWidth, isRightDrawerOpen, showSidebar)
@@ -162,13 +165,15 @@ const MeetingControlBar = (props: Props) => {
           const {key} = child
           const tranProps = {
             onTransitionEnd,
-            status: isInit ? TransitionStatus.ENTERED : status,
-            key
+            status: isInit ? TransitionStatus.ENTERED : status
           }
           switch (key) {
+            case 'music':
+              return <BottomControlBarMusic key={key} {...tranProps} meetingId={meetingId} />
             case 'tips':
               return (
                 <BottomControlBarTips
+                  key={key}
                   {...tranProps}
                   meeting={meeting}
                   cancelConfirm={cancelConfirm}
@@ -178,8 +183,11 @@ const MeetingControlBar = (props: Props) => {
             case 'next':
               return (
                 <BottomControlBarReady
+                  key={key}
                   {...tranProps}
                   isNext={isPoker ? true : isFacilitating}
+                  isFacilitating={isFacilitating}
+                  isPoker={isPoker}
                   cancelConfirm={
                     isPoker ? undefined : confirmingButton === 'next' ? undefined : cancelConfirm
                   }
@@ -193,6 +201,7 @@ const MeetingControlBar = (props: Props) => {
             case 'rejoin':
               return (
                 <BottomControlBarRejoin
+                  key={key}
                   {...tranProps}
                   onClick={() => gotoStageId(facilitatorStageId)}
                 />
@@ -200,15 +209,17 @@ const MeetingControlBar = (props: Props) => {
             case 'timer':
               return (
                 <StageTimerControl
+                  key={key}
                   {...tranProps}
                   cancelConfirm={cancelConfirm}
-                  defaultTimeLimit={DEFAULT_TIME_LIMIT[phaseType]}
+                  defaultTimeLimit={DEFAULT_TIME_LIMIT[phaseType] ?? 1}
                   meeting={meeting}
                 />
               )
             case 'end':
               return (
                 <EndMeetingButton
+                  key={key}
                   {...tranProps}
                   cancelConfirm={confirmingButton === 'end' ? undefined : cancelConfirm}
                   isConfirming={confirmingButton === 'end'}

@@ -18,6 +18,13 @@ export interface OAuth2PkceRefreshAuthorizationParams extends OAuth2RefreshAutho
   redirect_uri: string
 }
 
+export type OAuth2AuthorizeResponse = {
+  accessToken: string
+  refreshToken: string | undefined
+  scopes: string
+  expiresIn?: number
+}
+
 export default abstract class OAuth2Manager {
   protected clientId: string
   protected clientSecret: string
@@ -27,15 +34,17 @@ export default abstract class OAuth2Manager {
     this.clientSecret = clientSecret
     this.serverBaseUrl = serverBaseUrl
   }
-  abstract authorize(
-    code: string,
-    redirectUri: string
-  ): Promise<Error | {accessToken: string; refreshToken: string; scopes: string}>
+  abstract authorize(code: string, redirectUri: string): Promise<Error | OAuth2AuthorizeResponse>
 
   abstract refresh(refreshToken: string): Promise<Error | {accessToken: string}>
   protected abstract fetchToken(
     partialAuthParams: OAuth2RefreshAuthorizationParams | OAuth2AuthorizationParams
   ): Promise<
-    {accessToken: string; refreshToken: string | undefined; scopes: string | undefined} | Error
+    | {
+        accessToken: string
+        refreshToken: string | undefined
+        scopes: string | undefined
+      }
+    | Error
   >
 }

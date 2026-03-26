@@ -1,12 +1,12 @@
 import graphql from 'babel-plugin-relay/macro'
-import React, {Suspense} from 'react'
+import {Suspense} from 'react'
 import {useFragment} from 'react-relay'
 import MockScopingList from '~/modules/meeting/components/MockScopingList'
-import useQueryLoaderNow from '../hooks/useQueryLoaderNow'
 import jiraServerScopingSearchResultsQuery, {
-  JiraServerScopingSearchResultsQuery
+  type JiraServerScopingSearchResultsQuery
 } from '../__generated__/JiraServerScopingSearchResultsQuery.graphql'
-import {JiraServerScopingSearchResultsRoot_meeting$key} from '../__generated__/JiraServerScopingSearchResultsRoot_meeting.graphql'
+import type {JiraServerScopingSearchResultsRoot_meeting$key} from '../__generated__/JiraServerScopingSearchResultsRoot_meeting.graphql'
+import useQueryLoaderNow from '../hooks/useQueryLoaderNow'
 import JiraServerScopingSearchResults from './JiraServerScopingSearchResults'
 
 interface Props {

@@ -1,7 +1,8 @@
 import styled from '@emotion/styled'
 import graphql from 'babel-plugin-relay/macro'
-import React, {useMemo} from 'react'
+import {useMemo} from 'react'
 import {useFragment} from 'react-relay'
+import type {NewMeetingAvatarGroup_meeting$key} from '../../../../__generated__/NewMeetingAvatarGroup_meeting.graphql'
 import AddTeamMemberAvatarButton from '../../../../components/AddTeamMemberAvatarButton'
 import useAtmosphere from '../../../../hooks/useAtmosphere'
 import useBreakpoint from '../../../../hooks/useBreakpoint'
@@ -11,7 +12,6 @@ import {DECELERATE} from '../../../../styles/animation'
 import {meetingAvatarMediaQueries} from '../../../../styles/meeting'
 import {PALETTE} from '../../../../styles/paletteV3'
 import {Breakpoint} from '../../../../types/constEnums'
-import {NewMeetingAvatarGroup_meeting$key} from '../../../../__generated__/NewMeetingAvatarGroup_meeting.graphql'
 import NewMeetingAvatar from './NewMeetingAvatar'
 
 const MeetingAvatarGroupRoot = styled('div')({
@@ -97,14 +97,9 @@ const NewMeetingAvatarGroup = (props: Props) => {
         meetingMembers {
           id
           userId
+          isConnectedAt
           user {
-            isConnected
-            lastSeenAt
-            lastSeenAtURLs
-          }
-          teamMember {
-            ...NewMeetingAvatar_teamMember
-            id
+            ...NewMeetingAvatar_user
           }
         }
       }
@@ -119,14 +114,8 @@ const NewMeetingAvatarGroup = (props: Props) => {
   // all connected teamMembers except self
   const connectedMeetingMembers = useMemo(() => {
     return meetingMembers
-      .filter((meetingMember) => {
-        return (
-          meetingMember.userId === viewerId ||
-          (meetingMember.user.lastSeenAtURLs?.includes(`/meet/${meetingId}`) &&
-            meetingMember.user.isConnected)
-        )
-      })
-      .sort((a, b) => (a.userId === viewerId ? -1 : a.user.lastSeenAt < b.user.lastSeenAt ? -1 : 1))
+      .filter((meetingMember) => meetingMember.isConnectedAt)
+      .sort((a, b) => (a.userId === viewerId ? -1 : a.isConnectedAt! < b.isConnectedAt! ? -1 : 1))
       .map((tm) => ({
         ...tm,
         key: tm.userId
@@ -158,7 +147,7 @@ const NewMeetingAvatarGroup = (props: Props) => {
         return (
           <OverlappingBlock key={meetingMember.child.id}>
             <NewMeetingAvatar
-              teamMemberRef={meetingMember.child.teamMember}
+              userRef={meetingMember.child.user}
               onTransitionEnd={meetingMember.onTransitionEnd}
               status={isInit ? TransitionStatus.ENTERED : meetingMember.status}
             />

@@ -1,16 +1,15 @@
 import styled from '@emotion/styled'
 import graphql from 'babel-plugin-relay/macro'
-import React from 'react'
-import {createFragmentContainer} from 'react-relay'
+import {useFragment} from 'react-relay'
 import makeMinWidthMediaQuery from '~/utils/makeMinWidthMediaQuery'
+import type {TimelineRightDrawer_viewer$key} from '../__generated__/TimelineRightDrawer_viewer.graphql'
 import {PALETTE} from '../styles/paletteV3'
 import {DashTimeline, NavSidebar} from '../types/constEnums'
-import {TimelineRightDrawer_viewer} from '../__generated__/TimelineRightDrawer_viewer.graphql'
 import ErrorBoundary from './ErrorBoundary'
 import TimelinePriorityTasks from './TimelinePriorityTasks'
 
 interface Props {
-  viewer: TimelineRightDrawer_viewer
+  viewer: TimelineRightDrawer_viewer$key
 }
 
 const MIN_WIDTH =
@@ -24,7 +23,7 @@ export const RightDrawer = styled('div')({
   minWidth: DashTimeline.TIMELINE_DRAWER_WIDTH,
   maxWidth: DashTimeline.TIMELINE_DRAWER_WIDTH,
   borderLeft: `1px solid ${PALETTE.SLATE_400}`,
-  height: 'fit-content',
+  height: 'auto',
   padding: 16,
   [makeMinWidthMediaQuery(MIN_WIDTH)]: {
     display: 'block'
@@ -32,7 +31,15 @@ export const RightDrawer = styled('div')({
 })
 
 const TimelineRightDrawer = (props: Props) => {
-  const {viewer} = props
+  const {viewer: viewerRef} = props
+  const viewer = useFragment(
+    graphql`
+      fragment TimelineRightDrawer_viewer on User {
+        ...TimelinePriorityTasks_viewer
+      }
+    `,
+    viewerRef
+  )
   return (
     <RightDrawer>
       <ErrorBoundary>
@@ -42,10 +49,4 @@ const TimelineRightDrawer = (props: Props) => {
   )
 }
 
-export default createFragmentContainer(TimelineRightDrawer, {
-  viewer: graphql`
-    fragment TimelineRightDrawer_viewer on User {
-      ...TimelinePriorityTasks_viewer
-    }
-  `
-})
+export default TimelineRightDrawer

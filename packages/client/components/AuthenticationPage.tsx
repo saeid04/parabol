@@ -1,17 +1,17 @@
 import styled from '@emotion/styled'
-import React from 'react'
+import {useNavigate} from 'react-router'
 import useCanonical from '~/hooks/useCanonical'
 import useAtmosphere from '../hooks/useAtmosphere'
-import useDocumentTitle from '../hooks/useDocumentTitle'
-import useRouter from '../hooks/useRouter'
 import getValidRedirectParam from '../utils/getValidRedirectParam'
-import GenericAuthentication, {AuthPageSlug, GotoAuthPage} from './GenericAuthentication'
+import {AUTH_DIALOG_WIDTH} from './AuthenticationDialog'
+import GenericAuthentication, {type AuthPageSlug, type GotoAuthPage} from './GenericAuthentication'
 import TeamInvitationWrapper from './TeamInvitationWrapper'
 
 const CopyBlock = styled('div')({
   marginBottom: 48,
   width: 'calc(100vw - 16px)',
-  maxWidth: 500,
+  // must be no wider than the auth popup width to keep it looking clean
+  maxWidth: AUTH_DIALOG_WIDTH,
   textAlign: 'center'
 })
 
@@ -20,21 +20,19 @@ interface Props {
 }
 
 const AuthenticationPage = (props: Props) => {
-  const {history} = useRouter()
+  const navigate = useNavigate()
   const {page} = props
-  const atmosphere = useAtmosphere()
-  const {authObj} = atmosphere
-  useDocumentTitle('Sign Up for Free Online Retrospectives | Parabol', 'Sign Up')
+  const {authObj} = useAtmosphere()
   useCanonical(page)
   if (authObj) {
     const nextUrl = getValidRedirectParam() || '/meetings'
     // always replace otherwise they could get stuck in a back-button loop
-    setTimeout(() => history.replace(nextUrl))
+    setTimeout(() => navigate(nextUrl, {replace: true}))
     return null
   }
   const goToPage: GotoAuthPage = (page, search?) => {
     const url = search ? `/${page}${search}` : `/${page}`
-    history.push(url)
+    navigate(url)
   }
   return (
     <TeamInvitationWrapper>
@@ -49,5 +47,4 @@ const AuthenticationPage = (props: Props) => {
     </TeamInvitationWrapper>
   )
 }
-
 export default AuthenticationPage

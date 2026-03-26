@@ -1,10 +1,12 @@
 import graphql from 'babel-plugin-relay/macro'
-import {Snack} from '../../components/Snackbar'
-import {OnNextHistoryContext} from '../../types/relayMutations'
-import {mapResponseRepliedToToast_notification} from '../../__generated__/mapResponseRepliedToToast_notification.graphql'
+import type {mapResponseRepliedToToast_notification$data} from '../../__generated__/mapResponseRepliedToToast_notification.graphql'
+import type {Snack} from '../../components/Snackbar'
+import type {OnNextNavigateContext} from '../../types/relayMutations'
+import makeNotificationToastKey from './makeNotificationToastKey'
 
 graphql`
   fragment mapResponseRepliedToToast_notification on NotifyResponseReplied {
+    id
     author {
       id
       preferredName
@@ -20,25 +22,25 @@ graphql`
 `
 
 const mapResponseRepliedToToast = (
-  notification: mapResponseRepliedToToast_notification,
-  {history}: OnNextHistoryContext
+  notification: mapResponseRepliedToToast_notification$data,
+  {navigate}: OnNextNavigateContext
 ): Snack | null => {
   if (!notification) return null
-  const {meeting, author, response} = notification
-  const {preferredName: authorName} = author
+  const {id: notificationId, meeting, author, response} = notification
+  const authorName = author ? author.preferredName : 'Anonymous'
   const {id: meetingId, name: meetingName} = meeting
 
   // :TODO: (jmtaber129): Check if we're already open to the relevant standup response discussion
   // thread, and do nothing if we are.
 
   return {
-    key: `responseReplied:${response.id}:${author.id}`,
+    key: makeNotificationToastKey(notificationId),
     autoDismiss: 10,
     message: `${authorName} replied to your response in ${meetingName}.`,
     action: {
       label: 'See the discussion',
       callback: () => {
-        history.push(`/meet/${meetingId}/responses?responseId=${encodeURIComponent(response.id)}`)
+        navigate(`/meet/${meetingId}/responses?responseId=${encodeURIComponent(response.id)}`)
       }
     }
   }

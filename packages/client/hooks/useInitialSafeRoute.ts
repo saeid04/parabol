@@ -1,7 +1,9 @@
 import graphql from 'babel-plugin-relay/macro'
-import {Dispatch, SetStateAction, useEffect} from 'react'
+import {type Dispatch, type SetStateAction, useEffect} from 'react'
+import {useNavigate} from 'react-router'
 import {readInlineData} from 'relay-runtime'
-import {useInitialSafeRoute_meeting$key} from '~/__generated__/useInitialSafeRoute_meeting.graphql'
+import type {useInitialSafeRoute_meeting$key} from '~/__generated__/useInitialSafeRoute_meeting.graphql'
+import type {NewMeetingPhaseTypeEnum} from '../__generated__/ActionMeeting_meeting.graphql'
 import {RetroDemo} from '../types/constEnums'
 import findKeyByValue from '../utils/findKeyByValue'
 import findStageById from '../utils/meetings/findStageById'
@@ -9,16 +11,14 @@ import fromStageIdToUrl from '../utils/meetings/fromStageIdToUrl'
 import getMeetingPathParams from '../utils/meetings/getMeetingPathParams'
 import {phaseTypeToSlug} from '../utils/meetings/lookups'
 import updateLocalStage from '../utils/relay/updateLocalStage'
-import {NewMeetingPhaseTypeEnum} from '../__generated__/ActionMeeting_meeting.graphql'
 import useAtmosphere from './useAtmosphere'
-import useRouter from './useRouter'
 
 const useInitialSafeRoute = (
   setSafeRoute: Dispatch<SetStateAction<boolean>>,
   meetingRef: useInitialSafeRoute_meeting$key
 ) => {
   const atmosphere = useAtmosphere()
-  const {history} = useRouter()
+  const navigate = useNavigate()
   const meeting = readInlineData(
     graphql`
       fragment useInitialSafeRoute_meeting on NewMeeting @inline {
@@ -51,81 +51,71 @@ const useInitialSafeRoute = (
     meetingRef
   )
 
-  useEffect(
-    () => {
-      const meetingPath = getMeetingPathParams()
-      const {phaseSlug, stageIdxSlug, meetingId: pathMeetingId} = meetingPath
-      if (!meeting) {
-        history.replace({
-          pathname: `/invitation-required`,
-          search: `?redirectTo=${encodeURIComponent(
-            window.location.pathname
-          )}&meetingId=${pathMeetingId}`
-        })
-        setSafeRoute(false)
-        return
-      }
-      const {facilitatorStageId, facilitatorUserId, localStage, id: meetingId, phases} = meeting
-      const {viewerId} = atmosphere
+  useEffect(() => {
+    const meetingPath = getMeetingPathParams()
+    const {phaseSlug, stageIdxSlug} = meetingPath
+    if (!meeting) {
+      // We should not reach this as we should filter out inaccessible meetings in MeetingSelector
+      setSafeRoute(false)
+      return
+    }
+    const {facilitatorStageId, facilitatorUserId, localStage, id: meetingId, phases} = meeting
+    const {viewerId} = atmosphere
 
-      // I’m headed to the lobby but the meeting is already going, send me there
-      if (localStage && !phaseSlug) {
-        const {id: localStageId} = localStage
-        const nextUrl = fromStageIdToUrl(localStageId, meeting)
-        history.replace(nextUrl)
-        updateLocalStage(atmosphere, meeting, facilitatorStageId)
-        setSafeRoute(false)
-        return
-      }
+    // I’m headed to the lobby but the meeting is already going, send me there
+    if (localStage && !phaseSlug) {
+      const {id: localStageId} = localStage
+      const nextUrl = fromStageIdToUrl(localStageId, meeting)
+      navigate(nextUrl, {replace: true})
+      updateLocalStage(atmosphere, meeting, facilitatorStageId)
+      setSafeRoute(false)
+      return
+    }
 
-      const localPhaseType = findKeyByValue(phaseTypeToSlug, phaseSlug as NewMeetingPhaseTypeEnum)
-      const stageIdx = stageIdxSlug ? Number(stageIdxSlug) - 1 : 0
-      const phase = phases.find((curPhase) => curPhase.phaseType === localPhaseType)
+    const localPhaseType = findKeyByValue(phaseTypeToSlug, phaseSlug as NewMeetingPhaseTypeEnum)
+    const stageIdx = stageIdxSlug ? Number(stageIdxSlug) - 1 : 0
+    const phase = phases.find((curPhase) => curPhase.phaseType === localPhaseType)
 
-      // typo in url, send to the facilitator
-      if (!phase) {
-        const nextUrl = fromStageIdToUrl(facilitatorStageId, meeting)
-        history.replace(nextUrl)
-        updateLocalStage(atmosphere, meeting, facilitatorStageId)
-        setSafeRoute(false)
-        return
-      }
+    // typo in url, send to the facilitator
+    if (!phase) {
+      const nextUrl = fromStageIdToUrl(facilitatorStageId, meeting)
+      navigate(nextUrl, {replace: true})
+      updateLocalStage(atmosphere, meeting, facilitatorStageId)
+      setSafeRoute(false)
+      return
+    }
 
-      const stage = phase.stages[stageIdx]
-      const stageId = stage?.id
-      const isViewerFacilitator = viewerId === facilitatorUserId
-      const itemStage = stageId && findStageById(phases, stageId)
-      if (!itemStage) {
-        // useful for e.g. /discuss/2, especially on the demo
-        const nextUrl =
-          meetingId === RetroDemo.MEETING_ID
-            ? '/retrospective-demo/reflect'
-            : fromStageIdToUrl(facilitatorStageId, meeting)
-        updateLocalStage(atmosphere, meeting, facilitatorStageId)
-        history.replace(nextUrl)
-        setSafeRoute(false)
-        return
-      }
-      // const {stage} = itemStage
-      const {isNavigable, isNavigableByFacilitator} = stage
-      const canNavigate = isViewerFacilitator ? isNavigableByFacilitator : isNavigable
-      if (!canNavigate) {
-        // too early to visit meeting or typo, go to facilitator
-        const nextUrl = fromStageIdToUrl(facilitatorStageId, meeting)
-        history.replace(nextUrl)
-        updateLocalStage(atmosphere, meeting, facilitatorStageId)
-        setSafeRoute(false)
-        return
-      }
+    const stage = phase.stages[stageIdx]
+    const stageId = stage?.id
+    const isViewerFacilitator = viewerId === facilitatorUserId
+    const itemStage = stageId && findStageById(phases, stageId)
+    if (!itemStage) {
+      // useful for e.g. /discuss/2, especially on the demo
+      const nextUrl =
+        meetingId === RetroDemo.MEETING_ID
+          ? '/retrospective-demo/reflect'
+          : fromStageIdToUrl(facilitatorStageId, meeting)
+      updateLocalStage(atmosphere, meeting, facilitatorStageId)
+      navigate(nextUrl, {replace: true})
+      setSafeRoute(false)
+      return
+    }
+    // const {stage} = itemStage
+    const {isNavigable, isNavigableByFacilitator} = stage
+    const canNavigate = isViewerFacilitator ? isNavigableByFacilitator : isNavigable
+    if (!canNavigate) {
+      // too early to visit meeting or typo, go to facilitator
+      const nextUrl = fromStageIdToUrl(facilitatorStageId, meeting)
+      navigate(nextUrl, {replace: true})
+      updateLocalStage(atmosphere, meeting, facilitatorStageId)
+      setSafeRoute(false)
+      return
+    }
 
-      // legit URL!
-      updateLocalStage(atmosphere, meeting, stage.id)
-      setSafeRoute(true)
-    },
-    [
-      /* eslint-disable-line react-hooks/exhaustive-deps */
-    ]
-  )
+    // legit URL!
+    updateLocalStage(atmosphere, meeting, stage.id)
+    setSafeRoute(true)
+  }, [])
 }
 
 export default useInitialSafeRoute

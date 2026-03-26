@@ -3,11 +3,11 @@
  *
  */
 import styled from '@emotion/styled'
-import React from 'react'
+import type * as React from 'react'
+import {useNavigate} from 'react-router'
 import useAtmosphere from '../hooks/useAtmosphere'
 import useForm from '../hooks/useForm'
 import useMutationProps from '../hooks/useMutationProps'
-import useRouter from '../hooks/useRouter'
 import EmailPasswordResetMutation from '../mutations/EmailPasswordResetMutation'
 import {PALETTE} from '../styles/paletteV3'
 import {AuthenticationError} from '../types/constEnums'
@@ -16,7 +16,7 @@ import {emailRegex} from '../validation/regex'
 import AuthenticationDialog from './AuthenticationDialog'
 import DialogTitle from './DialogTitle'
 import EmailInputField from './EmailInputField'
-import {GotoAuthPage} from './GenericAuthentication'
+import type {GotoAuthPage} from './GenericAuthentication'
 import PlainButton from './PlainButton/PlainButton'
 import PrimaryButton from './PrimaryButton'
 import StyledError from './StyledError'
@@ -95,7 +95,7 @@ const ForgotPasswordPage = (props: Props) => {
       validate: validateEmail
     }
   })
-  const {history} = useRouter()
+  const navigate = useNavigate()
 
   const handleBlur = (e: React.FocusEvent<HTMLInputElement>) => {
     const {name} = e.target
@@ -117,7 +117,7 @@ const ForgotPasswordPage = (props: Props) => {
       atmosphere,
       {email},
       {
-        history,
+        navigate,
         onCompleted,
         onError
       }

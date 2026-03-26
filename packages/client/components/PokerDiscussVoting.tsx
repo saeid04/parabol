@@ -1,13 +1,17 @@
 import styled from '@emotion/styled'
 import graphql from 'babel-plugin-relay/macro'
-import React, {useEffect, useMemo, useRef, useState} from 'react'
-import {createFragmentContainer} from 'react-relay'
+import {Fragment, useEffect, useMemo, useRef, useState} from 'react'
+import {useFragment} from 'react-relay'
 import useAtmosphere from '~/hooks/useAtmosphere'
+import type {PokerDiscussVoting_meeting$key} from '../__generated__/PokerDiscussVoting_meeting.graphql'
+import type {
+  PokerDiscussVoting_stage$data,
+  PokerDiscussVoting_stage$key
+} from '../__generated__/PokerDiscussVoting_stage.graphql'
 import useForceUpdate from '../hooks/useForceUpdate'
 import {PokerCards} from '../types/constEnums'
 import isSpecialPokerLabel from '../utils/isSpecialPokerLabel'
-import {PokerDiscussVoting_meeting} from '../__generated__/PokerDiscussVoting_meeting.graphql'
-import {PokerDiscussVoting_stage} from '../__generated__/PokerDiscussVoting_stage.graphql'
+import JiraExportUpgradeModal from './JiraExportUpgradeModal'
 import PokerDimensionValueControl from './PokerDimensionValueControl'
 import PokerVotingRow from './PokerVotingRow'
 import useSetTaskEstimate from './useSetTaskEstimate'
@@ -20,18 +24,70 @@ const GroupedVotes = styled('div')({
 })
 
 interface Props {
-  meeting: PokerDiscussVoting_meeting
-  stage: PokerDiscussVoting_stage
+  meeting: PokerDiscussVoting_meeting$key
+  stage: PokerDiscussVoting_stage$key
   isInitialStageRender: boolean
 }
 
 const PokerDiscussVoting = (props: Props) => {
   const atmosphere = useAtmosphere()
-  const {setTaskEstimate, error, submitting, onCompleted, onError} = useSetTaskEstimate()
+  const {
+    setTaskEstimate,
+    error,
+    submitting,
+    onCompleted,
+    onError,
+    showUpgradeModal,
+    upgradeExportCount,
+    isHardBlock,
+    dismissUpgradeModal
+  } = useSetTaskEstimate()
   const forceUpdate = useForceUpdate()
   const {viewerId} = atmosphere
-  const {meeting, stage, isInitialStageRender} = props
-  const {id: meetingId, facilitatorUserId} = meeting
+  const {meeting: meetingRef, stage: stageRef, isInitialStageRender} = props
+  const stage = useFragment(
+    graphql`
+      fragment PokerDiscussVoting_stage on EstimateStage {
+        ...PokerDimensionValueControl_stage
+        id
+        finalScore
+        serviceField {
+          name
+          type
+        }
+        taskId
+        dimensionRef {
+          name
+          scale {
+            values {
+              ...PokerVotingRow_scaleValue
+              label
+              color
+            }
+          }
+        }
+        scores {
+          ...PokerVotingRow_scores
+          label
+        }
+      }
+    `,
+    stageRef
+  )
+  const meeting = useFragment(
+    graphql`
+      fragment PokerDiscussVoting_meeting on PokerMeeting {
+        id
+        facilitatorUserId
+        team {
+          orgId
+        }
+      }
+    `,
+    meetingRef
+  )
+  const {id: meetingId, facilitatorUserId, team} = meeting
+  const {orgId} = team
   const {id: stageId, dimensionRef, scores, taskId, serviceField} = stage
   const finalScore = stage.finalScore || ''
   const {name: serviceFieldName} = serviceField
@@ -46,7 +102,9 @@ const PokerDiscussVoting = (props: Props) => {
   }
 
   const {rows, topLabel} = useMemo(() => {
-    const scoreObj = {} as {[label: string]: PokerDiscussVoting_stage['scores'][0][]}
+    const scoreObj = {} as {
+      [label: string]: PokerDiscussVoting_stage$data['scores'][0][]
+    }
     let highScore = 0
     let topLabel = ''
     scores.forEach((score) => {
@@ -106,6 +164,13 @@ const PokerDiscussVoting = (props: Props) => {
 
   return (
     <>
+      <JiraExportUpgradeModal
+        isOpen={showUpgradeModal}
+        exportCount={upgradeExportCount}
+        isHardBlock={isHardBlock}
+        orgId={orgId}
+        onClose={dismissUpgradeModal}
+      />
       <PokerDimensionValueControl
         placeholder={isFacilitator ? topLabel : '?'}
         stage={stage}
@@ -136,14 +201,14 @@ const PokerDiscussVoting = (props: Props) => {
           }
 
           return (
-            <React.Fragment key={key}>
+            <Fragment key={key}>
               <PokerVotingRow
                 scaleValue={scaleValue}
                 scores={scores}
                 setFinalScore={canClick ? setFinalScore : undefined}
                 isInitialStageRender={isInitialStageRender}
               />
-            </React.Fragment>
+            </Fragment>
           )
         })}
       </GroupedVotes>
@@ -151,37 +216,4 @@ const PokerDiscussVoting = (props: Props) => {
   )
 }
 
-export default createFragmentContainer(PokerDiscussVoting, {
-  stage: graphql`
-    fragment PokerDiscussVoting_stage on EstimateStage {
-      ...PokerDimensionValueControl_stage
-      id
-      finalScore
-      serviceField {
-        name
-        type
-      }
-      taskId
-      dimensionRef {
-        name
-        scale {
-          values {
-            ...PokerVotingRow_scaleValue
-            label
-            color
-          }
-        }
-      }
-      scores {
-        ...PokerVotingRow_scores
-        label
-      }
-    }
-  `,
-  meeting: graphql`
-    fragment PokerDiscussVoting_meeting on PokerMeeting {
-      id
-      facilitatorUserId
-    }
-  `
-})
+export default PokerDiscussVoting

@@ -1,36 +1,53 @@
-import getRethink from '../../../database/rethinkDriver'
-import MeetingSettingsAction from '../../../database/types/MeetingSettingsAction'
-import MeetingSettingsPoker from '../../../database/types/MeetingSettingsPoker'
-import MeetingSettingsRetrospective from '../../../database/types/MeetingSettingsRetrospective'
+import TeamMemberId from '../../../../client/shared/gqlIds/TeamMemberId'
+import {MeetingSettingsThreshold} from '../../../../client/types/constEnums'
 import Team from '../../../database/types/Team'
 import TimelineEventCreatedTeam from '../../../database/types/TimelineEventCreatedTeam'
-import getPg from '../../../postgres/getPg'
-import {insertTeamQuery} from '../../../postgres/queries/generated/insertTeamQuery'
-import IUser from '../../../postgres/types/IUser'
-import catchAndLog from '../../../postgres/utils/catchAndLog'
-import addTeamIdToTMS from '../../../safeMutations/addTeamIdToTMS'
-import insertNewTeamMember from '../../../safeMutations/insertNewTeamMember'
+import type {DataLoaderInstance} from '../../../dataloader/RootDataLoader'
+import generateUID from '../../../generateUID'
+import getKysely from '../../../postgres/getKysely'
+import type {User} from '../../../postgres/types'
 
 interface ValidNewTeam {
   id: string
   name: string
   orgId: string
   isOnboardTeam: boolean
+  isPublic: boolean
 }
 
 // used for addorg, addTeam
-export default async function createTeamAndLeader(user: IUser, newTeam: ValidNewTeam) {
-  const r = await getRethink()
+export default async function createTeamAndLeader(
+  user: Pick<User, 'id'>,
+  newTeam: ValidNewTeam,
+  dataLoader: DataLoaderInstance
+) {
+  const pg = getKysely()
   const {id: userId} = user
-  const {id: teamId, orgId} = newTeam
-  const organization = await r.table('Organization').get(orgId).run()
+  const {id: teamId, orgId, isPublic: requestedIsPublic} = newTeam
+  const [organization, clusterRow] = await Promise.all([
+    dataLoader.get('organizations').loadNonNull(orgId),
+    pg
+      .selectFrom('CompanyClusterOrganization')
+      .innerJoin(
+        'CompanyCluster',
+        'CompanyCluster.id',
+        'CompanyClusterOrganization.companyClusterId'
+      )
+      .select('CompanyCluster.maxTeamLimitAt')
+      .where('CompanyClusterOrganization.orgId', '=', orgId)
+      .executeTakeFirst()
+  ])
   const {tier} = organization
-  const verifiedTeam = new Team({...newTeam, createdBy: userId, tier})
-  const meetingSettings = [
-    new MeetingSettingsRetrospective({teamId}),
-    new MeetingSettingsAction({teamId}),
-    new MeetingSettingsPoker({teamId})
-  ]
+  const maxTeamTrialExpiresAt = clusterRow?.maxTeamLimitAt ?? null
+
+  const isPublic = tier === 'starter' ? true : requestedIsPublic
+
+  const verifiedTeam = new Team({
+    ...newTeam,
+    createdBy: userId,
+    isPublic
+  })
+
   const timelineEvent = new TimelineEventCreatedTeam({
     createdAt: new Date(Date.now() + 5),
     userId,
@@ -38,13 +55,64 @@ export default async function createTeamAndLeader(user: IUser, newTeam: ValidNew
     orgId
   })
 
+  const suggestedAction = {
+    id: generateUID(),
+    userId,
+    teamId,
+    type: 'inviteYourTeam' as const,
+    priority: 2
+  }
+
   await Promise.all([
-    catchAndLog(() => insertTeamQuery.run(verifiedTeam, getPg())),
-    // add meeting settings
-    r.table('MeetingSettings').insert(meetingSettings).run(),
-    // denormalize common fields to team member
-    insertNewTeamMember(user, teamId),
-    r.table('TimelineEvent').insert(timelineEvent).run(),
-    addTeamIdToTMS(userId, teamId)
+    pg
+      .with('TeamInsert', (qc) =>
+        qc.insertInto('Team').values({...verifiedTeam, maxTeamTrialExpiresAt})
+      )
+      .with('TeamMemberInsert', (qc) =>
+        qc.insertInto('TeamMember').values({
+          id: TeamMemberId.join(teamId, userId),
+          teamId,
+          userId,
+          isLead: true,
+          openDrawer: 'manageTeam'
+        })
+      )
+      .with('SuggestedActionInsert', (qc) =>
+        qc
+          .insertInto('SuggestedAction')
+          .values(suggestedAction)
+          .onConflict((oc) => oc.columns(['userId', 'type']).doNothing())
+      )
+      .with('MeetingSettingsInsert', (qc) =>
+        qc.insertInto('MeetingSettings').values([
+          {
+            id: generateUID(),
+            teamId,
+            meetingType: 'retrospective',
+            phaseTypes: ['checkin', 'TEAM_HEALTH', 'reflect', 'group', 'vote', 'discuss'],
+            disableAnonymity: false,
+            maxVotesPerGroup: MeetingSettingsThreshold.RETROSPECTIVE_MAX_VOTES_PER_GROUP_DEFAULT,
+            totalVotes: MeetingSettingsThreshold.RETROSPECTIVE_TOTAL_VOTES_DEFAULT,
+            selectedTemplateId: 'workingStuckTemplate'
+          },
+          {
+            id: generateUID(),
+            teamId,
+            meetingType: 'action',
+            phaseTypes: ['checkin', 'updates', 'firstcall', 'agendaitems', 'lastcall']
+          },
+          {
+            id: generateUID(),
+            teamId,
+            meetingType: 'poker',
+            phaseTypes: ['checkin', 'SCOPE', 'ESTIMATE'],
+            selectedTemplateId: 'estimatedEffortTemplate'
+          }
+        ])
+      )
+      .insertInto('TimelineEvent')
+      .values(timelineEvent)
+      .execute()
   ])
+  dataLoader.clearAll(['teams', 'users', 'teamMembers', 'timelineEvents', 'meetingSettings'])
 }

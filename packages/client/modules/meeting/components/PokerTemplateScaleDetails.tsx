@@ -1,14 +1,14 @@
 import styled from '@emotion/styled'
 import {ArrowBack} from '@mui/icons-material'
 import graphql from 'babel-plugin-relay/macro'
-import React, {useEffect} from 'react'
-import {commitLocalUpdate, createFragmentContainer} from 'react-relay'
+import {useEffect} from 'react'
+import {commitLocalUpdate, useFragment} from 'react-relay'
+import type {PokerTemplateScaleDetails_team$key} from '../../../__generated__/PokerTemplateScaleDetails_team.graphql'
 import FlatButton from '../../../components/FlatButton'
 import useAtmosphere from '../../../hooks/useAtmosphere'
 import textOverflow from '../../../styles/helpers/textOverflow'
 import {PALETTE} from '../../../styles/paletteV3'
 import {FONT_FAMILY} from '../../../styles/typographyV2'
-import {PokerTemplateScaleDetails_team} from '../../../__generated__/PokerTemplateScaleDetails_team.graphql'
 import EditableTemplateScaleName from './EditableTemplateScaleName'
 import scaleValueString from './scaleValueString'
 import TemplateScaleValueList from './TemplateScaleValueList'
@@ -53,6 +53,7 @@ const ScaleValueEditor = styled('div')({
   flexDirection: 'column',
   overflow: 'hidden',
   maxWidth: 520,
+  paddingBottom: '4px',
   width: '100%'
 })
 
@@ -81,11 +82,31 @@ const ScaleValues = styled('div')({
 })
 
 interface Props {
-  team: PokerTemplateScaleDetails_team
+  team: PokerTemplateScaleDetails_team$key
 }
 
 const PokerTemplateScaleDetails = (props: Props) => {
-  const {team} = props
+  const {team: teamRef} = props
+  const team = useFragment(
+    graphql`
+      fragment PokerTemplateScaleDetails_team on Team {
+        id
+        editingScaleId
+        scales {
+          ...EditableTemplateScaleName_scales
+          ...TemplateScaleValueList_scale
+          ...NewTemplateScaleValueLabelInput_scale
+          id
+          name
+          teamId
+          values {
+            label
+          }
+        }
+      }
+    `,
+    teamRef
+  )
   const {id: teamId, scales, editingScaleId} = team
   const scale = scales.find((scale) => scale.id === editingScaleId)!
   const {values} = scale
@@ -123,22 +144,4 @@ const PokerTemplateScaleDetails = (props: Props) => {
   )
 }
 
-export default createFragmentContainer(PokerTemplateScaleDetails, {
-  team: graphql`
-    fragment PokerTemplateScaleDetails_team on Team {
-      id
-      editingScaleId
-      scales {
-        ...EditableTemplateScaleName_scales
-        ...TemplateScaleValueList_scale
-        ...NewTemplateScaleValueLabelInput_scale
-        id
-        name
-        teamId
-        values {
-          label
-        }
-      }
-    }
-  `
-})
+export default PokerTemplateScaleDetails

@@ -1,8 +1,8 @@
 import graphql from 'babel-plugin-relay/macro'
 import {useEffect} from 'react'
 import {useFragment} from 'react-relay'
+import type {useNewFeatureSnackbar_viewer$key} from '../__generated__/useNewFeatureSnackbar_viewer.graphql'
 import DismissNewFeatureMutation from '../mutations/DismissNewFeatureMutation'
-import {useNewFeatureSnackbar_viewer$key} from '../__generated__/useNewFeatureSnackbar_viewer.graphql'
 import useAtmosphere from './useAtmosphere'
 import useMutationProps from './useMutationProps'
 
@@ -38,6 +38,9 @@ const useNewFeatureSnackbar = (viewerRef: useNewFeatureSnackbar_viewer$key) => {
       }
     }
     atmosphere.eventEmitter.emit('addSnackbar', snack)
+    return () => {
+      atmosphere.eventEmitter.emit('removeSnackbar', ({key}) => key === 'newFeature')
+    }
   }, [newFeature])
 }
 

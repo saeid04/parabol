@@ -4,11 +4,11 @@
  */
 import graphql from 'babel-plugin-relay/macro'
 import {commitMutation} from 'react-relay'
-import {RecordSourceSelectorProxy} from 'relay-runtime'
-import {RemoveReflectionMutation_meeting} from '~/__generated__/RemoveReflectionMutation_meeting.graphql'
-import {BaseLocalHandlers, SharedUpdater, StandardMutation} from '../types/relayMutations'
+import type {RecordSourceSelectorProxy} from 'relay-runtime'
+import type {RemoveReflectionMutation_meeting$data} from '~/__generated__/RemoveReflectionMutation_meeting.graphql'
+import type {RemoveReflectionMutation as TRemoveReflectionMutation} from '../__generated__/RemoveReflectionMutation.graphql'
+import type {BaseLocalHandlers, SharedUpdater, StandardMutation} from '../types/relayMutations'
 import safeRemoveNodeFromArray from '../utils/relay/safeRemoveNodeFromArray'
-import {RemoveReflectionMutation as TRemoveReflectionMutation} from '../__generated__/RemoveReflectionMutation.graphql'
 import handleRemoveReflectionGroups from './handlers/handleRemoveReflectionGroups'
 
 graphql`
@@ -35,7 +35,7 @@ const mutation = graphql`
   }
 `
 
-type Reflection = NonNullable<RemoveReflectionMutation_meeting['reflection']>
+type Reflection = NonNullable<RemoveReflectionMutation_meeting$data['reflection']>
 
 const removeReflectionAndEmptyGroup = (
   reflectionId: string,
@@ -49,16 +49,14 @@ const removeReflectionAndEmptyGroup = (
   if (!reflectionGroup) return
   safeRemoveNodeFromArray(reflectionId, reflectionGroup, 'reflections')
   const reflections = reflectionGroup.getLinkedRecords('reflections')
-  // https://sentry.io/share/issue/c8712aae0e6544a1ac0acd3be8d38ae8/
   if (!reflections || reflections.length === 0) {
     handleRemoveReflectionGroups(reflectionGroupId, meetingId, store)
   }
 }
 
-export const removeReflectionMeetingUpdater: SharedUpdater<RemoveReflectionMutation_meeting> = (
-  payload,
-  {store}
-) => {
+export const removeReflectionMeetingUpdater: SharedUpdater<
+  RemoveReflectionMutation_meeting$data
+> = (payload, {store}) => {
   const meeting = payload.getLinkedRecord('meeting')
   const meetingId = meeting.getValue('id')
   const reflection = payload.getLinkedRecord('reflection')

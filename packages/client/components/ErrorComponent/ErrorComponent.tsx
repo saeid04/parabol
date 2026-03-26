@@ -1,9 +1,13 @@
 import styled from '@emotion/styled'
-import React from 'react'
 import PrimaryButton from '~/components/PrimaryButton'
-import ReportErrorFeedback from '~/components/ReportErrorFeedback'
+import ReportErrorFeedback, {ERROR_FEEDBACK_ENABLED} from '~/components/ReportErrorFeedback'
 import useModal from '~/hooks/useModal'
-import {isOldBrowserError} from '~/utils/isOldBrowserError'
+import {
+  isExtensionError,
+  isIgnoredError,
+  isNetworkError,
+  isOldBrowserError
+} from '../../utils/errorFilters'
 
 const ErrorBlock = styled('div')({
   alignItems: 'center',
@@ -30,11 +34,25 @@ interface Props {
 
 const ErrorComponent = (props: Props) => {
   const {error, eventId} = props
-  console.error(error)
+  if (!isIgnoredError(error)) {
+    console.error(error)
+  }
   const {modalPortal, openPortal, closePortal} = useModal()
-  const isOldBrowserErr = isOldBrowserError(error.message)
 
-  if (isOldBrowserErr) {
+  if (isExtensionError(error)) {
+    return (
+      <ErrorBlock>
+        <div>
+          Oh no! Seems like you're using Google Translate or a similar extension, which has a bug in
+          it that can crash apps like ours.
+        </div>
+        <div>If this continues, please disable the extension</div>
+        <Button onClick={() => window.location.reload()}>Refresh the page</Button>
+      </ErrorBlock>
+    )
+  }
+
+  if (isOldBrowserError(error)) {
     const url = 'https://browser-update.org/update-browser.html'
     return (
       <ErrorBlock>
@@ -47,11 +65,23 @@ const ErrorComponent = (props: Props) => {
       </ErrorBlock>
     )
   }
+
+  if (isNetworkError(error)) {
+    return (
+      <ErrorBlock>
+        There was a network issue. Please check your connection and try again.
+        <Button onClick={() => window.location.reload()}>Refresh the page</Button>
+      </ErrorBlock>
+    )
+  }
+
   return (
     <ErrorBlock>
       {'An error has occurred! We’ve alerted the developers. Try refreshing the page'}
-      {eventId && <Button onClick={openPortal}>Report Feedback</Button>}
-      {modalPortal(<ReportErrorFeedback closePortal={closePortal} eventId={eventId} />)}
+      {ERROR_FEEDBACK_ENABLED && eventId && <Button onClick={openPortal}>Report Feedback</Button>}
+      {modalPortal(
+        <ReportErrorFeedback closePortal={closePortal} error={error} eventId={eventId} />
+      )}
     </ErrorBlock>
   )
 }

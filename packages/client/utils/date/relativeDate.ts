@@ -3,14 +3,15 @@
 // capitalized J in just now
 // set my own defaults
 
+import humanizeDuration from 'humanize-duration'
 import plural from '../plural'
 
-const SECOND = 1000
-const MIN = SECOND * 60
-const HOUR = MIN * 60
-const DAY = HOUR * 24
-const YEAR = DAY * 365
-const MONTH = DAY * 30
+export const SECOND = 1000
+export const MIN = SECOND * 60
+export const HOUR = MIN * 60
+export const DAY = HOUR * 24
+export const YEAR = DAY * 365
+export const MONTH = DAY * 30
 
 interface Opts {
   max?: number
@@ -19,6 +20,38 @@ interface Opts {
   suffix?: boolean
   now?: string | Date | null
   smallDiff?: string
+}
+
+const weekDayFormatter = new Intl.DateTimeFormat('en-US', {weekday: 'long'})
+/**
+ * Creates a human-readable string representing of the next meeting date,
+ * for example: Friday; tomorrow; in 12 hours; next week; in 2 weeks; etc or null if the date is in the past
+ * @param date
+ */
+export const humanReadableNextStart = (date: string | Date) => {
+  const then = new Date(date)
+  const now = new Date()
+  const abs = then.getTime() - now.getTime()
+  if (abs < 0) return null
+  const periods = {
+    week: abs / (DAY * 7),
+    day: abs / DAY,
+    hour: abs / HOUR
+  } as const
+
+  const weeks = Math.floor(periods.week)
+  if (weeks > 0) {
+    return weeks === 1 ? 'next week' : `in ${weeks} weeks`
+  }
+
+  const days = Math.floor(periods.day)
+  const hours = Math.floor(periods.hour)
+
+  if (days > 0 || now.getDate() !== then.getDate()) {
+    return hours < 24 ? 'tomorrow' : weekDayFormatter.format(then)
+  }
+
+  return hours > 0 ? `in ${hours} ${plural(hours, 'hour', 'hours')}` : `soon`
 }
 
 /**
@@ -62,22 +95,10 @@ export const humanReadableCountdown = (date: string | Date) => {
 
 export const countdown = (date: string | Date) => {
   const now = new Date()
-  const abs = new Date(date).getTime() - now.getTime()
-  if (abs < 0) return null
-  const periods = {
-    d: (abs % MONTH) / DAY,
-    h: (abs % DAY) / HOUR,
-    m: (abs % HOUR) / MIN,
-    s: (abs % MIN) / SECOND
-  } as const
-  const keep: string[] = []
-
-  for (const k in periods) {
-    const val = String(Math.floor(periods[k as keyof typeof periods]))
-    if (val === '0' && keep.length === 0 && k !== 'm') continue
-    keep.push(keep.length === 0 ? val : val.padStart(2, '0'))
-  }
-  return keep.join(':')
+  const durationMillisecs = new Date(date).getTime() - now.getTime()
+  if (durationMillisecs < 0) return null
+  const durationWholeMillisecs = Math.round(durationMillisecs / 1000) * 1000
+  return humanizeDuration(durationWholeMillisecs)
 }
 
 const relativeDate = (date: string | Date, opts: Opts = {}) => {

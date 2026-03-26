@@ -1,15 +1,15 @@
 import graphql from 'babel-plugin-relay/macro'
-import React, {Suspense} from 'react'
-import {createFragmentContainer} from 'react-relay'
-import {MenuProps} from '../hooks/useMenu'
-import {MenuMutationProps} from '../hooks/useMutationProps'
-import useQueryLoaderNow from '../hooks/useQueryLoaderNow'
-import {UseTaskChild} from '../hooks/useTaskChildFocus'
-import {LoaderSize} from '../types/constEnums'
+import {Suspense} from 'react'
+import {useFragment} from 'react-relay'
 import taskFooterIntegrateMenuQuery, {
-  TaskFooterIntegrateMenuQuery
+  type TaskFooterIntegrateMenuQuery
 } from '../__generated__/TaskFooterIntegrateMenuQuery.graphql'
-import {TaskFooterIntegrateMenuRoot_task} from '../__generated__/TaskFooterIntegrateMenuRoot_task.graphql'
+import type {TaskFooterIntegrateMenuRoot_task$key} from '../__generated__/TaskFooterIntegrateMenuRoot_task.graphql'
+import type {MenuProps} from '../hooks/useMenu'
+import type {MenuMutationProps} from '../hooks/useMutationProps'
+import useQueryLoaderNow from '../hooks/useQueryLoaderNow'
+import type {UseTaskChild} from '../hooks/useTaskChildFocus'
+import {LoaderSize} from '../types/constEnums'
 import LoadingComponent from './LoadingComponent/LoadingComponent'
 import TaskFooterIntegrateMenu from './TaskFooterIntegrateMenu'
 
@@ -18,18 +18,22 @@ interface Props {
   loadingDelay: number
   loadingWidth: number
   mutationProps: MenuMutationProps
-  task: TaskFooterIntegrateMenuRoot_task
+  task: TaskFooterIntegrateMenuRoot_task$key
   useTaskChild: UseTaskChild
 }
 
-const TaskFooterIntegrateMenuRoot = ({
-  menuProps,
-  loadingDelay,
-  loadingWidth,
-  mutationProps,
-  task,
-  useTaskChild
-}: Props) => {
+const TaskFooterIntegrateMenuRoot = (props: Props) => {
+  const {menuProps, loadingDelay, loadingWidth, mutationProps, task: taskRef, useTaskChild} = props
+  const task = useFragment(
+    graphql`
+      fragment TaskFooterIntegrateMenuRoot_task on Task {
+        teamId
+        userId
+        ...TaskFooterIntegrateMenu_task
+      }
+    `,
+    taskRef
+  )
   const {teamId, userId} = task
   useTaskChild('integrate')
   const queryRef = useQueryLoaderNow<TaskFooterIntegrateMenuQuery>(taskFooterIntegrateMenuQuery, {
@@ -60,12 +64,4 @@ const TaskFooterIntegrateMenuRoot = ({
   )
 }
 
-export default createFragmentContainer(TaskFooterIntegrateMenuRoot, {
-  task: graphql`
-    fragment TaskFooterIntegrateMenuRoot_task on Task {
-      teamId
-      userId
-      ...TaskFooterIntegrateMenu_task
-    }
-  `
-})
+export default TaskFooterIntegrateMenuRoot

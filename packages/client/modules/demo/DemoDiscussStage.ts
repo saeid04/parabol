@@ -1,6 +1,6 @@
 import {RetroDemo} from '../../types/constEnums'
 import DemoGenericMeetingStage from './DemoGenericMeetingStage'
-import {DemoDiscussion} from './initDB'
+import type {DemoDiscussion} from './initDB'
 
 export default class DemoDiscussStage extends DemoGenericMeetingStage {
   __typename = 'RetroDiscussStage'
@@ -13,7 +13,7 @@ export default class DemoDiscussStage extends DemoGenericMeetingStage {
   phaseType = 'discuss' as const
   startAt = new Date().toJSON()
   viewCount = 0
-  readyCount = 0
+  readyUserIds = []
   reflectionGroupId: string
   discussion: DemoDiscussion
   constructor(

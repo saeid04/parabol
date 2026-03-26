@@ -1,17 +1,18 @@
 import graphql from 'babel-plugin-relay/macro'
-import {useEffect} from 'react'
+import {useEffect, useRef} from 'react'
+import {useNavigate} from 'react-router'
 import {readInlineData} from 'relay-runtime'
-import {useAutoCheckIn_meeting$key} from '~/__generated__/useAutoCheckIn_meeting.graphql'
+import type {useAutoCheckIn_meeting$key} from '~/__generated__/useAutoCheckIn_meeting.graphql'
 import JoinMeetingMutation from '../mutations/JoinMeetingMutation'
 import MeetingSubscription from '../subscriptions/MeetingSubscription'
 import useAtmosphere from './useAtmosphere'
-import useRouter from './useRouter'
 
 const useAutoCheckIn = (meetingRef: useAutoCheckIn_meeting$key) => {
   const atmosphere = useAtmosphere()
-  const {history, location} = useRouter()
-  const router = {history, location}
+  const navigate = useNavigate()
+  const router = {navigate}
   const queryKey = 'useAutoCheckIn'
+  const hasCalledJoinedRef = useRef(false)
   useEffect(() => {
     const meeting = readInlineData(
       graphql`
@@ -28,12 +29,15 @@ const useAutoCheckIn = (meetingRef: useAutoCheckIn_meeting$key) => {
     const {id: meetingId, endedAt, viewerMeetingMember} = meeting
     const subscribeToMeeting = () => {
       if (atmosphere.registerQuery) {
-        atmosphere.registerQuery(queryKey, MeetingSubscription, {meetingId}, router).catch()
+        atmosphere.registerQuery(queryKey, MeetingSubscription, {meetingId}, router).catch(() => {
+          /*ignore*/
+        })
       }
     }
     if (viewerMeetingMember) {
       subscribeToMeeting()
-    } else if (!endedAt) {
+    } else if (!endedAt && !hasCalledJoinedRef.current) {
+      hasCalledJoinedRef.current = true
       JoinMeetingMutation(
         atmosphere,
         {meetingId},
@@ -42,7 +46,7 @@ const useAutoCheckIn = (meetingRef: useAutoCheckIn_meeting$key) => {
     }
     return () => {
       if (atmosphere.scheduleUnregisterQuery) {
-        atmosphere.scheduleUnregisterQuery(queryKey, 300000)
+        atmosphere.scheduleUnregisterQuery(queryKey, 5000)
       }
     }
   }, [])

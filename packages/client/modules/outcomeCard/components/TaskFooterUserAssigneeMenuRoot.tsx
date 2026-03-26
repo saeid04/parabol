@@ -1,26 +1,37 @@
 import graphql from 'babel-plugin-relay/macro'
-import React, {Suspense} from 'react'
-import {createFragmentContainer} from 'react-relay'
-import {MenuProps} from '../../../hooks/useMenu'
-import useQueryLoaderNow from '../../../hooks/useQueryLoaderNow'
-import {UseTaskChild} from '../../../hooks/useTaskChildFocus'
-import {renderLoader} from '../../../utils/relay/renderLoader'
+import {Suspense} from 'react'
+import {useFragment} from 'react-relay'
 import taskFooterUserAssigneeMenuQuery, {
-  TaskFooterUserAssigneeMenuQuery
+  type TaskFooterUserAssigneeMenuQuery
 } from '../../../__generated__/TaskFooterUserAssigneeMenuQuery.graphql'
-import {TaskFooterUserAssigneeMenuRoot_task} from '../../../__generated__/TaskFooterUserAssigneeMenuRoot_task.graphql'
-import {AreaEnum} from '../../../__generated__/UpdateTaskMutation.graphql'
+import type {TaskFooterUserAssigneeMenuRoot_task$key} from '../../../__generated__/TaskFooterUserAssigneeMenuRoot_task.graphql'
+import type {AreaEnum} from '../../../__generated__/UpdateTaskMutation.graphql'
+import type {MenuProps} from '../../../hooks/useMenu'
+import useQueryLoaderNow from '../../../hooks/useQueryLoaderNow'
+import type {UseTaskChild} from '../../../hooks/useTaskChildFocus'
+import {Loader} from '../../../utils/relay/renderLoader'
 import TaskFooterUserAssigneeMenu from './OutcomeCardAssignMenu/TaskFooterUserAssigneeMenu'
 
 interface Props {
   area: string
   menuProps: MenuProps
-  task: TaskFooterUserAssigneeMenuRoot_task
+  task: TaskFooterUserAssigneeMenuRoot_task$key
   useTaskChild: UseTaskChild
 }
 
 const TaskFooterUserAssigneeMenuRoot = (props: Props) => {
-  const {area, menuProps, task, useTaskChild} = props
+  const {area, menuProps, task: taskRef, useTaskChild} = props
+  const task = useFragment(
+    graphql`
+      fragment TaskFooterUserAssigneeMenuRoot_task on Task {
+        ...TaskFooterUserAssigneeMenu_task
+        team {
+          id
+        }
+      }
+    `,
+    taskRef
+  )
   const {team} = task
   const {id: teamId} = team
   useTaskChild('userAssignee')
@@ -29,7 +40,7 @@ const TaskFooterUserAssigneeMenuRoot = (props: Props) => {
     {teamId}
   )
   return (
-    <Suspense fallback={renderLoader()}>
+    <Suspense fallback={<Loader />}>
       {queryRef && (
         <TaskFooterUserAssigneeMenu
           queryRef={queryRef}
@@ -42,13 +53,4 @@ const TaskFooterUserAssigneeMenuRoot = (props: Props) => {
   )
 }
 
-export default createFragmentContainer(TaskFooterUserAssigneeMenuRoot, {
-  task: graphql`
-    fragment TaskFooterUserAssigneeMenuRoot_task on Task {
-      ...TaskFooterUserAssigneeMenu_task
-      team {
-        id
-      }
-    }
-  `
-})
+export default TaskFooterUserAssigneeMenuRoot

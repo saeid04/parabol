@@ -1,14 +1,14 @@
 import graphql from 'babel-plugin-relay/macro'
 import {commitMutation} from 'react-relay'
-import {BaseLocalHandlers, SharedUpdater, StandardMutation} from '../types/relayMutations'
+import type {AddReflectTemplatePromptMutation as TAddReflectTemplatePromptMutation} from '../__generated__/AddReflectTemplatePromptMutation.graphql'
+import type {AddReflectTemplatePromptMutation_team$data} from '../__generated__/AddReflectTemplatePromptMutation_team.graphql'
+import type {BaseLocalHandlers, SharedUpdater, StandardMutation} from '../types/relayMutations'
 import createProxyRecord from '../utils/relay/createProxyRecord'
-import {AddReflectTemplatePromptMutation as TAddReflectTemplatePromptMutation} from '../__generated__/AddReflectTemplatePromptMutation.graphql'
-import {AddReflectTemplatePromptMutation_team} from '../__generated__/AddReflectTemplatePromptMutation_team.graphql'
 import handleAddReflectTemplatePrompt from './handlers/handleAddReflectTemplatePrompt'
 
 interface Handlers extends BaseLocalHandlers {
   promptCount: number
-  sortOrder: number
+  sortOrder: string
 }
 
 graphql`
@@ -35,7 +35,7 @@ const mutation = graphql`
 `
 
 export const addReflectTemplatePromptTeamUpdater: SharedUpdater<
-  AddReflectTemplatePromptMutation_team
+  AddReflectTemplatePromptMutation_team$data
 > = (payload, {store}) => {
   const prompt = payload.getLinkedRecord('prompt')
   if (!prompt) return

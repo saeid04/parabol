@@ -1,8 +1,8 @@
 import {useEffect} from 'react'
+import {useNavigate} from 'react-router'
 import {AuthTokenRole} from '../types/constEnums'
 import useAtmosphere from './useAtmosphere'
 import useDeepEqual from './useDeepEqual'
-import useRouter from './useRouter'
 
 interface Options {
   role?: AuthTokenRole
@@ -23,28 +23,36 @@ const unauthenticatedDefault = {
 
 const useAuthRoute = (inOptions: Options = {}) => {
   const atmosphere = useAtmosphere()
-  const {history} = useRouter()
+  const navigate = useNavigate()
   const options = useDeepEqual(inOptions)
-  useEffect(() => {
+
+  const checkAuth = () => {
     const {authObj} = atmosphere
     const {role, silent} = options
     if (authObj) {
+      // User is authenticated, check their authorization
       if (role && role !== authObj.rol) {
         atmosphere.eventEmitter.emit('addSnackbar', unauthorizedDefault)
-        history.replace('/')
+        navigate('/', {replace: true})
       }
     } else {
+      // User is not authenticated, redirect them to sign in
       if (!silent) {
         setTimeout(() => {
           atmosphere.eventEmitter.emit('addSnackbar', unauthenticatedDefault)
         })
       }
-      history.replace({
-        pathname: '/',
-        search: `?redirectTo=${encodeURIComponent(window.location.pathname)}`
-      })
+      navigate(
+        {
+          pathname: '/',
+          search: `?redirectTo=${encodeURIComponent(window.location.pathname)}`
+        },
+        {replace: true}
+      )
     }
-  }, [atmosphere, history, options])
+  }
+
+  useEffect(checkAuth, [atmosphere.authObj, navigate, options])
 }
 
 export default useAuthRoute

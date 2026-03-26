@@ -1,12 +1,7 @@
 import areEqual from 'fbjs/lib/areEqual'
 import {useCallback, useEffect, useRef} from 'react'
-import {
-  fetchQuery,
-  PreloadableConcreteRequest,
-  PreloadFetchPolicy,
-  useQueryLoader
-} from 'react-relay'
-import {GraphQLTaggedNode, OperationType, VariablesOf} from 'relay-runtime'
+import {fetchQuery, type PreloadFetchPolicy, useQueryLoader} from 'react-relay'
+import type {ConcreteRequest, GraphQLTaggedNode, OperationType, VariablesOf} from 'relay-runtime'
 import useAtmosphere from './useAtmosphere'
 
 type QueryLoaderOptions = {
@@ -15,7 +10,7 @@ type QueryLoaderOptions = {
 }
 
 export const useQueryLoaderNowWithRetry = <TQuery extends OperationType>(
-  preloadableRequest: GraphQLTaggedNode | PreloadableConcreteRequest<TQuery>,
+  preloadableRequest: GraphQLTaggedNode | ConcreteRequest,
   variables: VariablesOf<TQuery> = {},
   options: QueryLoaderOptions = {}
 ) => {
@@ -35,7 +30,9 @@ export const useQueryLoaderNowWithRetry = <TQuery extends OperationType>(
         // *After* the query has been fetched, we call loadQuery again to re-render
         // with a new queryRef. At this point the data for the query should be
         // cached, so we use the 'store-only' fetchPolicy to avoid suspending.
-        loadQuery(variables, {fetchPolicy: 'store-only' as PreloadFetchPolicy})
+        loadQuery(variables, {
+          fetchPolicy: 'store-only' as PreloadFetchPolicy
+        })
       }
     })
   }, [varRef.current])
@@ -44,7 +41,9 @@ export const useQueryLoaderNowWithRetry = <TQuery extends OperationType>(
   useEffect(() => {
     if (preventSuspense) refreshQuery()
     else {
-      loadQuery(variables || {}, {fetchPolicy: fetchPolicy || 'store-or-network'})
+      loadQuery(variables || {}, {
+        fetchPolicy: fetchPolicy || 'store-or-network'
+      })
     }
   }, [varRef.current])
 
@@ -63,7 +62,7 @@ export const useQueryLoaderNowWithRetry = <TQuery extends OperationType>(
 }
 
 const useQueryLoaderNow = <TQuery extends OperationType>(
-  preloadableRequest: GraphQLTaggedNode | PreloadableConcreteRequest<TQuery>,
+  preloadableRequest: GraphQLTaggedNode | ConcreteRequest,
   variables: VariablesOf<TQuery> = {},
   fetchPolicy?: PreloadFetchPolicy,
   preventSuspense?: boolean

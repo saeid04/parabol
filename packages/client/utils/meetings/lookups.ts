@@ -1,6 +1,6 @@
-import React from 'react'
-import {MeetingTypeEnum} from '~/../server/postgres/types/Meeting'
-import {NewMeetingPhaseTypeEnum} from '~/__generated__/ActionMeetingSidebar_meeting.graphql'
+import type * as React from 'react'
+import type {NewMeetingPhaseTypeEnum} from '~/__generated__/ActionMeetingSidebar_meeting.graphql'
+import type {MeetingTypeEnum} from '../../__generated__/SummarySheet_meeting.graphql'
 import CardsSVG from '../../components/CardsSVG'
 import {ACTION, POKER, RETROSPECTIVE, TEAM_PROMPT} from '../constants'
 
@@ -9,6 +9,7 @@ import {ACTION, POKER, RETROSPECTIVE, TEAM_PROMPT} from '../constants'
 /* These are the labels show to the viewer */
 export const phaseLabelLookup = {
   checkin: 'Icebreaker',
+  TEAM_HEALTH: 'Team Health',
   reflect: 'Reflect',
   group: 'Group',
   vote: 'Vote',
@@ -25,6 +26,7 @@ export const phaseLabelLookup = {
 
 export const phaseIconLookup = {
   checkin: 'group',
+  TEAM_HEALTH: 'monitor_heart',
   reflect: 'edit',
   group: 'group_work',
   vote: 'thumbs_up_down',
@@ -49,6 +51,7 @@ export const meetingTypeToIcon = {
 
 export const phaseTypeToSlug = {
   checkin: 'checkin',
+  TEAM_HEALTH: 'teamhealth',
   reflect: 'reflect',
   group: 'group',
   vote: 'vote',

@@ -1,28 +1,40 @@
 import graphql from 'babel-plugin-relay/macro'
-import React from 'react'
-import {createFragmentContainer} from 'react-relay'
+import {useFragment} from 'react-relay'
+import type {SlackProviderRow_viewer$key} from '../../../../__generated__/SlackProviderRow_viewer.graphql'
 import SlackConfigMenu from '../../../../components/SlackConfigMenu'
 import SlackProviderLogo from '../../../../components/SlackProviderLogo'
 import useAtmosphere from '../../../../hooks/useAtmosphere'
 import {MenuPosition} from '../../../../hooks/useCoords'
 import useMenu from '../../../../hooks/useMenu'
-import useMutationProps, {MenuMutationProps} from '../../../../hooks/useMutationProps'
+import useMutationProps, {type MenuMutationProps} from '../../../../hooks/useMutationProps'
 import {Providers} from '../../../../types/constEnums'
 import SlackClientManager from '../../../../utils/SlackClientManager'
-import {SlackProviderRow_viewer} from '../../../../__generated__/SlackProviderRow_viewer.graphql'
 import ProviderRow from './ProviderRow'
 import SlackNotificationList from './SlackNotificationList'
 
 interface Props {
   teamId: string
-  viewer: SlackProviderRow_viewer
+  viewer: SlackProviderRow_viewer$key
 }
 
 const SlackProviderRow = (props: Props) => {
-  const {viewer, teamId} = props
+  const {viewer: viewerRef, teamId} = props
+  const viewer = useFragment(
+    graphql`
+      fragment SlackProviderRow_viewer on User {
+        ...SlackProviderRowViewer @relay(mask: false)
+      }
+    `,
+    viewerRef
+  )
   const atmosphere = useAtmosphere()
   const {submitting, submitMutation, onError, onCompleted} = useMutationProps()
-  const mutationProps = {submitting, submitMutation, onError, onCompleted} as MenuMutationProps
+  const mutationProps = {
+    submitting,
+    submitMutation,
+    onError,
+    onCompleted
+  } as MenuMutationProps
   const {teamMember} = viewer
   const {integrations} = teamMember!
   const {slack} = integrations
@@ -31,6 +43,8 @@ const SlackProviderRow = (props: Props) => {
     SlackClientManager.openOAuth(atmosphere, teamId, mutationProps)
   }
   const {togglePortal, originRef, menuPortal, menuProps} = useMenu(MenuPosition.UPPER_RIGHT)
+
+  if (!SlackClientManager.isAvailable) return null
 
   return (
     <>
@@ -68,10 +82,4 @@ graphql`
   }
 `
 
-export default createFragmentContainer(SlackProviderRow, {
-  viewer: graphql`
-    fragment SlackProviderRow_viewer on User {
-      ...SlackProviderRowViewer @relay(mask: false)
-    }
-  `
-})
+export default SlackProviderRow

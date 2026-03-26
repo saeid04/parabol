@@ -1,10 +1,9 @@
 import styled from '@emotion/styled'
 import {Search} from '@mui/icons-material'
 import graphql from 'babel-plugin-relay/macro'
-import React from 'react'
 import {useFragment} from 'react-relay'
+import type {AzureDevOpsScopingSearchBar_meeting$key} from '../__generated__/AzureDevOpsScopingSearchBar_meeting.graphql'
 import {PALETTE} from '../styles/paletteV3'
-import {AzureDevOpsScopingSearchBar_meeting$key} from '../__generated__/AzureDevOpsScopingSearchBar_meeting.graphql'
 import AzureDevOpsScopingSearchFilterToggle from './AzureDevOpsScopingSearchFilterToggle'
 import AzureDevOpsScopingSearchInput from './AzureDevOpsScopingSearchInput'
 

@@ -1,11 +1,15 @@
 import graphql from 'babel-plugin-relay/macro'
-import {Snack} from '../../components/Snackbar'
-import {OnNextHistoryContext} from '../../types/relayMutations'
+import type {mapDiscussionMentionedToToast_notification$data} from '../../__generated__/mapDiscussionMentionedToToast_notification.graphql'
+import type {Snack} from '../../components/Snackbar'
+import type {OnNextNavigateContext} from '../../types/relayMutations'
+import findStageById from '../../utils/meetings/findStageById'
 import fromStageIdToUrl from '../../utils/meetings/fromStageIdToUrl'
-import {mapDiscussionMentionedToToast_notification} from '../../__generated__/mapDiscussionMentionedToToast_notification.graphql'
+import getMeetingPathParams from '../../utils/meetings/getMeetingPathParams'
+import makeNotificationToastKey from './makeNotificationToastKey'
 
 graphql`
   fragment mapDiscussionMentionedToToast_notification on NotifyDiscussionMentioned {
+    id
     author {
       id
       preferredName
@@ -13,6 +17,12 @@ graphql`
     meeting {
       id
       name
+      phases {
+        phaseType
+        stages {
+          id
+        }
+      }
       ...fromStageIdToUrl_meeting
     }
     discussion {
@@ -31,29 +41,38 @@ graphql`
 `
 
 const mapDiscussionMentionedToToast = (
-  notification: mapDiscussionMentionedToToast_notification,
-  {history}: OnNextHistoryContext
+  notification: mapDiscussionMentionedToToast_notification$data,
+  {navigate}: OnNextNavigateContext
 ): Snack | null => {
   if (!notification) return null
-  const {meeting, author, discussion} = notification
-  const {preferredName: authorName} = author
+  const {id: notificationId, meeting, author, discussion} = notification
+  const authorName = author ? author.preferredName : 'Anonymous'
   const {id: meetingId, name: meetingName} = meeting
   const {stage} = discussion
   const {id: stageId, response} = stage ?? {}
 
+  const meetingPath = getMeetingPathParams()
+  const notifStageRes = findStageById(meeting.phases, stageId)
+  if (
+    meetingPath.meetingId === meetingId &&
+    (!stageId ||
+      (notifStageRes?.stageIdx === meetingPath.stageIdx &&
+        notifStageRes?.phase.phaseType === meetingPath.phaseType))
+  ) {
+    // We're already in the relevant stage of the meeting, so don't pop toast.
+    return null
+  }
+
   const directUrl = stageId ? fromStageIdToUrl(stageId, meeting) : `/meet/${meetingId}`
 
-  // :TODO: (jmtaber129): Check if we're already open to the relevant standup response discussion
-  // thread, and do nothing if we are.
-
   return {
-    key: `discussionMentioned:${discussion.id}:${author.id}`,
+    key: makeNotificationToastKey(notificationId),
     autoDismiss: 10,
     message: `${authorName} mentioned you in a discussion in ${meetingName}.`,
     action: {
       label: 'See the discussion',
       callback: () => {
-        history.push(
+        navigate(
           response ? `${directUrl}?responseId=${encodeURIComponent(response.id)}` : directUrl
         )
       }

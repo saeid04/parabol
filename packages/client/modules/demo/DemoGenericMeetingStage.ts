@@ -1,5 +1,5 @@
+import type {NewMeetingPhaseTypeEnum} from '../../__generated__/MeetingControlBar_meeting.graphql'
 import {RetroDemo} from '../../types/constEnums'
-import {NewMeetingPhaseTypeEnum} from '../../__generated__/MeetingControlBar_meeting.graphql'
 
 export default class DemoGenericMeetingStage {
   __typename = 'GenericMeetingStage'
@@ -13,7 +13,7 @@ export default class DemoGenericMeetingStage {
   isNavigableByFacilitator = false
   startAt = new Date().toJSON()
   viewCount = 0
-  readyCount = 0
+  readyUserIds = []
   scheduledEndTime = null
   suggestedEndTime = null
   suggestedTimeLimit = null

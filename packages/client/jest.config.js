@@ -1,17 +1,12 @@
 const tsJestPresets = require('ts-jest/presets')
 
 module.exports = {
-  preset: 'ts-jest',
   testEnvironment: 'node',
-  globals: {
-    'ts-jest': {
-      diagnostics: false
-    }
-  },
   transform: {
-    '\\.(gql|graphql)$': 'jest-transform-graphql',
-    ...tsJestPresets.jsWithBabel.transform
+    '\\.(gql|graphql)$': '../server/__tests__/jest-transform-graphql-shim.js',
+    '^.+\\.(t|j)sx?$': ['@swc/jest']
   },
+  transformIgnorePatterns: ['/marked\.esm\.js/'],
   modulePaths: ['<rootDir>/packages/'],
   moduleNameMapper: {
     '~/(.*)': ['<rootDir>/../client/$1']

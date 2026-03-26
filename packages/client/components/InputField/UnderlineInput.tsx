@@ -1,5 +1,6 @@
 import styled from '@emotion/styled'
-import React, {forwardRef, Ref} from 'react'
+import * as React from 'react'
+import {forwardRef, type Ref} from 'react'
 import {PALETTE} from '../../styles/paletteV3'
 import {FONT_FAMILY} from '../../styles/typographyV2'
 import StyledError from '../StyledError'
@@ -31,6 +32,7 @@ const ErrorMessage = styled(StyledError)({
 
 interface Props {
   ariaLabel: string
+  autoComplete?: string
   autoFocus?: boolean
   disabled?: boolean
   error: string | undefined
@@ -45,6 +47,7 @@ interface Props {
 const UnderlineInput = forwardRef((props: Props, ref: Ref<HTMLInputElement>) => {
   const {
     ariaLabel,
+    autoComplete,
     autoFocus,
     disabled,
     error,
@@ -59,6 +62,7 @@ const UnderlineInput = forwardRef((props: Props, ref: Ref<HTMLInputElement>) => 
     <React.Fragment>
       <Input
         aria-label={ariaLabel}
+        autoComplete={autoComplete}
         autoFocus={autoFocus}
         disabled={Boolean(disabled)}
         ref={ref}

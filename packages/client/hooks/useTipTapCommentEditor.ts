@@ -1,0 +1,81 @@
+import Mention from '@tiptap/extension-mention'
+import {Placeholder} from '@tiptap/extensions'
+import {Extension, useEditor} from '@tiptap/react'
+import StarterKit from '@tiptap/starter-kit'
+import {useRef} from 'react'
+import type Atmosphere from '../Atmosphere'
+import {LoomExtension} from '../components/TipTapEditor/LoomExtension'
+import {TiptapLinkExtension} from '../components/TipTapEditor/TiptapLinkExtension'
+import {mentionConfig} from '../shared/tiptap/serverTipTapExtensions'
+import {ClearOnSubmit} from '../tiptap/extensions/ClearOnSubmit'
+import {MentionTaskTag} from '../utils/MentionTaskTag'
+import {tiptapEmojiConfig} from '../utils/tiptapEmojiConfig'
+import {tiptapMentionConfig} from '../utils/tiptapMentionConfig'
+import {tiptapTagConfig} from '../utils/tiptapTagConfig'
+import {useTipTapEditorContent} from './useTipTapEditorContent'
+
+const isValid = <T>(obj: T | undefined | null | boolean): obj is T => {
+  return !!obj
+}
+
+export const useTipTapCommentEditor = (
+  content: string,
+  options: {
+    atmosphere?: Atmosphere
+    teamId?: string
+    readOnly?: boolean
+    placeholder?: string
+    onEnter?: () => void
+    onEscape?: () => void
+  }
+) => {
+  const {atmosphere, teamId, readOnly, placeholder, onEnter, onEscape} = options
+  const [contentJSON, editorRef] = useTipTapEditorContent(content)
+  const placeholderRef = useRef(placeholder)
+  // Keeping it in a ref means we don't have to re-initialize the editor, so content is preserved
+  placeholderRef.current = placeholder
+  editorRef.current = useEditor(
+    {
+      content: contentJSON,
+      extensions: [
+        StarterKit.configure({link: false}),
+        LoomExtension,
+        Placeholder.configure({
+          showOnlyWhenEditable: false,
+          placeholder: () => {
+            return placeholderRef.current || 'Edit your comment'
+          }
+        }),
+        MentionTaskTag.configure(tiptapTagConfig),
+        Mention.configure(
+          atmosphere && teamId ? tiptapMentionConfig(atmosphere, teamId) : mentionConfig
+        ),
+        Mention.extend({name: 'emojiMention'}).configure(tiptapEmojiConfig),
+        TiptapLinkExtension.configure({
+          openOnClick: false
+        }),
+        ClearOnSubmit,
+        onEnter &&
+          onEscape &&
+          Extension.create({
+            name: 'commentKeyboardShortcuts',
+            addKeyboardShortcuts(this) {
+              return {
+                Enter: () => {
+                  onEnter()
+                  return true
+                },
+                Escape: () => {
+                  onEscape()
+                  return true
+                }
+              }
+            }
+          })
+      ].filter(isValid),
+      editable: !readOnly
+    },
+    [readOnly]
+  )
+  return {editor: editorRef.current}
+}

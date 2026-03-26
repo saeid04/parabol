@@ -1,17 +1,17 @@
 import {Times} from 'parabol-client/types/constEnums'
-import {MutableRefObject, useLayoutEffect, useRef} from 'react'
+import {type MutableRefObject, useLayoutEffect, useRef} from 'react'
 import useAtmosphere from '~/hooks/useAtmosphere'
 import {PortalStatus} from '~/hooks/usePortal'
-import SendClientSegmentEventMutation from '~/mutations/SendClientSegmentEventMutation'
 import StartDraggingReflectionMutation from '~/mutations/StartDraggingReflectionMutation'
 import {Elevation} from '~/styles/elevation'
 import {BezierCurve, ElementWidth} from '~/types/constEnums'
 import clientTempId from '~/utils/relay/clientTempId'
 import cloneReflection from '~/utils/retroGroup/cloneReflection'
+import SendClientSideEvent from '~/utils/SendClientSideEvent'
 
 const useAnimatedSpotlightSource = (
   portalStatus: PortalStatus,
-  reflectionId: string | null,
+  reflectionId: string | null | undefined,
   dragIdRef: MutableRefObject<string | undefined>
 ) => {
   const atmosphere = useAtmosphere()
@@ -53,7 +53,7 @@ const useAnimatedSpotlightSource = (
     dragIdRef.current = clientTempId()
     // execute mutation after cloning as the mutation will cause reflection height to change
     startDrag(reflectionId, dragIdRef.current)
-    SendClientSegmentEventMutation(atmosphere, 'Opened Spotlight', {
+    SendClientSideEvent(atmosphere, 'Opened Spotlight', {
       reflectionId
     })
     const dragInterval = setInterval(() => {
@@ -72,7 +72,7 @@ const useAnimatedSpotlightSource = (
     return () => {
       clearTimeout(transitionTimeout)
       clearTimeout(removeCloneTimeout)
-      clearTimeout(dragInterval)
+      clearInterval(dragInterval)
     }
   }, [portalStatus])
 

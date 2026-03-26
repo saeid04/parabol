@@ -1,15 +1,15 @@
 import styled from '@emotion/styled'
 import {OpenInNew} from '@mui/icons-material'
 import graphql from 'babel-plugin-relay/macro'
-import React, {useMemo} from 'react'
-import {createFragmentContainer} from 'react-relay'
+import {useMemo} from 'react'
+import {useFragment} from 'react-relay'
+import type {JiraFieldMenu_stage$key} from '../__generated__/JiraFieldMenu_stage.graphql'
 import useAtmosphere from '../hooks/useAtmosphere'
-import {MenuProps} from '../hooks/useMenu'
-import SendClientSegmentEventMutation from '../mutations/SendClientSegmentEventMutation'
+import type {MenuProps} from '../hooks/useMenu'
 import UpdateJiraDimensionFieldMutation from '../mutations/UpdateJiraDimensionFieldMutation'
 import {PALETTE} from '../styles/paletteV3'
 import {ExternalLinks, SprintPokerDefaults} from '../types/constEnums'
-import {JiraFieldMenu_stage} from '../__generated__/JiraFieldMenu_stage.graphql'
+import SendClientSideEvent from '../utils/SendClientSideEvent'
 import Menu from './Menu'
 import MenuItem from './MenuItem'
 import MenuItemHR from './MenuItemHR'
@@ -17,7 +17,7 @@ import MenuItemLabel from './MenuItemLabel'
 
 interface Props {
   menuProps: MenuProps
-  stage: JiraFieldMenu_stage
+  stage: JiraFieldMenu_stage$key
   submitScore(): void
 }
 
@@ -34,7 +34,35 @@ const ExternalIcon = styled(OpenInNew)({
 })
 
 const JiraFieldMenu = (props: Props) => {
-  const {menuProps, stage, submitScore} = props
+  const {menuProps, stage: stageRef, submitScore} = props
+  const stage = useFragment(
+    graphql`
+      fragment JiraFieldMenu_stage on EstimateStage {
+        dimensionRef {
+          name
+        }
+        meetingId
+        serviceField {
+          name
+        }
+        task {
+          id
+          teamId
+          integration {
+            ... on JiraIssue {
+              __typename
+              possibleEstimationFields {
+                fieldId
+                fieldName
+              }
+              missingEstimationFieldHint
+            }
+          }
+        }
+      }
+    `,
+    stageRef
+  )
   const atmosphere = useAtmosphere()
   const {portalStatus, isDropdown, closePortal} = menuProps
   const {meetingId, dimensionRef, serviceField, task} = stage
@@ -44,7 +72,7 @@ const JiraFieldMenu = (props: Props) => {
 
   const {name: dimensionName} = dimensionRef
   const {name: serviceFieldName} = serviceField
-  /* eslint-disable react-hooks/rules-of-hooks */
+  // biome-ignore lint/correctness/useHookAtTopLevel: legacy
   const defaultActiveidx = useMemo(() => {
     if (possibleEstimationFields.length === 0) return undefined
     if (serviceFieldName === SprintPokerDefaults.SERVICE_FIELD_COMMENT)
@@ -73,7 +101,7 @@ const JiraFieldMenu = (props: Props) => {
         'noreferrer'
       )
     }
-    SendClientSegmentEventMutation(atmosphere, 'Jira Missing Field Doc Link Clicked', {
+    SendClientSideEvent(atmosphere, 'Jira Missing Field Doc Link Clicked', {
       meetingId,
       teamId,
       taskId,
@@ -137,30 +165,4 @@ const JiraFieldMenu = (props: Props) => {
   )
 }
 
-export default createFragmentContainer(JiraFieldMenu, {
-  stage: graphql`
-    fragment JiraFieldMenu_stage on EstimateStage {
-      dimensionRef {
-        name
-      }
-      meetingId
-      serviceField {
-        name
-      }
-      task {
-        id
-        teamId
-        integration {
-          ... on JiraIssue {
-            __typename
-            possibleEstimationFields {
-              fieldId
-              fieldName
-            }
-            missingEstimationFieldHint
-          }
-        }
-      }
-    }
-  `
-})
+export default JiraFieldMenu

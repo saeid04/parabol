@@ -1,15 +1,14 @@
 import styled from '@emotion/styled'
 import {Add} from '@mui/icons-material'
 import graphql from 'babel-plugin-relay/macro'
-import React from 'react'
-import {createFragmentContainer} from 'react-relay'
+import {useFragment} from 'react-relay'
 import useAtmosphere from '~/hooks/useAtmosphere'
+import useMutationProps from '~/hooks/useMutationProps'
 import {Threshold} from '~/types/constEnums'
+import type {AddTemplatePrompt_prompts$key} from '../../../__generated__/AddTemplatePrompt_prompts.graphql'
 import LinkButton from '../../../components/LinkButton'
 import AddReflectTemplatePromptMutation from '../../../mutations/AddReflectTemplatePromptMutation'
-import dndNoise from '../../../utils/dndNoise'
-import withMutationProps, {WithMutationProps} from '../../../utils/relay/withMutationProps'
-import {AddTemplatePrompt_prompts} from '../../../__generated__/AddTemplatePrompt_prompts.graphql'
+import {positionAfter} from '../../../shared/sortOrder'
 
 const AddPromptLink = styled(LinkButton)({
   alignItems: 'center',
@@ -29,19 +28,30 @@ const AddPromptLinkPlus = styled(Add)({
   margin: '0 16px 0 16px'
 })
 
-interface Props extends WithMutationProps {
-  prompts: AddTemplatePrompt_prompts
+interface Props {
+  prompts: AddTemplatePrompt_prompts$key
   templateId: string
 }
 
 const AddTemplatePrompt = (props: Props) => {
   const atmosphere = useAtmosphere()
+  const {onError, onCompleted, submitMutation, submitting} = useMutationProps()
+
+  const {prompts: promptsRef, templateId} = props
+  const prompts = useFragment(
+    graphql`
+      fragment AddTemplatePrompt_prompts on ReflectPrompt @relay(plural: true) {
+        sortOrder
+      }
+    `,
+    promptsRef
+  )
+
   const addPrompt = () => {
-    const {prompts, templateId, onError, onCompleted, submitMutation, submitting} = props
     if (submitting) return
     submitMutation()
-    const sortOrders = prompts.map(({sortOrder}) => sortOrder)
-    const sortOrder = Math.max(0, ...sortOrders) + 1 + dndNoise()
+    const lastPrompt = prompts.at(-1)!
+    const sortOrder = positionAfter(lastPrompt.sortOrder)
     const promptCount = prompts.length
     AddReflectTemplatePromptMutation(
       atmosphere,
@@ -54,8 +64,6 @@ const AddTemplatePrompt = (props: Props) => {
       }
     )
   }
-
-  const {prompts, submitting} = props
   if (prompts.length >= Threshold.MAX_REFLECTION_PROMPTS) return null
   return (
     <AddPromptLink palette='blue' onClick={addPrompt} waiting={submitting}>
@@ -65,10 +73,4 @@ const AddTemplatePrompt = (props: Props) => {
   )
 }
 
-export default createFragmentContainer(withMutationProps(AddTemplatePrompt), {
-  prompts: graphql`
-    fragment AddTemplatePrompt_prompts on ReflectPrompt @relay(plural: true) {
-      sortOrder
-    }
-  `
-})
+export default AddTemplatePrompt

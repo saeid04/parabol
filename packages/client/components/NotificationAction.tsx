@@ -1,5 +1,5 @@
 import styled from '@emotion/styled'
-import React from 'react'
+import type * as React from 'react'
 import {PALETTE} from '../styles/paletteV3'
 import PlainButton from './PlainButton/PlainButton'
 
@@ -11,7 +11,7 @@ const Button = styled(PlainButton)({
 
 interface Props {
   label: string
-  onClick(): void
+  onClick(e: React.MouseEvent): void
 }
 
 const NotificationAction = (props: Props) => {

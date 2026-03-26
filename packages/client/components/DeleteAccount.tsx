@@ -1,5 +1,7 @@
 import styled from '@emotion/styled'
-import React from 'react'
+import graphql from 'babel-plugin-relay/macro'
+import {useFragment} from 'react-relay'
+import type {DeleteAccount_viewer$key} from '../__generated__/DeleteAccount_viewer.graphql'
 import useModal from '../hooks/useModal'
 import {PALETTE} from '../styles/paletteV3'
 import lazyPreload from '../utils/lazyPreload'
@@ -16,7 +18,19 @@ const Hint = styled('div')({
   marginTop: 8
 })
 
-const DeleteAccount = () => {
+interface Props {
+  viewerRef: DeleteAccount_viewer$key
+}
+
+const DeleteAccount = ({viewerRef}: Props) => {
+  const viewer = useFragment(
+    graphql`
+      fragment DeleteAccount_viewer on User {
+        ...DeleteAccountModal_viewer
+      }
+    `,
+    viewerRef
+  )
   const {togglePortal, modalPortal} = useModal()
   return (
     <>
@@ -29,10 +43,10 @@ const DeleteAccount = () => {
           <IconLabel iconLarge icon='remove_circle' label='Delete Account' />
         </LinkButton>
         <Hint>
-          <b>Note</b>: {'This can’t be undone.'}
+          <b>Note</b>: {"This can't be undone."}
         </Hint>
       </div>
-      {modalPortal(<DeleteAccountModal />)}
+      {modalPortal(<DeleteAccountModal viewerRef={viewer} />)}
     </>
   )
 }

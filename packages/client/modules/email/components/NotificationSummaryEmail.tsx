@@ -1,7 +1,6 @@
+import type {EmailNotificationPicker_notification$key} from 'parabol-client/__generated__/EmailNotificationPicker_notification.graphql'
 import {ContactInfo, ExternalLinks} from 'parabol-client/types/constEnums'
 import plural from 'parabol-client/utils/plural'
-import {EmailNotificationPicker_notification$key} from 'parabol-client/__generated__/EmailNotificationPicker_notification.graphql'
-import React from 'react'
 import {EMAIL_CORS_OPTIONS} from '../../../types/cors'
 import makeAppURL from '../../../utils/makeAppURL'
 import {emailCopyStyle, emailLinkStyle} from '../styles'
@@ -41,7 +40,9 @@ export interface NotificationSummaryProps {
 export default function NotificationSummaryEmail(props: NotificationSummaryProps) {
   const {appOrigin, notificationCount, preferredName, notificationRefs} = props
   const additionalNotifications = notificationCount - notificationRefs.length
-  const tasksURL = makeAppURL(appOrigin, 'me/tasks', {searchParams: notificationSummaryUrlParams})
+  const tasksURL = makeAppURL(appOrigin, 'me/tasks', {
+    searchParams: notificationSummaryUrlParams
+  })
   return (
     <Layout maxWidth={544}>
       <EmailBlock innerMaxWidth={innerMaxWidth}>

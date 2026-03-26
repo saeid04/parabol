@@ -1,16 +1,20 @@
-import {GraphQLResolveInfo} from 'graphql'
-import {TaskIntegration} from '../database/types/Task'
-import {DataLoaderWorker, GQLContext} from '../graphql/graphql'
-import {IntegrationProviderServiceEnumType} from '../graphql/types/IntegrationProviderServiceEnum'
-import {
+import type {JSONContent} from '@tiptap/core'
+import type {GraphQLResolveInfo} from 'graphql'
+import type {DataLoaderWorker, GQLContext} from '../graphql/graphql'
+import type {Task} from '../postgres/types'
+import type {
   IntegrationProviderAzureDevOps,
   IntegrationProviderJiraServer
-} from '../postgres/queries/getIntegrationProvidersByIds'
+} from '../postgres/types/IntegrationProvider'
+import type {Integrationproviderserviceenum} from '../postgres/types/pg'
 import AzureDevOpsServerManager from '../utils/AzureDevOpsServerManager'
 import GitHubServerManager from './github/GitHubServerManager'
 import GitLabServerManager from './gitlab/GitLabServerManager'
 import JiraIntegrationManager from './jira/JiraIntegrationManager'
 import JiraServerRestManager from './jiraServer/JiraServerRestManager'
+import LinearServerManager from './linear/LinearServerManager'
+
+export type IntegrationProviderServiceEnumType = Integrationproviderserviceenum | 'jira' | 'github'
 
 export type CreateTaskResponse =
   | {
@@ -18,7 +22,7 @@ export type CreateTaskResponse =
       // TODO: include issueId for GitHub in hash or store integration.issueId for all integrations
       // See https://github.com/ParabolInc/parabol/issues/6252
       issueId: string
-      integration: TaskIntegration
+      integration: NonNullable<Task['integration']>
     }
   | Error
 
@@ -26,7 +30,7 @@ export interface TaskIntegrationManager {
   title: string
 
   createTask(params: {
-    rawContentStr: string
+    rawContentJSON: JSONContent
     integrationRepoId: string
     context?: GQLContext
     info?: GraphQLResolveInfo
@@ -55,6 +59,7 @@ export default class TaskIntegrationManagerFactory {
     | JiraServerRestManager
     | GitLabServerManager
     | AzureDevOpsServerManager
+    | LinearServerManager
     | null
   > {
     if (service === 'jira') {
@@ -64,7 +69,7 @@ export default class TaskIntegrationManagerFactory {
 
     if (service === 'github') {
       const auth = await dataLoader.get('githubAuth').load({teamId, userId})
-      return auth && new GitHubServerManager(auth, context, info)
+      return auth ? new GitHubServerManager(auth, context, info) : null
     }
 
     if (service === 'gitlab') {
@@ -78,7 +83,7 @@ export default class TaskIntegrationManagerFactory {
 
     if (service === 'jiraServer') {
       const auth = await dataLoader
-        .get('teamMemberIntegrationAuths')
+        .get('teamMemberIntegrationAuthsByServiceTeamAndUserId')
         .load({service: 'jiraServer', teamId, userId})
 
       if (!auth) {
@@ -91,7 +96,7 @@ export default class TaskIntegrationManagerFactory {
 
     if (service === 'azureDevOps') {
       const auth = await dataLoader
-        .get('teamMemberIntegrationAuths')
+        .get('teamMemberIntegrationAuthsByServiceTeamAndUserId')
         .load({service: 'azureDevOps', teamId, userId})
 
       if (!auth) {
@@ -100,6 +105,16 @@ export default class TaskIntegrationManagerFactory {
       const provider = await dataLoader.get('integrationProviders').loadNonNull(auth.providerId)
 
       return new AzureDevOpsServerManager(auth, provider as IntegrationProviderAzureDevOps)
+    }
+
+    if (service === 'linear') {
+      const auth = await dataLoader.get('freshLinearAuth').load({teamId, userId})
+
+      if (!auth) {
+        return null
+      }
+
+      return new LinearServerManager(auth, context, info)
     }
 
     return null

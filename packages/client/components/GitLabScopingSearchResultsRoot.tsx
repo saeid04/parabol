@@ -1,12 +1,12 @@
 import graphql from 'babel-plugin-relay/macro'
-import React, {Suspense} from 'react'
+import {Suspense} from 'react'
 import {useFragment} from 'react-relay'
 import MockScopingList from '~/modules/meeting/components/MockScopingList'
-import useQueryLoaderNow from '../hooks/useQueryLoaderNow'
 import gitlabScopingSearchResultsQuery, {
-  GitLabScopingSearchResultsQuery
+  type GitLabScopingSearchResultsQuery
 } from '../__generated__/GitLabScopingSearchResultsQuery.graphql'
-import {GitLabScopingSearchResultsRoot_meeting$key} from '../__generated__/GitLabScopingSearchResultsRoot_meeting.graphql'
+import type {GitLabScopingSearchResultsRoot_meeting$key} from '../__generated__/GitLabScopingSearchResultsRoot_meeting.graphql'
+import useQueryLoaderNow from '../hooks/useQueryLoaderNow'
 import GitLabScopingSearchResults from './GitLabScopingSearchResults'
 
 interface Props {

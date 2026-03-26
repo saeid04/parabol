@@ -20,10 +20,9 @@ module.exports = {
     __dirname: false
   },
   entry: {
+    assignSURole: [DOTENV, path.join(TOOLBOX_SRC, 'assignSURole.ts')],
     pgRestore: [DOTENV, path.join(TOOLBOX_SRC, 'pgRestore.ts')],
-    postDeploy: [DOTENV, path.join(TOOLBOX_SRC, 'postDeploy.ts')],
-    renameDB: [DOTENV, path.join(TOOLBOX_SRC, 'renameDB.ts')],
-    softenDurability: [DOTENV, path.join(TOOLBOX_SRC, 'softenDurability.ts')],
+    setIsEnterprise: [DOTENV, path.join(TOOLBOX_SRC, 'setIsEnterprise.ts')],
     updateSchema: [DOTENV, path.join(SERVER_ROOT, 'utils', 'updateGQLSchema.ts')]
   },
   output: {
@@ -37,29 +36,50 @@ module.exports = {
       'parabol-server': SERVER_ROOT,
       'parabol-client': CLIENT_ROOT
     },
-    extensions: ['.js', '.json', '.ts', '.tsx'],
-    unsafeCache: true,
-    // this is run outside the server dir, but we want to favor using modules from the server dir
-    modules: [path.resolve(SERVER_ROOT, '../node_modules'), 'node_modules']
-  },
-  resolveLoader: {
-    modules: [path.resolve(SERVER_ROOT, '../node_modules'), 'node_modules']
+    extensions: ['.js', '.json', '.ts', '.tsx']
   },
   target: 'node',
   externals: [
     nodeExternals({
-      allowlist: [/parabol-client/, '/parabol-server/']
+      allowlist: [/parabol-client/, /parabol-server/, /@dicebear/]
     })
   ],
   plugins: [
     new webpack.DefinePlugin({
-      __PRODUCTION__: true,
-      __PROJECT_ROOT__: JSON.stringify(PROJECT_ROOT),
+      __PRODUCTION__: true
+    }),
+    new webpack.IgnorePlugin({
+      resourceRegExp: /^exiftool-vendored$/,
+      contextRegExp: /@dicebear/
+    }),
+    new webpack.IgnorePlugin({
+      resourceRegExp: /^@resvg\/resvg-js$/,
+      contextRegExp: /@dicebear/
     })
+    // new CircularDependencyPlugin({
+    //   // `onStart` is called before the cycle detection starts
+    //   onStart({compilation}) {
+    //     console.log('start detecting webpack modules cycles')
+    //   },
+    //   // `onDetected` is called for each module that is cyclical
+    //   onDetected({module: webpackModuleRecord, paths, compilation}) {
+    //     // `paths` will be an Array of the relative module paths that make up the cycle
+    //     // `module` is the module record that caused the cycle
+    //     compilation.errors.push(new Error(paths.join(' -> ')))
+    //   },
+    //   // `onEnd` is called before the cycle detection ends
+    //   onEnd({compilation}) {
+    //     console.log('end detecting webpack modules cycles')
+    //   },
+    //   // set to false to only detect cycles that include an entrypoint
+    //   allowAsyncCycles: false,
+    //   // set to true to detect cycles in node_modules
+    //   cwd: process.cwd() // set the current working directory for displaying module paths
+    // })
   ],
   module: {
     rules: [
-      ...transformRules(PROJECT_ROOT),
+      ...transformRules(PROJECT_ROOT, true),
       {
         test: /\.js$/,
         include: [path.join(SERVER_ROOT), path.join(CLIENT_ROOT)],
@@ -67,7 +87,9 @@ module.exports = {
           {
             loader: '@sucrase/webpack-loader',
             options: {
-              transforms: ['jsx']
+              production: true,
+              transforms: ['jsx'],
+              jsxRuntime: 'automatic'
             }
           }
         ]

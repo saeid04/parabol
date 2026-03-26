@@ -1,30 +1,23 @@
-import styled from '@emotion/styled'
-import React, {
+import type * as React from 'react'
+import {
   Children,
   cloneElement,
   forwardRef,
-  ReactElement,
-  ReactNode,
+  type ReactElement,
+  type ReactNode,
   useCallback,
   useEffect,
   useImperativeHandle,
   useRef,
   useState
 } from 'react'
-import {PortalStatus} from '../hooks/usePortal'
+import {twMerge} from 'tailwind-merge'
+import type {PortalStatus} from '../hooks/usePortal'
 import MenuItemAnimation from './MenuItemAnimation'
 
 const isMenuItem = (node: any) => node && node.onClick
 const REACT_ELEMENT = Symbol.for('react.element')
 const isReactElement = (child: any) => child && child.$$typeof === REACT_ELEMENT
-
-const MenuStyles = styled('div')({
-  maxHeight: 224,
-  maxWidth: 400,
-  outline: 0,
-  // VERY important! If not present, draft-js gets confused & thinks the menu is the selection rectangle
-  userSelect: 'none'
-})
 
 interface Props {
   ariaLabel: string
@@ -58,23 +51,19 @@ const Menu = forwardRef((props: Props, ref: any) => {
   const initialDefaultActiveIdxRef = useRef(activeIdx)
   useEffect(() => {
     // support an active index that is async fetched
-    if (defaultActiveIdx && !initialDefaultActiveIdxRef.current) {
+    if (defaultActiveIdx !== null && initialDefaultActiveIdxRef.current === null) {
       setActiveIdx(defaultActiveIdx)
+      // Update the ref if we explicitly set the state based on prop change
+      initialDefaultActiveIdxRef.current = defaultActiveIdx
     }
   }, [defaultActiveIdx])
   useImperativeHandle(ref, () => ({
     handleKeyDown
   }))
 
-  useEffect(
-    () => {
-      if (!keepParentFocus) menuRef.current && menuRef.current.focus()
-    },
-    resetActiveOnChanges ||
-      [
-        /* eslint-disable-line react-hooks/exhaustive-deps*/
-      ]
-  )
+  useEffect(() => {
+    if (!keepParentFocus) menuRef.current && menuRef.current.focus()
+  }, resetActiveOnChanges || [])
 
   const handleMouseDown = useCallback(
     (e: React.MouseEvent) => {
@@ -176,17 +165,17 @@ const Menu = forwardRef((props: Props, ref: any) => {
   )
 
   return (
-    <MenuStyles
+    <div
       role='menu'
       aria-label={ariaLabel}
-      className={className}
+      className={twMerge('max-h-56 max-w-md select-none outline-none', className)}
       tabIndex={-1}
       onMouseDown={handleMouseDown}
       onKeyDown={handleKeyDown}
       ref={menuRef}
     >
       {makeSmartChildren(children)}
-    </MenuStyles>
+    </div>
   )
 })
 

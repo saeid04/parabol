@@ -1,17 +1,17 @@
 import styled from '@emotion/styled'
 import graphql from 'babel-plugin-relay/macro'
-import React, {useEffect} from 'react'
+import {useEffect} from 'react'
 import {useFragment} from 'react-relay'
+import type {BottomControlBarTips_meeting$key} from '~/__generated__/BottomControlBarTips_meeting.graphql'
 import {MenuPosition} from '~/hooks/useCoords'
 import useMenu from '~/hooks/useMenu'
 import useTimeout from '~/hooks/useTimeout'
-import {TransitionStatus} from '~/hooks/useTransition'
-import LocalAtmosphere from '~/modules/demo/LocalAtmosphere'
-import lazyPreload, {LazyExoticPreload} from '~/utils/lazyPreload'
-import {BottomControlBarTips_meeting$key} from '~/__generated__/BottomControlBarTips_meeting.graphql'
+import type {TransitionStatus} from '~/hooks/useTransition'
+import type LocalAtmosphere from '~/modules/demo/LocalAtmosphere'
+import lazyPreload, {type LazyPreloadedComponent} from '~/utils/lazyPreload'
+import type {NewMeetingPhaseTypeEnum} from '../__generated__/BottomControlBarTips_meeting.graphql'
 import useAtmosphere from '../hooks/useAtmosphere'
 import isDemoRoute from '../utils/isDemoRoute'
-import {NewMeetingPhaseTypeEnum} from '../__generated__/BottomControlBarTips_meeting.graphql'
 import BottomNavControl from './BottomNavControl'
 import BottomNavIconLabel from './BottomNavIconLabel'
 import Menu from './Menu'
@@ -22,6 +22,10 @@ const TallMenu = styled(Menu)({
 
 const CheckInHelpMenu = lazyPreload(
   async () => import(/* webpackChunkName: 'CheckInHelpMenu' */ './MeetingHelp/CheckInHelpMenu')
+)
+const TeamHealthHelpMenu = lazyPreload(
+  async () =>
+    import(/* webpackChunkName: 'TeamHealthHelpMenu' */ './MeetingHelp/TeamHealthHelpMenu')
 )
 
 const ReflectHelpMenu = lazyPreload(
@@ -80,16 +84,17 @@ const EstimateHelpMenu = lazyPreload(
   async () => import(/* webpackChunkName: 'EstimateHelpMenu' */ './MeetingHelp/EstimateHelpMenu')
 )
 
-const demoHelps = {
+const demoHelps: Partial<Record<NewMeetingPhaseTypeEnum, LazyPreloadedComponent>> = {
   checkin: DemoReflectHelpMenu,
   reflect: DemoReflectHelpMenu,
   group: DemoGroupHelpMenu,
   vote: DemoVoteHelpMenu,
   discuss: DemoDiscussHelpMenu
-} as Record<NewMeetingPhaseTypeEnum, LazyExoticPreload<any>>
+}
 
-const helps = {
+const helps: Partial<Record<NewMeetingPhaseTypeEnum, LazyPreloadedComponent>> = {
   checkin: CheckInHelpMenu,
+  TEAM_HEALTH: TeamHealthHelpMenu,
   reflect: ReflectHelpMenu,
   group: GroupHelpMenu,
   vote: VoteHelpMenu,
@@ -100,7 +105,7 @@ const helps = {
   lastcall: ActionMeetingLastCallHelpMenu,
   SCOPE: ScopeHelpMenu,
   ESTIMATE: EstimateHelpMenu
-} as Record<NewMeetingPhaseTypeEnum, LazyExoticPreload<any>>
+}
 
 interface Props {
   cancelConfirm: (() => void) | undefined
@@ -108,15 +113,21 @@ interface Props {
   status: TransitionStatus
   onTransitionEnd: () => void
 }
+
 const BottomControlBarTips = (props: Props) => {
   const {cancelConfirm, meeting: meetingRef, status, onTransitionEnd} = props
   const meeting = useFragment(
     graphql`
       fragment BottomControlBarTips_meeting on NewMeeting {
+        ...VoteHelpMenu_meeting
+        ...ReflectHelpMenu_settings
         id
         meetingType
         localPhase {
           phaseType
+        }
+        localStage {
+          ...TeamHealthHelpMenu_stage
         }
         phases {
           phaseType
@@ -126,7 +137,7 @@ const BottomControlBarTips = (props: Props) => {
     meetingRef
   )
 
-  const {localPhase, meetingType} = meeting
+  const {localPhase, localStage, meetingType} = meeting
   const {phaseType} = localPhase
   const {menuProps, menuPortal, originRef, togglePortal, openPortal} = useMenu(
     MenuPosition.LOWER_LEFT
@@ -148,6 +159,11 @@ const BottomControlBarTips = (props: Props) => {
       }
     }
   }, [demoPauseOpen, openPortal])
+
+  if (!MenuContent) {
+    return null
+  }
+
   return (
     <BottomNavControl
       dataCy={`tip-menu-toggle`}
@@ -160,7 +176,7 @@ const BottomControlBarTips = (props: Props) => {
       <BottomNavIconLabel icon='help_outline' iconColor='midGray' label={'Tips'} />
       {menuPortal(
         <TallMenu ariaLabel='Meeting tips' {...menuProps}>
-          <MenuContent meetingType={meetingType} />
+          <MenuContent meetingType={meetingType} stageRef={localStage} meetingRef={meeting} />
         </TallMenu>
       )}
     </BottomNavControl>

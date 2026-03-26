@@ -1,52 +1,21 @@
 import styled from '@emotion/styled'
 import graphql from 'babel-plugin-relay/macro'
-import React, {RefObject, useMemo, useRef} from 'react'
-import {createFragmentContainer} from 'react-relay'
+import {type RefObject, useMemo, useRef} from 'react'
+import {useFragment} from 'react-relay'
+import type {GroupingKanbanColumn_meeting$key} from '~/__generated__/GroupingKanbanColumn_meeting.graphql'
+import type {GroupingKanbanColumn_prompt$key} from '~/__generated__/GroupingKanbanColumn_prompt.graphql'
+import type {GroupingKanbanColumn_reflectionGroups$key} from '~/__generated__/GroupingKanbanColumn_reflectionGroups.graphql'
 import {useCoverable} from '~/hooks/useControlBarCovers'
 import useDeepEqual from '~/hooks/useDeepEqual'
 import useSubColumns from '~/hooks/useSubColumns'
-import makeMinWidthMediaQuery from '~/utils/makeMinWidthMediaQuery'
-import {GroupingKanbanColumn_meeting} from '~/__generated__/GroupingKanbanColumn_meeting.graphql'
-import {GroupingKanbanColumn_prompt} from '~/__generated__/GroupingKanbanColumn_prompt.graphql'
-import {GroupingKanbanColumn_reflectionGroups} from '~/__generated__/GroupingKanbanColumn_reflectionGroups.graphql'
 import useAtmosphere from '../hooks/useAtmosphere'
 import useMutationProps from '../hooks/useMutationProps'
 import CreateReflectionMutation from '../mutations/CreateReflectionMutation'
-import {PALETTE} from '../styles/paletteV3'
-import {
-  BezierCurve,
-  Breakpoint,
-  DragAttribute,
-  ElementWidth,
-  MeetingControlBarEnum
-} from '../types/constEnums'
+import {BezierCurve, DragAttribute, ElementWidth, MeetingControlBarEnum} from '../types/constEnums'
 import getNextSortOrder from '../utils/getNextSortOrder'
-import {SwipeColumn} from './GroupingKanban'
+import type {SwipeColumn} from './GroupingKanban'
 import GroupingKanbanColumnHeader from './GroupingKanbanColumnHeader'
 import ReflectionGroup from './ReflectionGroup/ReflectionGroup'
-
-const Column = styled('div')<{
-  isLengthExpanded: boolean
-  isFirstColumn: boolean
-  isLastColumn: boolean
-}>(({isLengthExpanded, isFirstColumn, isLastColumn}) => ({
-  alignContent: 'flex-start',
-  background: PALETTE.SLATE_300,
-  borderRadius: 8,
-  display: 'flex',
-  flex: 1,
-  flexDirection: 'column',
-  height: '100%',
-  minWidth: ElementWidth.REFLECTION_COLUMN,
-  padding: 0,
-  position: 'relative',
-  transition: `all 100ms ${BezierCurve.DECELERATE}`,
-  [makeMinWidthMediaQuery(Breakpoint.SINGLE_REFLECTION_COLUMN)]: {
-    height: isLengthExpanded ? '100%' : `calc(100% - ${MeetingControlBarEnum.HEIGHT}px)`,
-    margin: `0 ${isLastColumn ? 16 : 8}px 0px ${isFirstColumn ? 16 : 8}px`,
-    maxWidth: 'min-content'
-  }
-}))
 
 const ColumnScrollContainer = styled('div')({
   display: 'flex',
@@ -56,21 +25,22 @@ const ColumnScrollContainer = styled('div')({
   height: '100%'
 })
 
-const ColumnBody = styled('div')<{isDesktop: boolean; isWidthExpanded: boolean}>(
-  ({isDesktop, isWidthExpanded}) => ({
-    alignContent: 'flex-start',
-    display: 'flex',
-    flex: 1,
-    flexDirection: 'row',
-    flexWrap: 'wrap',
-    justifyContent: 'space-around',
-    maxHeight: 'fit-content',
-    minHeight: 200,
-    padding: `${isWidthExpanded ? 12 : 6}px ${isDesktop ? 12 : 8}px`,
-    transition: `all 100ms ${BezierCurve.DECELERATE}`,
-    minWidth: ElementWidth.REFLECTION_COLUMN
-  })
-)
+const ColumnBody = styled('div')<{
+  isDesktop: boolean
+  isWidthExpanded: boolean
+}>(({isDesktop, isWidthExpanded}) => ({
+  alignContent: 'flex-start',
+  display: 'flex',
+  flex: 1,
+  flexDirection: 'row',
+  flexWrap: 'wrap',
+  justifyContent: 'space-around',
+  maxHeight: 'fit-content',
+  minHeight: 200,
+  padding: `${isWidthExpanded ? 12 : 6}px ${isDesktop ? 12 : 8}px`,
+  transition: `all 100ms ${BezierCurve.DECELERATE}`,
+  minWidth: ElementWidth.REFLECTION_COLUMN
+}))
 
 export type OpenSpotlight = (
   reflectionGroupId: string,
@@ -81,11 +51,11 @@ interface Props {
   columnsRef: RefObject<HTMLDivElement>
   isAnyEditing: boolean
   isDesktop: boolean
-  meeting: GroupingKanbanColumn_meeting
+  meeting: GroupingKanbanColumn_meeting$key
   openSpotlight: OpenSpotlight
   phaseRef: RefObject<HTMLDivElement>
-  prompt: GroupingKanbanColumn_prompt
-  reflectionGroups: GroupingKanbanColumn_reflectionGroups
+  prompt: GroupingKanbanColumn_prompt$key
+  reflectionGroups: GroupingKanbanColumn_reflectionGroups$key
   reflectPromptsCount: number
   swipeColumn?: SwipeColumn
   showDragHintAnimation?: boolean
@@ -96,15 +66,60 @@ const GroupingKanbanColumn = (props: Props) => {
     columnsRef,
     isAnyEditing,
     isDesktop,
-    meeting,
+    meeting: meetingRef,
     openSpotlight,
-    reflectionGroups,
+    reflectionGroups: reflectionGroupsRef,
     phaseRef,
-    prompt,
+    prompt: promptRef,
     reflectPromptsCount,
     swipeColumn,
     showDragHintAnimation
   } = props
+  const meeting = useFragment(
+    graphql`
+      fragment GroupingKanbanColumn_meeting on RetrospectiveMeeting {
+        ...ReflectionGroup_meeting
+        id
+        endedAt
+        localStage {
+          isComplete
+          phaseType
+        }
+        phases {
+          stages {
+            isComplete
+            phaseType
+          }
+        }
+      }
+    `,
+    meetingRef
+  )
+  const reflectionGroups = useFragment(
+    graphql`
+      fragment GroupingKanbanColumn_reflectionGroups on RetroReflectionGroup @relay(plural: true) {
+        ...ReflectionGroup_reflectionGroup
+        id
+        reflections {
+          id
+        }
+        sortOrder
+        subColumnIdx
+      }
+    `,
+    reflectionGroupsRef
+  )
+  const prompt = useFragment(
+    graphql`
+      fragment GroupingKanbanColumn_prompt on ReflectPrompt {
+        id
+        question
+        groupColor
+        sortOrder
+      }
+    `,
+    promptRef
+  )
   const {question, id: promptId, groupColor} = prompt
   const {id: meetingId, endedAt, localStage} = meeting
   const {isComplete, phaseType} = localStage
@@ -115,8 +130,6 @@ const GroupingKanbanColumn = (props: Props) => {
   const isLengthExpanded =
     useCoverable(promptId, columnRef, MeetingControlBarEnum.HEIGHT, phaseRef, columnsRef) ||
     !!endedAt
-  const isFirstColumn = prompt.sortOrder === 0
-  const isLastColumn = Math.round(prompt.sortOrder) === reflectPromptsCount - 1
   const groups = useDeepEqual(reflectionGroups)
   // group may be undefined because relay could GC before useMemo in the Kanban recomputes >:-(
   const filteredReflectionGroups = useMemo(
@@ -143,12 +156,9 @@ const GroupingKanbanColumn = (props: Props) => {
     submitMutation()
     CreateReflectionMutation(atmosphere, {input}, {onError, onCompleted})
   }
-
   return (
-    <Column
-      isLengthExpanded={isLengthExpanded}
-      isFirstColumn={isFirstColumn}
-      isLastColumn={isLastColumn}
+    <div
+      className={`relative mr-2 ml-2 flex h-full min-w-[320px] single-reflection-column:max-w-min flex-1 flex-col content-start rounded-lg bg-slate-300 p-0 transition-all duration-100 ease-out first-of-type:ml-4 last-of-type:mr-4 ${isLengthExpanded ? '' : 'single-reflection-column:h-[calc(100%-56px)]'} max-w-min`}
       ref={columnRef}
       data-cy={`group-column-${question}`}
     >
@@ -195,45 +205,8 @@ const GroupingKanbanColumn = (props: Props) => {
           )
         })}
       </ColumnScrollContainer>
-    </Column>
+    </div>
   )
 }
 
-export default createFragmentContainer(GroupingKanbanColumn, {
-  meeting: graphql`
-    fragment GroupingKanbanColumn_meeting on RetrospectiveMeeting {
-      ...ReflectionGroup_meeting
-      id
-      endedAt
-      localStage {
-        isComplete
-        phaseType
-      }
-      phases {
-        stages {
-          isComplete
-          phaseType
-        }
-      }
-    }
-  `,
-  reflectionGroups: graphql`
-    fragment GroupingKanbanColumn_reflectionGroups on RetroReflectionGroup @relay(plural: true) {
-      ...ReflectionGroup_reflectionGroup
-      id
-      reflections {
-        id
-      }
-      sortOrder
-      subColumnIdx
-    }
-  `,
-  prompt: graphql`
-    fragment GroupingKanbanColumn_prompt on ReflectPrompt {
-      id
-      question
-      groupColor
-      sortOrder
-    }
-  `
-})
+export default GroupingKanbanColumn

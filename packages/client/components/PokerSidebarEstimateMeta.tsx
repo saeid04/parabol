@@ -1,5 +1,4 @@
 import styled from '@emotion/styled'
-import React from 'react'
 import {MenuPosition} from '../hooks/useCoords'
 import useTooltip from '../hooks/useTooltip'
 import {PALETTE} from '../styles/paletteV3'
@@ -38,7 +37,9 @@ const PokerSidebarEstimateMeta = (props: Props) => {
   const completedScoreCount = finalScores.filter(Boolean).length
   const {tooltipPortal, openTooltip, closeTooltip, originRef} = useTooltip<HTMLDivElement>(
     MenuPosition.LOWER_CENTER,
-    {disabled: completedScoreCount === 0}
+    {
+      disabled: completedScoreCount === 0
+    }
   )
   if (finalScores.length === 1) {
     const [firstScore] = finalScores

@@ -1,0 +1,4 @@
+type UpdatePageAccessPayload {
+  page: Page!
+  pageSection: PageSectionEnum!
+}

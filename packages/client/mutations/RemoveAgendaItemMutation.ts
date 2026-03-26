@@ -1,9 +1,10 @@
 import graphql from 'babel-plugin-relay/macro'
 import {commitMutation} from 'react-relay'
-import {SharedUpdater, StandardMutation} from '../types/relayMutations'
-import {RemoveAgendaItemMutation as TRemoveAgendaItemMutation} from '../__generated__/RemoveAgendaItemMutation.graphql'
-import {RemoveAgendaItemMutation_team} from '../__generated__/RemoveAgendaItemMutation_team.graphql'
+import type {RemoveAgendaItemMutation as TRemoveAgendaItemMutation} from '../__generated__/RemoveAgendaItemMutation.graphql'
+import type {RemoveAgendaItemMutation_team$data} from '../__generated__/RemoveAgendaItemMutation_team.graphql'
+import type {SharedUpdater, StandardMutation} from '../types/relayMutations'
 import handleRemoveAgendaItems from './handlers/handleRemoveAgendaItems'
+
 graphql`
   fragment RemoveAgendaItemMutation_team on RemoveAgendaItemPayload {
     agendaItem {
@@ -30,12 +31,12 @@ const mutation = graphql`
   }
 `
 
-export const removeAgendaItemUpdater: SharedUpdater<RemoveAgendaItemMutation_team> = (
+export const removeAgendaItemUpdater: SharedUpdater<RemoveAgendaItemMutation_team$data> = (
   payload,
   {store}
 ) => {
   const agendaItemId = payload.getLinkedRecord('agendaItem').getValue('id')
-  const meetingId = payload.getLinkedRecord('meeting').getValue('id')
+  const meetingId = payload.getLinkedRecord('meeting')?.getValue('id')
   handleRemoveAgendaItems(agendaItemId, store, meetingId)
 }
 

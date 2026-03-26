@@ -1,22 +1,36 @@
 import graphql from 'babel-plugin-relay/macro'
-import React from 'react'
-import {createFragmentContainer} from 'react-relay'
+import {useFragment} from 'react-relay'
+import {useNavigate} from 'react-router'
 import NotificationAction from '~/components/NotificationAction'
-import useRouter from '../hooks/useRouter'
-import {PaymentRejected_notification} from '../__generated__/PaymentRejected_notification.graphql'
+import type {PaymentRejected_notification$key} from '../__generated__/PaymentRejected_notification.graphql'
 import NotificationTemplate from './NotificationTemplate'
 
 interface Props {
-  notification: PaymentRejected_notification
+  notification: PaymentRejected_notification$key
 }
 const PaymentRejected = (props: Props) => {
-  const {notification} = props
-  const {history} = useRouter()
+  const {notification: notificationRef} = props
+  const notification = useFragment(
+    graphql`
+      fragment PaymentRejected_notification on NotifyPaymentRejected {
+        ...NotificationTemplate_notification
+        organization {
+          id
+          creditCard {
+            last4
+            brand
+          }
+        }
+      }
+    `,
+    notificationRef
+  )
+  const navigate = useNavigate()
   const {organization} = notification
   const {id: orgId, creditCard} = organization
   const {last4, brand} = creditCard || {last4: '****', brand: 'Unknown'}
   const addBilling = () => {
-    history.push(`/me/organizations/${orgId}`)
+    navigate(`/me/organizations/${orgId}`)
   }
   return (
     <NotificationTemplate
@@ -27,17 +41,4 @@ const PaymentRejected = (props: Props) => {
   )
 }
 
-export default createFragmentContainer(PaymentRejected, {
-  notification: graphql`
-    fragment PaymentRejected_notification on NotifyPaymentRejected {
-      ...NotificationTemplate_notification
-      organization {
-        id
-        creditCard {
-          last4
-          brand
-        }
-      }
-    }
-  `
-})
+export default PaymentRejected

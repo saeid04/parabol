@@ -1,20 +1,21 @@
 import generateUID from '../../generateUID'
-import {MeetingTypeEnum} from '../../postgres/types/Meeting'
-import GenericMeetingPhase from './GenericMeetingPhase'
+import type {MeetingTypeEnum} from '../../postgres/types/Meeting'
+import type {NewMeetingPhase} from '../../postgres/types/NewMeetingPhase'
+import type GenericMeetingPhase from './GenericMeetingPhase'
 
 interface Input {
-  id?: string
+  id?: string | null
   teamId: string
   meetingType: MeetingTypeEnum
   meetingCount: number
-  name?: string
+  name?: string | null
   // Every meeting has at least one phase
-  phases: [GenericMeetingPhase, ...GenericMeetingPhase[]]
+  phases: [NewMeetingPhase, ...NewMeetingPhase[]]
   facilitatorUserId: string
-  showConversionModal?: boolean
-  meetingSeriesId?: number
-  scheduledEndTime?: Date
-  summary?: string
+  meetingSeriesId?: number | null
+  scheduledEndTime?: Date | null
+  summary?: string | null
+  sentimentScore?: number | null
 }
 
 const namePrefix = {
@@ -26,21 +27,24 @@ export default abstract class Meeting {
   isLegacy?: boolean // true if old version of action meeting
   createdAt = new Date()
   updatedAt = new Date()
-  createdBy: string
+  createdBy: string | null
   endedAt: Date | undefined | null = undefined
-  facilitatorStageId: string | undefined
-  facilitatorUserId: string
+  facilitatorStageId: string
+  facilitatorUserId: string | null
   meetingCount: number
   meetingNumber: number
   name: string
-  summarySentAt: Date | undefined = undefined
+  summarySentAt: Date | undefined | null = undefined
   teamId: string
   meetingType: MeetingTypeEnum
   phases: GenericMeetingPhase[]
-  showConversionModal?: boolean
-  meetingSeriesId?: number
+  meetingSeriesId?: number | null
   scheduledEndTime?: Date | null
-  summary?: string
+  summary?: string | null
+  sentimentScore?: number | null
+  usedReactjis?: Record<string, number> | null
+  slackTs?: string | number | null
+  engagement?: number | null
 
   constructor(input: Input) {
     const {
@@ -51,10 +55,10 @@ export default abstract class Meeting {
       meetingType,
       name,
       phases,
-      showConversionModal,
       meetingSeriesId,
       scheduledEndTime,
-      summary
+      summary,
+      sentimentScore
     } = input
     this.id = id ?? generateUID()
     this.createdBy = facilitatorUserId
@@ -66,9 +70,9 @@ export default abstract class Meeting {
     this.name = name ?? `${namePrefix[meetingType]} #${this.meetingNumber}`
     this.phases = phases
     this.teamId = teamId
-    this.showConversionModal = showConversionModal
     this.meetingSeriesId = meetingSeriesId
     this.scheduledEndTime = scheduledEndTime
     this.summary = summary
+    this.sentimentScore = sentimentScore
   }
 }

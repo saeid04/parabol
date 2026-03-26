@@ -1,38 +1,47 @@
-import {stateToMarkdown} from 'draft-js-export-markdown'
-import {GraphQLResolveInfo} from 'graphql'
+import type {JSONContent} from '@tiptap/core'
+import type {GraphQLResolveInfo} from 'graphql'
 import GitLabIssueId from 'parabol-client/shared/gqlIds/GitLabIssueId'
-import splitDraftContent from 'parabol-client/utils/draftjs/splitDraftContent'
-import {GQLContext} from '../../graphql/graphql'
+import {splitTipTapContent} from 'parabol-client/shared/tiptap/splitTipTapContent'
+import type {InternalContext} from '../../graphql/graphql'
 import createIssueMutation from '../../graphql/nestedSchema/GitLab/mutations/createIssue.graphql'
+import createLabel from '../../graphql/nestedSchema/GitLab/mutations/createLabel.graphql'
 import createNote from '../../graphql/nestedSchema/GitLab/mutations/createNote.graphql'
+import updateIssue from '../../graphql/nestedSchema/GitLab/mutations/updateIssue.graphql'
 import getIssue from '../../graphql/nestedSchema/GitLab/queries/getIssue.graphql'
+import getLabels from '../../graphql/nestedSchema/GitLab/queries/getLabels.graphql'
 import getProfile from '../../graphql/nestedSchema/GitLab/queries/getProfile.graphql'
 import getProjectIssues from '../../graphql/nestedSchema/GitLab/queries/getProjectIssues.graphql'
 import getProjects from '../../graphql/nestedSchema/GitLab/queries/getProjects.graphql'
-import {RootSchema} from '../../graphql/public/rootSchema'
-import {IGetTeamMemberIntegrationAuthQueryResult} from '../../postgres/queries/generated/getTeamMemberIntegrationAuthQuery'
-import {
+import {gitlabRequest} from '../../graphql/public/rootSchema'
+import type {TeamMemberIntegrationAuth} from '../../postgres/types'
+import type {
   CreateIssueMutation,
+  CreateLabelMutation,
+  CreateLabelMutationVariables,
   CreateNoteMutation,
   GetIssueQuery,
+  GetLabelsQuery,
   GetProfileQuery,
   GetProjectIssuesQuery,
   GetProjectIssuesQueryVariables,
-  GetProjectsQuery
+  GetProjectsQuery,
+  UpdateIssueMutation,
+  UpdateIssueMutationVariables
 } from '../../types/gitlabTypes'
+import {convertTipTapToMarkdown} from '../../utils/convertTipTapToMarkdown'
 import makeCreateGitLabTaskComment from '../../utils/makeCreateGitLabTaskComment'
-import {CreateTaskResponse, TaskIntegrationManager} from '../TaskIntegrationManagerFactory'
+import type {CreateTaskResponse, TaskIntegrationManager} from '../TaskIntegrationManagerFactory'
 
 class GitLabServerManager implements TaskIntegrationManager {
   public title = 'GitLab'
-  private readonly auth: IGetTeamMemberIntegrationAuthQueryResult
-  private readonly context: GQLContext
+  private readonly auth: TeamMemberIntegrationAuth
+  private readonly context: InternalContext
   private readonly info: GraphQLResolveInfo
   private readonly serverBaseUrl: string
 
   constructor(
-    auth: IGetTeamMemberIntegrationAuthQueryResult,
-    context: GQLContext,
+    auth: TeamMemberIntegrationAuth,
+    context: InternalContext,
     info: GraphQLResolveInfo,
     serverBaseUrl: string
   ) {
@@ -43,10 +52,8 @@ class GitLabServerManager implements TaskIntegrationManager {
   }
 
   getGitLabRequest(info: GraphQLResolveInfo, batchRef: Record<any, any>) {
-    const {schema} = info
-    const composedRequest = (schema as RootSchema).gitlabRequest
     return async <TData = any, TVars = any>(query: string, variables: TVars) => {
-      const result = await composedRequest<TData, TVars>({
+      const result = await gitlabRequest<TData, TVars>({
         query,
         variables,
         info,
@@ -76,7 +83,10 @@ class GitLabServerManager implements TaskIntegrationManager {
       teamName,
       teamDashboardUrl
     )
-    const [noteData, noteError] = await this.createNote({body: comment, noteableId: issueId})
+    const [noteData, noteError] = await this.createNote({
+      body: comment,
+      noteableId: issueId
+    })
     if (noteError) return noteError
     const noteId = noteData.createNote?.note?.id
     if (!noteId) return new Error('Unable to create GitLab comment')
@@ -84,14 +94,14 @@ class GitLabServerManager implements TaskIntegrationManager {
   }
 
   async createTask({
-    rawContentStr,
+    rawContentJSON,
     integrationRepoId
   }: {
-    rawContentStr: string
+    rawContentJSON: JSONContent
     integrationRepoId: string
   }): Promise<CreateTaskResponse> {
-    const {title, contentState} = splitDraftContent(rawContentStr)
-    const description = stateToMarkdown(contentState) as string
+    const {title, bodyContent} = splitTipTapContent(rawContentJSON)
+    const description = convertTipTapToMarkdown(bodyContent)
     const [createIssueData, createIssueError] = await this.createIssue({
       title,
       description,
@@ -145,6 +155,12 @@ class GitLabServerManager implements TaskIntegrationManager {
     return [noteData, noteError] as const
   }
 
+  async updateIssue(input: UpdateIssueMutationVariables['input']) {
+    const gitlabRequest = this.getGitLabRequest(this.info, this.context)
+    const [data, error] = await gitlabRequest<UpdateIssueMutation>(updateIssue, {input})
+    return [data, error] as const
+  }
+
   async getProjectIssues(projectIssuesArgs: GetProjectIssuesQueryVariables) {
     const gitlabRequest = this.getGitLabRequest(this.info, this.context)
     const [issuesData, issuesError] = await gitlabRequest<GetProjectIssuesQuery>(
@@ -169,6 +185,40 @@ class GitLabServerManager implements TaskIntegrationManager {
       gid
     })
     return [issueData, issueError] as const
+  }
+
+  /**
+   * @param title - Search for the exact title of the label
+   * @param titleSearch - Search for labels which titles contain the searched words
+   */
+  async getLabels({
+    fullPath,
+    first = 100,
+    after,
+    title,
+    titleSearch
+  }: {
+    fullPath: string
+    first?: number
+    after?: string
+    title?: string
+    titleSearch?: string
+  }) {
+    const gitlabRequest = this.getGitLabRequest(this.info, this.context)
+    const [data, error] = await gitlabRequest<GetLabelsQuery>(getLabels, {
+      fullPath,
+      first,
+      after,
+      title,
+      titleSearch
+    })
+    return [data, error] as const
+  }
+
+  async createLabel(input: CreateLabelMutationVariables['input']) {
+    const gitlabRequest = this.getGitLabRequest(this.info, this.context)
+    const [data, error] = await gitlabRequest<CreateLabelMutation>(createLabel, {input})
+    return [data, error] as const
   }
 
   async isTokenValid(

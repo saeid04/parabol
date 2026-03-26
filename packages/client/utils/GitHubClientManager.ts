@@ -1,5 +1,5 @@
-import Atmosphere from '../Atmosphere'
-import {MenuMutationProps} from '../hooks/useMutationProps'
+import type Atmosphere from '../Atmosphere'
+import type {MenuMutationProps} from '../hooks/useMutationProps'
 import AddGitHubAuthMutation from '../mutations/AddGitHubAuthMutation'
 import {Providers} from '../types/constEnums'
 import getOAuthPopupFeatures from './getOAuthPopupFeatures'
@@ -8,11 +8,16 @@ class GitHubClientManager {
   static SCOPE = Providers.GITHUB_SCOPE
 
   fetch = window.fetch.bind(window)
+  static isAvailable = typeof window !== 'undefined' && !!window.__ACTION__.github
   static openOAuth(atmosphere: Atmosphere, teamId: string, mutationProps: MenuMutationProps) {
     const {submitting, onError, onCompleted, submitMutation} = mutationProps
     const hash = Math.random().toString(36).substring(5)
     const providerState = btoa(
-      JSON.stringify({hash, origin: window.location.origin, service: 'github'})
+      JSON.stringify({
+        hash,
+        origin: window.location.origin,
+        service: 'github'
+      })
     )
     const uri = `https://github.com/login/oauth/authorize?client_id=${window.__ACTION__.github}&scope=${GitHubClientManager.SCOPE}&state=${providerState}`
 

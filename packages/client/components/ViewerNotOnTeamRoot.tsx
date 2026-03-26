@@ -1,12 +1,12 @@
-import React, {Suspense} from 'react'
+import {Suspense} from 'react'
+import viewerNotOnTeamQuery, {
+  type ViewerNotOnTeamQuery
+} from '../__generated__/ViewerNotOnTeamQuery.graphql'
 import useQueryLoaderNow from '../hooks/useQueryLoaderNow'
 import useSubscription from '../hooks/useSubscription'
 import NotificationSubscription from '../subscriptions/NotificationSubscription'
 import {LoaderSize} from '../types/constEnums'
-import {renderLoader} from '../utils/relay/renderLoader'
-import viewerNotOnTeamQuery, {
-  ViewerNotOnTeamQuery
-} from '../__generated__/ViewerNotOnTeamQuery.graphql'
+import {Loader} from '../utils/relay/renderLoader'
 import ViewerNotOnTeam from './ViewerNotOnTeam'
 
 const ViewerNotOnTeamRoot = () => {
@@ -19,7 +19,7 @@ const ViewerNotOnTeamRoot = () => {
     meetingId
   })
   return (
-    <Suspense fallback={renderLoader({size: LoaderSize.WHOLE_PAGE})}>
+    <Suspense fallback={<Loader size={LoaderSize.WHOLE_PAGE} />}>
       {queryRef && <ViewerNotOnTeam queryRef={queryRef} />}
     </Suspense>
   )

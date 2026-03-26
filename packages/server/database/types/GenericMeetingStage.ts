@@ -1,5 +1,6 @@
 import ms from 'ms'
 import generateUID from '../../generateUID'
+import type {Newmeetingphasetypeenum} from '../../postgres/types/pg'
 
 const MAX_SYNC_STAGE_DURATION = ms('1h')
 
@@ -7,9 +8,7 @@ const MAX_SYNC_STAGE_DURATION = ms('1h')
 const filterOutliers = (someArray: number[]) => {
   const values = someArray.concat()
   if (values.length === 0) return []
-  values.sort(function (a, b) {
-    return a - b
-  })
+  values.sort((a, b) => a - b)
   const q1 = values[Math.floor(values.length / 4)]!
   const q3 = values[Math.ceil(values.length * (3 / 4))]!
   const iqr = q3 - q1
@@ -26,7 +25,7 @@ const getSuggestedDuration = (filteredDurations: number[], allDurations: number[
 
 export interface GenericMeetingStageInput {
   durations?: number[] | undefined
-  phaseType: string
+  phaseType: Newmeetingphasetypeenum
   id?: string
   isNavigable?: boolean
   isNavigableByFacilitator?: boolean
@@ -36,18 +35,18 @@ export interface GenericMeetingStageInput {
 
 export default class GenericMeetingStage {
   id: string
-  isAsync: boolean | undefined | null
+  isAsync?: boolean | undefined | null
   isComplete = false
   isNavigable: boolean
   isNavigableByFacilitator: boolean
-  startAt: Date | undefined
-  endAt: Date | undefined = undefined
-  scheduledEndTime: Date | undefined | null
-  suggestedEndTime: Date | undefined
-  suggestedTimeLimit: number | undefined
+  startAt?: Date | undefined
+  endAt?: Date | undefined = undefined
+  scheduledEndTime?: Date | undefined | null
+  suggestedEndTime?: Date | undefined
+  suggestedTimeLimit?: number | undefined
   viewCount: number
-  readyToAdvance: string[] | undefined = []
-  phaseType: string
+  readyToAdvance?: string[] | undefined = []
+  phaseType: Newmeetingphasetypeenum
   constructor(input: GenericMeetingStageInput) {
     const {durations, phaseType, id, isNavigable, isNavigableByFacilitator, startAt, viewCount} =
       input

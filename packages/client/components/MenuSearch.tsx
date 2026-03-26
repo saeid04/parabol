@@ -1,10 +1,7 @@
 import styled from '@emotion/styled'
-import React, {useCallback, useRef} from 'react'
+import type * as React from 'react'
+import {useCallback, useRef} from 'react'
 import {PALETTE} from '../styles/paletteV3'
-
-interface Props {
-  placeholder: string
-}
 
 const Input = styled('input')({
   appearance: 'none',
@@ -26,6 +23,7 @@ const Input = styled('input')({
 interface Props {
   value: string
   onChange: (e: React.ChangeEvent<HTMLInputElement>) => void
+  placeholder: string
 }
 
 const MenuSearch = (props: Props) => {

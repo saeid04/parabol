@@ -1,4 +1,4 @@
-import MeetingTemplate, {SharingScopeEnum} from './MeetingTemplate'
+import MeetingTemplate, {type SharingScopeEnum} from './MeetingTemplate'
 
 interface Input {
   name: string
@@ -6,7 +6,9 @@ interface Input {
   scope?: SharingScopeEnum
   orgId: string
   parentTemplateId?: string
-  lastUsedAt?: Date
+  lastUsedAt?: Date | null
+  illustrationUrl: string
+  mainCategory: string
 }
 
 export default class ReflectTemplate extends MeetingTemplate {

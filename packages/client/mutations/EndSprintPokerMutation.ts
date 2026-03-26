@@ -1,15 +1,18 @@
 import graphql from 'babel-plugin-relay/macro'
 import {commitMutation} from 'react-relay'
+import type {RecordProxy} from 'relay-runtime'
+import type {EndSprintPokerMutation_team$data} from '~/__generated__/EndSprintPokerMutation_team.graphql'
 import onMeetingRoute from '~/utils/onMeetingRoute'
-import {EndSprintPokerMutation_team} from '~/__generated__/EndSprintPokerMutation_team.graphql'
-import {
-  HistoryMaybeLocalHandler,
+import type {EndSprintPokerMutation as TEndSprintPokerMutation} from '../__generated__/EndSprintPokerMutation.graphql'
+import type {
+  NavigateMaybeLocalHandler,
   OnNextHandler,
-  OnNextHistoryContext,
+  OnNextNavigateContext,
   SharedUpdater,
   StandardMutation
 } from '../types/relayMutations'
-import {EndSprintPokerMutation as TEndSprintPokerMutation} from '../__generated__/EndSprintPokerMutation.graphql'
+import {GQLID} from '../utils/GQLID'
+import handleAddTimelineEvent from './handlers/handleAddTimelineEvent'
 import handleRemoveTasks from './handlers/handleRemoveTasks'
 import popEndMeetingToast from './toasts/popEndMeetingToast'
 
@@ -20,12 +23,34 @@ graphql`
       id
       endedAt
       teamId
+      commentCount
+      storyCount
+      name
+      phases {
+        phaseType
+        ... on EstimatePhase {
+          stages {
+            id
+          }
+        }
+      }
+      locked
+      organization {
+        id
+        viewerOrganizationUser {
+          id
+        }
+      }
+      summaryPageId
     }
     team {
       id
       activeMeetings {
         id
       }
+    }
+    timelineEvent {
+      ...TimelineEventPokerComplete_timelineEvent @relay(mask: false)
     }
     removedTaskIds
   }
@@ -45,35 +70,40 @@ const mutation = graphql`
 `
 
 export const endSprintPokerTeamOnNext: OnNextHandler<
-  EndSprintPokerMutation_team,
-  OnNextHistoryContext
+  EndSprintPokerMutation_team$data,
+  OnNextNavigateContext
 > = (payload, context) => {
   const {isKill, meeting} = payload
-  const {atmosphere, history} = context
+  const {atmosphere, navigate} = context
   if (!meeting) return
-  const {id: meetingId, teamId} = meeting
+  const {id: meetingId, teamId, summaryPageId} = meeting
   if (onMeetingRoute(window.location.pathname, [meetingId])) {
     if (isKill) {
-      history.push(`/team/${teamId}`)
+      navigate(`/team/${teamId}`)
       popEndMeetingToast(atmosphere, meetingId)
-    } else {
-      history.push(`/new-summary/${meetingId}`)
+    } else if (summaryPageId) {
+      const pageCode = GQLID.fromKey(summaryPageId)[0]
+      navigate(`/pages/${pageCode}`)
     }
   }
 }
 
-export const endSprintPokerTeamUpdater: SharedUpdater<EndSprintPokerMutation_team> = (
+export const endSprintPokerTeamUpdater: SharedUpdater<EndSprintPokerMutation_team$data> = (
   payload,
   {store}
 ) => {
   const removedTaskIds = payload.getValue('removedTaskIds')
   handleRemoveTasks(removedTaskIds as any, store)
+
+  const meeting = payload.getLinkedRecord('meeting') as RecordProxy
+  const timelineEvent = payload.getLinkedRecord('timelineEvent') as RecordProxy
+  handleAddTimelineEvent(meeting, timelineEvent, store)
 }
 
 const EndSprintPokerMutation: StandardMutation<
   TEndSprintPokerMutation,
-  HistoryMaybeLocalHandler
-> = (atmosphere, variables, {onError, onCompleted, history}) => {
+  NavigateMaybeLocalHandler
+> = (atmosphere, variables, {onError, onCompleted, navigate}) => {
   return commitMutation<TEndSprintPokerMutation>(atmosphere, {
     mutation,
     variables,
@@ -87,7 +117,10 @@ const EndSprintPokerMutation: StandardMutation<
       if (onCompleted) {
         onCompleted(res, errors)
       }
-      endSprintPokerTeamOnNext(res.endSprintPoker as any, {atmosphere, history})
+      endSprintPokerTeamOnNext(res.endSprintPoker as any, {
+        atmosphere,
+        navigate
+      })
     },
     onError
   })

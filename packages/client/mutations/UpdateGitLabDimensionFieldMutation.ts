@@ -1,10 +1,10 @@
 import graphql from 'babel-plugin-relay/macro'
 import {commitMutation} from 'react-relay'
-import {DiscriminateProxy} from '../types/generics'
-import {StandardMutation} from '../types/relayMutations'
+import type {GitLabFieldMenu_stage$data} from '../__generated__/GitLabFieldMenu_stage.graphql'
+import type {UpdateGitLabDimensionFieldMutation as TUpdateGitLabDimensionFieldMutation} from '../__generated__/UpdateGitLabDimensionFieldMutation.graphql'
+import type {DiscriminateProxy} from '../types/generics'
+import type {StandardMutation} from '../types/relayMutations'
 import createProxyRecord from '../utils/relay/createProxyRecord'
-import {GitLabFieldMenu_stage} from '../__generated__/GitLabFieldMenu_stage.graphql'
-import {UpdateGitLabDimensionFieldMutation as TUpdateGitLabDimensionFieldMutation} from '../__generated__/UpdateGitLabDimensionFieldMutation.graphql'
 
 graphql`
   fragment UpdateGitLabDimensionFieldMutation_team on UpdateGitLabDimensionFieldSuccess {
@@ -61,7 +61,7 @@ const UpdateGitLabDimensionFieldMutation: StandardMutation<TUpdateGitLabDimensio
       const phases = meeting.getLinkedRecords('phases')
       if (!phases) return
       const estimatePhase = phases.find((phase) => phase.getValue('phaseType') === 'ESTIMATE')!
-      const stages = estimatePhase.getLinkedRecords<GitLabFieldMenu_stage[]>('stages')
+      const stages = estimatePhase.getLinkedRecords<GitLabFieldMenu_stage$data[]>('stages')
 
       stages.forEach((stage) => {
         const dimensionRef = stage.getLinkedRecord('dimensionRef')

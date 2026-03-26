@@ -1,11 +1,11 @@
-import getRethink from '../../../database/rethinkDriver'
 import getPg from '../../../postgres/getPg'
 import {getUserByEmail} from '../../../postgres/queries/getUsersByEmails'
 import {toEpochSeconds} from '../../../utils/epochTime'
-import isCompanyDomain from '../../../utils/isCompanyDomain'
 import SlackServerManager from '../../../utils/SlackServerManager'
+import type {DataLoaderWorker} from '../../graphql'
+import isValid from '../../isValid'
 import {makeSection} from '../../mutations/helpers/notifications/makeSlackBlocks'
-import {QueryResolvers} from '../resolverTypes'
+import type {QueryResolvers} from '../resolverTypes'
 import authCountByDomain from './helpers/authCountByDomain'
 
 interface TypeField {
@@ -30,8 +30,17 @@ const TOP_X = 20
 const getTotal = (domainCount: DomainCount[]) =>
   domainCount.reduce((sum, row) => sum + row.total, 0)
 
-const filterCounts = (domainCount: DomainCount[]) =>
-  domainCount.filter(({domain, total}) => isCompanyDomain(domain) && total > 1).slice(0, TOP_X)
+const filterCounts = async (domainCount: DomainCount[], dataLoader: DataLoaderWorker) => {
+  const companyCounts = await Promise.all(
+    domainCount.map(async (count) => {
+      const {domain, total} = count
+      if (total <= 1 || !domain || !(await dataLoader.get('isCompanyDomain').load(domain)))
+        return null
+      return count
+    })
+  )
+  return companyCounts.filter(isValid).slice(0, TOP_X)
+}
 
 const addAllTimeTotals = async (domainCount: DomainCount[]): Promise<DomainCountWithAllTime[]> => {
   const pg = getPg()
@@ -49,8 +58,8 @@ const addAllTimeTotals = async (domainCount: DomainCount[]): Promise<DomainCount
   return mergedCount
 }
 
-const makeTopXSection = async (domainCount: DomainCount[]) => {
-  const filtered = filterCounts(domainCount)
+const makeTopXSection = async (domainCount: DomainCount[], dataLoader: DataLoaderWorker) => {
+  const filtered = await filterCounts(domainCount, dataLoader)
   const aggregated = await addAllTimeTotals(filtered)
   let curDomains = ''
   let curTotals = ''
@@ -72,18 +81,16 @@ const makeTopXSection = async (domainCount: DomainCount[]) => {
   }
 }
 
-const dailyPulse: QueryResolvers['dailyPulse'] = async (_source, {after, email, channelId}) => {
-  const r = await getRethink()
+const dailyPulse: QueryResolvers['dailyPulse'] = async (
+  _source,
+  {after, email, channelId},
+  {dataLoader}
+) => {
   const user = await getUserByEmail(email)
   if (!user) throw new Error('Bad user')
   const {id: userId} = user
-  const slackAuth = await r
-    .table('SlackAuth')
-    .getAll(userId, {index: 'userId'})
-    .filter((row) => row('botAccessToken').default(null).ne(null))
-    .nth(0)
-    .default(null)
-    .run()
+  const slackAuths = await dataLoader.get('slackAuthByUserId').load(userId)
+  const slackAuth = slackAuths.find((auth) => auth.isActive && auth.botAccessToken)
   if (!slackAuth) throw new Error('No Slack Auth Found!')
   const {botAccessToken} = slackAuth
   const [rawSignups, rawLogins] = await Promise.all([
@@ -91,10 +98,10 @@ const dailyPulse: QueryResolvers['dailyPulse'] = async (_source, {after, email, 
     authCountByDomain(after, true, 'lastSeenAt')
   ])
   const totalSignups = getTotal(rawSignups)
-  const signupsList = await makeTopXSection(rawSignups)
+  const signupsList = await makeTopXSection(rawSignups, dataLoader)
 
   const totalLogins = getTotal(rawLogins)
-  const loginsList = await makeTopXSection(rawLogins)
+  const loginsList = await makeTopXSection(rawLogins, dataLoader)
 
   const start = toEpochSeconds(after)
 

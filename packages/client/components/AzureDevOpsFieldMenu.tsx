@@ -1,8 +1,8 @@
 import graphql from 'babel-plugin-relay/macro'
-import React from 'react'
 import {useFragment} from 'react-relay'
 import useAtmosphere from '~/hooks/useAtmosphere'
-import {MenuProps} from '../hooks/useMenu'
+import type {AzureDevOpsFieldMenu_stage$key} from '../__generated__/AzureDevOpsFieldMenu_stage.graphql'
+import type {MenuProps} from '../hooks/useMenu'
 import UpdateAzureDevOpsDimensionFieldMutation from '../mutations/UpdateAzureDevOpsDimensionFieldMutation'
 import {SprintPokerDefaults} from '../types/constEnums'
 import AzureDevOpsClientManager from '../utils/AzureDevOpsClientManager'
@@ -12,7 +12,6 @@ import {
   azureDevOpsRemainingWorkWorkItems,
   azureDevOpsStoryPointWorkItems
 } from '../utils/AzureDevOpsWorkItemFields'
-import {AzureDevOpsFieldMenu_stage$key} from '../__generated__/AzureDevOpsFieldMenu_stage.graphql'
 import Menu from './Menu'
 import MenuItem from './MenuItem'
 import MenuItemHR from './MenuItemHR'

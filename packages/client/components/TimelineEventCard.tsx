@@ -1,13 +1,12 @@
 import styled from '@emotion/styled'
-import {AccountCircle, ChangeHistory, GroupAdd, GroupWork, History, Lock} from '@mui/icons-material'
 import graphql from 'babel-plugin-relay/macro'
-import React, {ReactNode} from 'react'
-import {createFragmentContainer} from 'react-relay'
+import type {ReactNode} from 'react'
+import {useFragment} from 'react-relay'
+import type {TimelineEventCard_timelineEvent$key} from '../__generated__/TimelineEventCard_timelineEvent.graphql'
 import {cardShadow} from '../styles/elevation'
-import {PALETTE} from '../styles/paletteV3'
-import {TimelineEventCard_timelineEvent} from '../__generated__/TimelineEventCard_timelineEvent.graphql'
 import TimelineEventDate from './TimelineEventDate'
 import TimelineEventHeaderMenuToggle from './TimelineEventHeaderMenuToggle'
+import TimelineEventTypeIcon from './TimelineEventTypeIcon'
 
 interface Props {
   children: ReactNode
@@ -15,7 +14,7 @@ interface Props {
   iconName?: string
   IconSVG?: ReactNode
   title: ReactNode
-  timelineEvent: TimelineEventCard_timelineEvent
+  timelineEvent: TimelineEventCard_timelineEvent$key
 }
 
 const Surface = styled('div')({
@@ -41,16 +40,6 @@ const CardTitleBlock = styled('div')({
   display: 'flex'
 })
 
-const EventIcon = styled('div')({
-  alignSelf: 'flex-start',
-  borderRadius: '100%',
-  color: PALETTE.SLATE_600,
-  display: 'block',
-  height: 24,
-  userSelect: 'none',
-  width: 24
-})
-
 const HeaderText = styled('div')({
   display: 'flex',
   flexDirection: 'column',
@@ -61,41 +50,36 @@ const HeaderText = styled('div')({
   paddingTop: 2
 })
 
-const GrapeLock = styled(Lock)({
-  color: PALETTE.GRAPE_500
-})
-
 const TimelineEventCard = (props: Props) => {
-  const {children, iconName, IconSVG, title, timelineEvent} = props
-  const {id: timelineEventId, createdAt, type} = timelineEvent
+  const {children, iconName, IconSVG, title, timelineEvent: timelineEventRef} = props
+  const timelineEvent = useFragment(
+    graphql`
+      fragment TimelineEventCard_timelineEvent on TimelineEvent {
+        id
+        createdAt
+        type
+        isActive
+      }
+    `,
+    timelineEventRef
+  )
+  const {id: timelineEventId, createdAt, type, isActive} = timelineEvent
   return (
     <Surface>
       <CardHeader>
         <CardTitleBlock>
-          {iconName && (
-            <EventIcon>
-              {
-                {
-                  change_history: <ChangeHistory />,
-                  history: <History />,
-                  account_circle: <AccountCircle />,
-                  group_add: <GroupAdd />,
-                  group_work: <GroupWork />,
-                  lock: <GrapeLock />
-                }[iconName]
-              }
-            </EventIcon>
-          )}
+          <TimelineEventTypeIcon iconName={iconName} />
           {IconSVG}
           <HeaderText>
             {title}
             <TimelineEventDate createdAt={createdAt} />
           </HeaderText>
         </CardTitleBlock>
-        {type === 'retroComplete' ||
-        type === 'actionComplete' ||
-        type === 'POKER_COMPLETE' ||
-        type === 'TEAM_PROMPT_COMPLETE' ? (
+        {isActive &&
+        (type === 'retroComplete' ||
+          type === 'actionComplete' ||
+          type === 'POKER_COMPLETE' ||
+          type === 'TEAM_PROMPT_COMPLETE') ? (
           <TimelineEventHeaderMenuToggle timelineEventId={timelineEventId} />
         ) : null}
       </CardHeader>
@@ -104,12 +88,4 @@ const TimelineEventCard = (props: Props) => {
   )
 }
 
-export default createFragmentContainer(TimelineEventCard, {
-  timelineEvent: graphql`
-    fragment TimelineEventCard_timelineEvent on TimelineEvent {
-      id
-      createdAt
-      type
-    }
-  `
-})
+export default TimelineEventCard

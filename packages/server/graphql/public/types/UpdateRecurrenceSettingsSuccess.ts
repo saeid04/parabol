@@ -1,5 +1,4 @@
-import MeetingTeamPrompt from '../../../database/types/MeetingTeamPrompt'
-import {UpdateRecurrenceSettingsSuccessResolvers} from '../resolverTypes'
+import type {UpdateRecurrenceSettingsSuccessResolvers} from '../resolverTypes'
 
 export type UpdateRecurrenceSettingsSuccessSource = {
   meetingId: string
@@ -7,7 +6,8 @@ export type UpdateRecurrenceSettingsSuccessSource = {
 
 const UpdateRecurrenceSettingsSuccess: UpdateRecurrenceSettingsSuccessResolvers = {
   meeting: async ({meetingId}, _args, {dataLoader}) => {
-    return dataLoader.get('newMeetings').load(meetingId) as Promise<MeetingTeamPrompt>
+    const meeting = await dataLoader.get('newMeetings').loadNonNull(meetingId)
+    return meeting
   }
 }
 

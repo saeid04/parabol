@@ -1,12 +1,12 @@
 import {Add as AddIcon, Close as CloseIcon} from '@mui/icons-material'
 import graphql from 'babel-plugin-relay/macro'
-import React, {useState} from 'react'
+import {useState} from 'react'
 import {useFragment} from 'react-relay'
-import {MattermostProviderRow_viewer$key} from '~/__generated__/MattermostProviderRow_viewer.graphql'
+import type {MattermostProviderRow_viewer$key} from '~/__generated__/MattermostProviderRow_viewer.graphql'
 import MattermostProviderLogo from '../../../../components/MattermostProviderLogo'
 import {MenuPosition} from '../../../../hooks/useCoords'
 import useMenu from '../../../../hooks/useMenu'
-import useMutationProps, {MenuMutationProps} from '../../../../hooks/useMutationProps'
+import useMutationProps, {type MenuMutationProps} from '../../../../hooks/useMutationProps'
 import {Providers} from '../../../../types/constEnums'
 import MattermostConfigMenu from './MattermostConfigMenu'
 import MattermostPanel from './MattermostPanel'
@@ -18,14 +18,15 @@ interface Props {
 }
 
 graphql`
-  fragment MattermostProviderRowTeamMember on TeamMember {
-    integrations {
-      mattermost {
-        auth {
-          provider {
-            id
-          }
+  fragment MattermostProviderRowTeamMemberIntegrations on TeamMemberIntegrations {
+    mattermost {
+      auth {
+        provider {
+          id
         }
+      }
+      teamNotificationSettings {
+        ...NotificationSettings_settings
       }
     }
   }
@@ -37,7 +38,9 @@ const MattermostProviderRow = (props: Props) => {
       fragment MattermostProviderRow_viewer on User {
         ...MattermostPanel_viewer
         teamMember(teamId: $teamId) {
-          ...MattermostProviderRowTeamMember @relay(mask: false)
+          integrations {
+            ...MattermostProviderRowTeamMemberIntegrations @relay(mask: false)
+          }
         }
       }
     `,
@@ -45,12 +48,19 @@ const MattermostProviderRow = (props: Props) => {
   )
   const [isConnectClicked, setConnectClicked] = useState(false)
   const {togglePortal, originRef, menuPortal, menuProps} = useMenu(MenuPosition.UPPER_RIGHT)
-  const {submitting, submitMutation, onError, onCompleted} = useMutationProps()
-  const mutationProps = {submitting, submitMutation, onError, onCompleted} as MenuMutationProps
+  const {submitting, submitMutation, error, onError, onCompleted} = useMutationProps()
+  const mutationProps = {
+    submitting,
+    submitMutation,
+    onError,
+    onCompleted
+  } as MenuMutationProps
   const {teamMember} = viewer
   const {integrations} = teamMember!
   const {mattermost} = integrations
   const {auth} = mattermost
+
+  if (window.__ACTION__.mattermostWebhookIntegrationDisabled) return null
 
   return (
     <>
@@ -65,6 +75,7 @@ const MattermostProviderRow = (props: Props) => {
         providerLogo={<MattermostProviderLogo />}
         connectButtonText={!isConnectClicked ? 'Connect' : 'Cancel'}
         connectButtonIcon={!isConnectClicked ? <AddIcon /> : <CloseIcon />}
+        error={error?.message}
       >
         {(auth || isConnectClicked) && <MattermostPanel teamId={teamId} viewerRef={viewer} />}
       </ProviderRow>

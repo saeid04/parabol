@@ -1,21 +1,16 @@
 import graphql from 'babel-plugin-relay/macro'
-import React, {lazy, Suspense, useEffect} from 'react'
-import {PreloadedQuery, usePreloadedQuery} from 'react-relay'
-import {Route} from 'react-router'
-import {matchPath, Switch} from 'react-router-dom'
+import {lazy, Suspense, useEffect} from 'react'
+import {type PreloadedQuery, usePreloadedQuery} from 'react-relay'
+import {matchPath, Route, Routes, useNavigate} from 'react-router'
 import ErrorBoundary from '~/components/ErrorBoundary'
-import useRouter from '../../../../hooks/useRouter'
-import {TeamContainerQuery} from '../../../../__generated__/TeamContainerQuery.graphql'
+import type {TeamContainerQuery} from '../../../../__generated__/TeamContainerQuery.graphql'
 import Team from '../../components/Team/Team'
 
 const TeamDashMain = lazy(
   () => import(/* webpackChunkName: 'TeamDashMainRoot' */ '../../components/TeamDashMainRoot')
 )
 const TeamSettings = lazy(
-  () =>
-    import(
-      /* webpackChunkName: 'TeamSettingsWrapper' */ '../../components/TeamSettingsWrapper/TeamSettingsWrapper'
-    )
+  () => import(/* webpackChunkName: 'TeamIntegrationsRoot' */ '../../components/TeamSettingsRoot')
 )
 const ArchivedTasks = lazy(
   () => import(/* webpackChunkName: 'ArchiveTaskRoot' */ '../../../../components/ArchiveTaskRoot')
@@ -24,9 +19,6 @@ const ArchivedTasks = lazy(
 interface Props {
   teamId: string
   queryRef: PreloadedQuery<TeamContainerQuery>
-  // not sure if we still need these, but not trying to break stuff during the Relay Refactor
-  location: any
-  match: any
 }
 
 const TeamContainer = (props: Props) => {
@@ -35,6 +27,7 @@ const TeamContainer = (props: Props) => {
     graphql`
       query TeamContainerQuery($teamId: ID!) {
         viewer {
+          canAccessTeam: canAccess(entity: Team, id: $teamId)
           team(teamId: $teamId) {
             ...Team_team
             ...TeamArchive_team
@@ -43,44 +36,39 @@ const TeamContainer = (props: Props) => {
         }
       }
     `,
-    queryRef,
-    {UNSTABLE_renderPolicy: 'full'}
+    queryRef
   )
   const {viewer} = data
-  const {team} = viewer
-  const {history, match} = useRouter()
+  const {team, canAccessTeam} = viewer
+  const navigate = useNavigate()
   const {location} = window
   const {pathname} = location
   useEffect(() => {
-    if (!team) {
-      history.replace({
-        pathname: `/invitation-required`,
-        search: `?redirectTo=${encodeURIComponent(pathname)}&teamId=${teamId}`
-      })
+    if (!canAccessTeam) {
+      navigate(
+        {
+          pathname: `/invitation-required`,
+          search: `?redirectTo=${pathname}&teamId=${teamId}`
+        },
+        {replace: true}
+      )
     }
-  })
+  }, [canAccessTeam])
   if (!team) return null
 
-  const isSettings = Boolean(
-    matchPath(pathname, {
-      path: '/team/:teamId/settings'
-    })
-  )
+  const isSettings = Boolean(matchPath('/team/:teamId/settings', pathname))
   return (
     <ErrorBoundary>
       <Team isSettings={isSettings} team={team}>
         <Suspense fallback={''}>
-          <Switch>
-            {/* TODO: replace match.path with a relative when the time comes: https://github.com/ReactTraining/react-router/pull/4539 */}
-            <Route exact path={match.path} component={TeamDashMain} />
-            <Route path={`${match.path}/settings`} component={TeamSettings} />
+          <Routes>
+            <Route path='settings' element={<TeamSettings teamId={teamId} />} />
             <Route
-              path={`${match.path}/archive`}
-              render={(p) => (
-                <ArchivedTasks {...p} team={team} returnToTeamId={teamId} teamIds={[teamId]} />
-              )}
+              path='archive'
+              element={<ArchivedTasks team={team} returnToTeamId={teamId} teamIds={[teamId]} />}
             />
-          </Switch>
+            <Route path='*' element={<TeamDashMain />} />
+          </Routes>
         </Suspense>
       </Team>
     </ErrorBoundary>

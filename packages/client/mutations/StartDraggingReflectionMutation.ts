@@ -1,15 +1,12 @@
 import graphql from 'babel-plugin-relay/macro'
 import {commitMutation} from 'react-relay'
-import {matchPath} from 'react-router-dom'
-import {Disposable, RecordSourceProxy} from 'relay-runtime'
-import {StartDraggingReflectionMutation_meeting} from '~/__generated__/StartDraggingReflectionMutation_meeting.graphql'
-import Atmosphere from '../Atmosphere'
-import {ClientRetroReflection} from '../types/clientSchema'
-import {LocalHandlers, SharedUpdater} from '../types/relayMutations'
-import {
-  StartDraggingReflectionMutation as TStartDraggingReflectionMutation,
-  StartDraggingReflectionMutationVariables
-} from '../__generated__/StartDraggingReflectionMutation.graphql'
+import {matchPath} from 'react-router'
+import type {Disposable, RecordSourceProxy} from 'relay-runtime'
+import type {StartDraggingReflectionMutation_meeting$data} from '~/__generated__/StartDraggingReflectionMutation_meeting.graphql'
+import type {StartDraggingReflectionMutation as TStartDraggingReflectionMutation} from '../__generated__/StartDraggingReflectionMutation.graphql'
+import type Atmosphere from '../Atmosphere'
+import type {ClientRetroReflection} from '../types/clientSchema'
+import type {LocalHandlers, SharedUpdater} from '../types/relayMutations'
 
 graphql`
   fragment StartDraggingReflectionMutation_meeting on StartDraggingReflectionPayload {
@@ -48,12 +45,12 @@ interface UpdaterOptions {
 
 // used only by subscription
 export const startDraggingReflectionMeetingUpdater: SharedUpdater<
-  StartDraggingReflectionMutation_meeting
+  StartDraggingReflectionMutation_meeting$data
 > = (payload, {atmosphere, store}: UpdaterOptions) => {
   const meetingId = payload.getValue('meetingId')
   const {pathname} = window.location
-  const meetingRoute = matchPath(pathname, {path: `/meet/${meetingId}`})
-  const isDemoRoute = matchPath(pathname, {path: `/retrospective-demo`})
+  const meetingRoute = matchPath({path: `/meet/${meetingId}`, end: false}, pathname)
+  const isDemoRoute = matchPath({path: '/retrospective-demo', end: false}, pathname)
   /*
    * Avoid adding reflectionsInFlight on clients that are not in the meeting because
    * we can't call the endDrag handler to remove them because
@@ -84,7 +81,7 @@ export const startDraggingReflectionMeetingUpdater: SharedUpdater<
       reflection.setValue(false, 'isDropping')
       reflection.setLinkedRecord(remoteDrag, 'remoteDrag')
       // cancel spotlight, too
-      const meeting = meetingId !== null ? store.get(meetingId) : null
+      const meeting = meetingId ? store.get(meetingId) : null
       meeting?.setValue(null, 'spotlightReflection')
     } else {
       // viewer wins
@@ -110,7 +107,7 @@ export const startDraggingReflectionMeetingUpdater: SharedUpdater<
 
 const StartDraggingReflectionMutation = (
   atmosphere: Atmosphere,
-  variables: StartDraggingReflectionMutationVariables,
+  variables: TStartDraggingReflectionMutation['variables'],
   {onError, onCompleted}: LocalHandlers = {}
 ): Disposable => {
   return commitMutation<TStartDraggingReflectionMutation>(atmosphere, {

@@ -1,7 +1,7 @@
 """
 An organization
 """
-type Organization {
+type Organization implements OrganizationPartial {
   """
   The unique organization ID
   """
@@ -28,39 +28,36 @@ type Organization {
   creditCard: CreditCard
 
   """
-  The assumed company this organizaiton belongs to
-  """
-  company: Company
-
-  """
   true if the viewer is the billing leader for the org
   """
   isBillingLeader: Boolean!
 
   """
-  Basic meeting metadata for aggregated stats across the entire organization.
-  Includes metadata on teams the viewer is not apart of
+  true if the viewer holds the the org admin role on the org
   """
-  meetingStats: [MeetingStat!]!
+  isOrgAdmin: Boolean!
+
   """
   The name of the organization
   """
   name: String!
 
   """
-  The org avatar
+  Number of teams with 3+ meetings (>1 attendee) that met within last 30 days
   """
-  picture: URL
+  activeTeamCount: Int!
 
   """
-  all the teams the viewer is on in the organization
+  Teams in the organization that the viewer has access to.
+  For org admins/super users: all teams in the org (viewer's teams first).
+  For regular users: teams the viewer is on plus public teams.
   """
   teams: [Team!]!
 
   """
-  The level of access to features on the parabol site
+  The count of all teams in the organization
   """
-  tier: TierEnum!
+  allTeamsCount: Int!
 
   """
   THe datetime the current billing cycle ends
@@ -96,11 +93,6 @@ type Organization {
   Number of retro meetings that can be run (if not pro)
   """
   retroMeetingsRemaining: Int! @deprecated(reason: "Unlimited retros for all!")
-
-  """
-  true if should show the org the conversion modal, else false
-  """
-  showConversionModal: Boolean!
 
   """
   The customerId from stripe
@@ -140,7 +132,51 @@ type Organization {
   """
   The leaders of the org
   """
-  billingLeaders: [User!]!
+  billingLeaders: [OrganizationUser!]!
+
+  """
+  The assumed company this organizaiton belongs to
+  """
+  company: Company
+
+  """
+  Basic meeting metadata for aggregated stats across the entire organization.
+  Includes metadata on teams the viewer is not apart of
+  """
+  meetingStats: [MeetingStat!]!
+
+  """
+  The org avatar
+  """
+  picture: URL
+  tier: TierEnum!
+
+  """
+  Whether the org has access to AI features
+  """
+  useAI: Boolean!
+
+  billingTier: TierEnum!
+
+  """
+  false if the Organization was explicitly marked as not paid manually or by stripe
+  """
+  isPaid: Boolean!
+
+  """
+  Message to show if the organization is unpaid
+  """
+  unpaidMessageHTML: String
+
+  """
+  When the trial started, iff there is a trial active
+  """
+  trialStartDate: DateTime
+
+  """
+  A discount coupon assigned to this organization, to be applied automatically on upgrade
+  """
+  coupon: OrganizationDiscount
 
   """
   Minimal details about all teams in the organization
@@ -148,26 +184,43 @@ type Organization {
   teamStats: [TeamStat!]!
 
   """
-  Any super power given to the organization via a super user
+  Whether the org has a feature flag enabled or not
   """
-  featureFlags: OrganizationFeatureFlags!
-}
+  featureFlag(featureName: String!): Boolean!
 
-type MeetingStat {
-  id: ID!
-  meetingType: MeetingTypeEnum!
-  createdAt: DateTime!
-}
+  """
+  The SAML record attached to the Organization, if any
+  """
+  saml: SAML
 
-type TeamStat {
-  id: ID!
-  createdAt: DateTime!
-}
+  """
+  The SAML id for the organization if it is provisioned via SAML attribute
+  """
+  samlId: ID
 
-"""
-The types of flags that give an individual organization super powers
-"""
-type OrganizationFeatureFlags {
-  teamsLimit: Boolean!
-  SAMLUI: Boolean!
+  """
+  A list of domains approved by the organization to join.
+  Empty if all domains are allowed
+  """
+  approvedDomains: [String!]!
+
+  """
+  Custom integration providers with organization scope
+  """
+  integrationProviders: OrgIntegrationProviders!
+
+  """
+  OAuth 2.0 Applications registered for this organization
+  """
+  oauthApplications: [OAuthAPIProvider!]!
+
+  """
+  Get an OAuth 2.0 Application by ID
+  """
+  oauthAPIProvider(providerId: ID!): OAuthAPIProvider
+
+  """
+  The feature flags the org has enabled
+  """
+  orgFeatureFlags: [OwnedFeatureFlag!]!
 }

@@ -1,6 +1,6 @@
 import styled from '@emotion/styled'
 import {Add, UnfoldLess, UnfoldMore} from '@mui/icons-material'
-import React, {MouseEvent} from 'react'
+import type {MouseEvent} from 'react'
 import useBreakpoint from '~/hooks/useBreakpoint'
 import {MenuPosition} from '~/hooks/useCoords'
 import useTooltip from '~/hooks/useTooltip'
@@ -69,7 +69,7 @@ interface Props {
   groupColor: string
   isWidthExpanded: boolean
   onClick: () => void
-  phaseType: string | null
+  phaseType: string | null | undefined
   question: string
   submitting: boolean
   toggleWidth: (e: MouseEvent<Element>) => void

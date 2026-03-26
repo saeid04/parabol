@@ -1,10 +1,10 @@
+import {expect, test} from '@playwright/test'
 import config from '../config'
-import {test, expect} from '@playwright/test'
 import {
-  startDemo,
   dragReflectionCard,
   goToNextPhase,
-  skipToGroupPhase
+  skipToGroupPhase,
+  startDemo
 } from './retrospective-demo-helpers'
 
 test.describe('retrospective-demo / group page', () => {
@@ -14,22 +14,22 @@ test.describe('retrospective-demo / group page', () => {
     const startTextbox = '[data-cy=reflection-column-Start] [role=textbox]'
     await page.click(startTextbox)
     await page.type(startTextbox, 'Start doing this')
-    await page.press(startTextbox, 'Enter')
+    await page.keyboard.press('Tab')
+    await page.keyboard.press('Enter')
 
     const stopTextbox = '[data-cy=reflection-column-Stop] [role=textbox]'
     await page.click(stopTextbox)
     await page.type(stopTextbox, 'Stop doing this')
-    await page.press(stopTextbox, 'Enter')
+    await page.keyboard.press('Tab')
+    await page.keyboard.press('Enter')
 
     const continueTextbox = '[data-cy=reflection-column-Continue] [role=textbox]'
     await page.click(continueTextbox)
     await page.type(continueTextbox, 'Continue doing this')
-    await page.press(continueTextbox, 'Enter')
+    await page.keyboard.press('Tab')
+    await page.keyboard.press('Enter')
 
-    const nextButton = page.locator('button :text("Next")')
-    await expect(nextButton).toBeVisible()
-    await nextButton.click()
-    await nextButton.click()
+    await goToNextPhase(page)
     expect(page.url()).toEqual(`${config.rootUrlPath}/retrospective-demo/group`)
 
     await expect(
@@ -49,11 +49,19 @@ test.describe('retrospective-demo / group page', () => {
     const startTextbox = '[data-cy=reflection-column-Start] [role=textbox]'
     await page.click(startTextbox)
     await page.type(startTextbox, 'Documenting things in Notion')
-    await page.press(startTextbox, 'Enter')
+    await page.keyboard.press('Tab')
+    await page.keyboard.press('Enter')
+    await expect(
+      page.locator('[data-cy="reflection-column-Start"] :text("Documenting things in Notion")')
+    ).toBeVisible()
 
     await page.click(startTextbox)
     await page.type(startTextbox, 'Writing things down')
-    await page.press(startTextbox, 'Enter')
+    await page.keyboard.press('Tab')
+    await page.keyboard.press('Enter')
+    await expect(
+      page.locator('[data-cy="reflection-column-Start"] :text("Writing things down")')
+    ).toBeVisible()
 
     await goToNextPhase(page)
     expect(page.url()).toEqual(`${config.rootUrlPath}/retrospective-demo/group`)
@@ -61,13 +69,6 @@ test.describe('retrospective-demo / group page', () => {
     const writingThingsDownCard = page.locator('text=Writing things down')
     const documentingInNotionCard = page.locator('text=Documenting things in Notion')
     await dragReflectionCard(writingThingsDownCard, documentingInNotionCard)
-
-    // Then it auto-generates a header
-    await expect(
-      page.locator(
-        `[data-cy=group-column-Start] [data-cy*="Start-group-"] input[value="Documenting things in"]`
-      )
-    ).toBeVisible()
 
     // Then it shows all cards when clicking the group
     await writingThingsDownCard.click()
@@ -92,13 +93,23 @@ test.describe('retrospective-demo / group page', () => {
 
     const startTextbox = '[data-cy=reflection-column-Start] [role=textbox]'
     await page.click(startTextbox)
-    await page.type(startTextbox, 'Documenting things in Notion')
-    await page.press(startTextbox, 'Enter')
+    await page.fill(startTextbox, 'Documenting things in Notion')
+    await page.keyboard.press('Tab')
+    await page.keyboard.press('Enter')
+    await expect(
+      page.locator('[data-cy="reflection-column-Start"] :text("Documenting things in Notion")')
+    ).toBeVisible()
 
     const stopTextbox = '[data-cy=reflection-column-Stop] [role=textbox]'
     await page.click(stopTextbox)
-    await page.type(stopTextbox, 'Making decisions in one-on-one meetings')
-    await page.press(stopTextbox, 'Enter')
+    await page.fill(stopTextbox, 'Making decisions in one-on-one meetings')
+    await page.keyboard.press('Tab')
+    await page.keyboard.press('Enter')
+    await expect(
+      page.locator(
+        '[data-cy="reflection-column-Stop"] :text("Making decisions in one-on-one meetings")'
+      )
+    ).toBeVisible()
 
     await goToNextPhase(page)
     expect(page.url()).toEqual(`${config.rootUrlPath}/retrospective-demo/group`)
@@ -106,13 +117,6 @@ test.describe('retrospective-demo / group page', () => {
     const decisionsInOneOnOnesCard = page.locator('text=Making decisions in one-on-one meetings')
     const documentingInNotionCard = page.locator('text=Documenting things in notion')
     await dragReflectionCard(decisionsInOneOnOnesCard, documentingInNotionCard)
-
-    // Then it auto-generates a header
-    await expect(
-      page.locator(
-        `[data-cy=group-column-Start] [data-cy*="Start-group-"] input[value="Documenting things in"]`
-      )
-    ).toBeVisible()
 
     // Then it shows all cards when clicking the group
     await decisionsInOneOnOnesCard.click()
@@ -149,13 +153,6 @@ test.describe('retrospective-demo / group page', () => {
       timeout
     })
 
-    // It created the "People Decisions Interns" group
-    await expect(
-      page.locator(
-        `[data-cy=group-column-Start] [data-cy*="Start-group-"] input[value="People Decisions Interns"]`
-      )
-    ).toBeVisible({timeout})
-
     // It drags the "making important decisions in chat" card from Stop to Start
     await expect(
       page.locator(`[data-cy=group-column-Start] :text("${decisionsText}")`)
@@ -169,13 +166,6 @@ test.describe('retrospective-demo / group page', () => {
     ).toBeVisible({
       timeout
     })
-
-    // It created the "Team Work" group
-    await expect(
-      page.locator(
-        `[data-cy=group-column-Continue] [data-cy*="Continue-group-"] input[value="Team Work"]`
-      )
-    ).toBeVisible({timeout})
 
     // It drags "debates" card from Stop to Continue
     await expect(

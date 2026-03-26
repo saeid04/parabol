@@ -1,26 +1,22 @@
-import React, {Suspense} from 'react'
-import {RouteComponentProps, withRouter} from 'react-router-dom'
+import {Suspense} from 'react'
+import {useParams} from 'react-router'
+import userProfileQuery, {
+  type UserProfileQuery
+} from '../../../__generated__/UserProfileQuery.graphql'
 import useQueryLoaderNow from '../../../hooks/useQueryLoaderNow'
 import useSubscription from '../../../hooks/useSubscription'
 import NotificationSubscription from '../../../subscriptions/NotificationSubscription'
-import userProfileQuery, {UserProfileQuery} from '../../../__generated__/UserProfileQuery.graphql'
 import UserProfile from './UserProfile'
 
-interface Props extends RouteComponentProps<{teamId: string}> {}
-
-const UserProfileRoot = (props: Props) => {
-  const {
-    match: {
-      params: {teamId}
-    }
-  } = props
+const UserProfileRoot = () => {
+  const {teamId} = useParams()
   useSubscription('UserProfileRoot', NotificationSubscription)
-  const queryRef = useQueryLoaderNow<UserProfileQuery>(userProfileQuery, {teamId})
+  const queryRef = useQueryLoaderNow<UserProfileQuery>(userProfileQuery, {})
   return (
     <Suspense fallback={''}>
-      {queryRef && <UserProfile queryRef={queryRef} teamId={teamId} />}
+      {queryRef && <UserProfile queryRef={queryRef} teamId={teamId!} />}
     </Suspense>
   )
 }
 
-export default withRouter(UserProfileRoot)
+export default UserProfileRoot

@@ -1,33 +1,41 @@
 import graphql from 'babel-plugin-relay/macro'
-import React from 'react'
-import {createFragmentContainer} from 'react-relay'
-import {RouteComponentProps, withRouter} from 'react-router'
+import {useFragment} from 'react-relay'
+import {useNavigate} from 'react-router'
 import useAtmosphere from '~/hooks/useAtmosphere'
+import useMutationProps from '~/hooks/useMutationProps'
+import type {SuggestedActionTryTheDemo_suggestedAction$key} from '../__generated__/SuggestedActionTryTheDemo_suggestedAction.graphql'
 import DismissSuggestedActionMutation from '../mutations/DismissSuggestedActionMutation'
 import {PALETTE} from '../styles/paletteV3'
-import withMutationProps, {WithMutationProps} from '../utils/relay/withMutationProps'
-import {SuggestedActionTryTheDemo_suggestedAction} from '../__generated__/SuggestedActionTryTheDemo_suggestedAction.graphql'
 import SuggestedActionButton from './SuggestedActionButton'
 import SuggestedActionCard from './SuggestedActionCard'
 import SuggestedActionCopy from './SuggestedActionCopy'
 
-interface Props extends WithMutationProps, RouteComponentProps<{[x: string]: string | undefined}> {
-  suggestedAction: SuggestedActionTryTheDemo_suggestedAction
+interface Props {
+  suggestedAction: SuggestedActionTryTheDemo_suggestedAction$key
 }
 
 const SuggestedActionTryTheDemo = (props: Props) => {
+  const navigate = useNavigate()
   const atmosphere = useAtmosphere()
+  const {submitting, submitMutation, onError, onCompleted} = useMutationProps()
+
+  const {suggestedAction: suggestedActionRef} = props
+  const suggestedAction = useFragment(
+    graphql`
+      fragment SuggestedActionTryTheDemo_suggestedAction on SuggestedActionTryTheDemo {
+        id
+      }
+    `,
+    suggestedActionRef
+  )
+  const {id: suggestedActionId} = suggestedAction
+
   const onClick = () => {
-    const {history, submitting, submitMutation, suggestedAction, onError, onCompleted} = props
-    const {id: suggestedActionId} = suggestedAction
     if (submitting) return
     submitMutation()
     DismissSuggestedActionMutation(atmosphere, {suggestedActionId}, {onError, onCompleted})
-    history.push('/retrospective-demo')
+    navigate('/retrospective-demo')
   }
-
-  const {suggestedAction} = props
-  const {id: suggestedActionId} = suggestedAction
   return (
     <SuggestedActionCard
       backgroundColor={PALETTE.GOLD_300}
@@ -42,10 +50,4 @@ const SuggestedActionTryTheDemo = (props: Props) => {
   )
 }
 
-export default createFragmentContainer(withMutationProps(withRouter(SuggestedActionTryTheDemo)), {
-  suggestedAction: graphql`
-    fragment SuggestedActionTryTheDemo_suggestedAction on SuggestedActionTryTheDemo {
-      id
-    }
-  `
-})
+export default SuggestedActionTryTheDemo

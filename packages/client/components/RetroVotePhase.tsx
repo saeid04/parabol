@@ -1,7 +1,6 @@
 import graphql from 'babel-plugin-relay/macro'
-import React from 'react'
-import {createFragmentContainer} from 'react-relay'
-import {RetroVotePhase_meeting} from '~/__generated__/RetroVotePhase_meeting.graphql'
+import {useFragment} from 'react-relay'
+import type {RetroVotePhase_meeting$key} from '~/__generated__/RetroVotePhase_meeting.graphql'
 import useCallbackRef from '../hooks/useCallbackRef'
 import {phaseLabelLookup} from '../utils/meetings/lookups'
 import GroupingKanban from './GroupingKanban'
@@ -12,16 +11,29 @@ import MeetingTopBar from './MeetingTopBar'
 import PhaseHeaderDescription from './PhaseHeaderDescription'
 import PhaseHeaderTitle from './PhaseHeaderTitle'
 import PhaseWrapper from './PhaseWrapper'
-import {RetroMeetingPhaseProps} from './RetroMeeting'
+import type {RetroMeetingPhaseProps} from './RetroMeeting'
 import RetroVoteMetaHeader from './RetroVoteMetaHeader'
 import StageTimerDisplay from './StageTimerDisplay'
 
 interface Props extends RetroMeetingPhaseProps {
-  meeting: RetroVotePhase_meeting
+  meeting: RetroVotePhase_meeting$key
 }
 
 const RetroVotePhase = (props: Props) => {
-  const {avatarGroup, toggleSidebar, meeting} = props
+  const {avatarGroup, toggleSidebar, meeting: meetingRef} = props
+  const meeting = useFragment(
+    graphql`
+      fragment RetroVotePhase_meeting on RetrospectiveMeeting {
+        ...StageTimerControl_meeting
+        ...StageTimerDisplay_meeting
+        ...GroupingKanban_meeting
+        ...RetroVoteMetaHeader_meeting
+        endedAt
+        showSidebar
+      }
+    `,
+    meetingRef
+  )
   const [callbackRef, phaseRef] = useCallbackRef()
   const {endedAt, showSidebar} = meeting
 
@@ -50,15 +62,4 @@ const RetroVotePhase = (props: Props) => {
   )
 }
 
-export default createFragmentContainer(RetroVotePhase, {
-  meeting: graphql`
-    fragment RetroVotePhase_meeting on RetrospectiveMeeting {
-      ...StageTimerControl_meeting
-      ...StageTimerDisplay_meeting
-      ...GroupingKanban_meeting
-      ...RetroVoteMetaHeader_meeting
-      endedAt
-      showSidebar
-    }
-  `
-})
+export default RetroVotePhase

@@ -1,10 +1,9 @@
 import graphql from 'babel-plugin-relay/macro'
-import React from 'react'
 import {commitLocalUpdate, useFragment} from 'react-relay'
+import type {GitHubScopingSearchHistoryToggle_meeting$key} from '../__generated__/GitHubScopingSearchHistoryToggle_meeting.graphql'
 import useAtmosphere from '../hooks/useAtmosphere'
 import PersistGitHubSearchQueryMutation from '../mutations/PersistGitHubSearchQueryMutation'
 import SearchQueryId from '../shared/gqlIds/SearchQueryId'
-import {GitHubScopingSearchHistoryToggle_meeting$key} from '../__generated__/GitHubScopingSearchHistoryToggle_meeting.graphql'
 import ScopingSearchHistoryToggle from './ScopingSearchHistoryToggle'
 
 interface Props {

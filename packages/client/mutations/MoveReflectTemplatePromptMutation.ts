@@ -1,9 +1,10 @@
 import graphql from 'babel-plugin-relay/macro'
 import {commitMutation} from 'react-relay'
-import {MoveReflectTemplatePromptMutation as TMoveReflectTemplatePromptMutation} from '~/__generated__/MoveReflectTemplatePromptMutation.graphql'
-import {SharedUpdater, StandardMutation} from '../types/relayMutations'
-import {MoveReflectTemplatePromptMutation_team} from '../__generated__/MoveReflectTemplatePromptMutation_team.graphql'
+import type {MoveReflectTemplatePromptMutation as TMoveReflectTemplatePromptMutation} from '~/__generated__/MoveReflectTemplatePromptMutation.graphql'
+import type {MoveReflectTemplatePromptMutation_team$data} from '../__generated__/MoveReflectTemplatePromptMutation_team.graphql'
+import type {SharedUpdater, StandardMutation} from '../types/relayMutations'
 import handleMoveTemplatePrompt from './handlers/handleMoveTemplatePrompt'
+
 interface Context {
   templateId: string
 }
@@ -18,7 +19,7 @@ graphql`
 `
 
 const mutation = graphql`
-  mutation MoveReflectTemplatePromptMutation($promptId: ID!, $sortOrder: Float!) {
+  mutation MoveReflectTemplatePromptMutation($promptId: ID!, $sortOrder: String!) {
     moveReflectTemplatePrompt(promptId: $promptId, sortOrder: $sortOrder) {
       error {
         message
@@ -29,7 +30,7 @@ const mutation = graphql`
 `
 
 export const moveReflectTemplatePromptTeamUpdater: SharedUpdater<
-  MoveReflectTemplatePromptMutation_team
+  MoveReflectTemplatePromptMutation_team$data
 > = (payload, {store}) => {
   if (!payload) return
   const templateId = payload.getLinkedRecord('prompt').getValue('templateId')

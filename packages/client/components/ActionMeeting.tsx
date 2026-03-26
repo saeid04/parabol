@@ -1,11 +1,11 @@
 import graphql from 'babel-plugin-relay/macro'
-import React, {ReactElement, Suspense, useEffect} from 'react'
-import {createFragmentContainer} from 'react-relay'
-import {ActionMeeting_meeting} from '~/__generated__/ActionMeeting_meeting.graphql'
+import {type ReactElement, Suspense, useEffect} from 'react'
+import {useFragment} from 'react-relay'
+import type {ActionMeeting_meeting$key} from '~/__generated__/ActionMeeting_meeting.graphql'
+import type {NewMeetingPhaseTypeEnum} from '../__generated__/ActionMeeting_meeting.graphql'
 import useMeeting from '../hooks/useMeeting'
 import NewMeetingAvatarGroup from '../modules/meeting/components/MeetingAvatarGroup/NewMeetingAvatarGroup'
-import lazyPreload, {LazyExoticPreload} from '../utils/lazyPreload'
-import {NewMeetingPhaseTypeEnum} from '../__generated__/ActionMeeting_meeting.graphql'
+import lazyPreload, {type LazyPreloadedComponent} from '../utils/lazyPreload'
 import ActionMeetingSidebar from './ActionMeetingSidebar'
 import MeetingArea from './MeetingArea'
 import MeetingControlBar from './MeetingControlBar'
@@ -14,10 +14,10 @@ import MeetingStyles from './MeetingStyles'
 import ResponsiveDashSidebar from './ResponsiveDashSidebar'
 
 interface Props {
-  meeting: ActionMeeting_meeting
+  meeting: ActionMeeting_meeting$key
 }
 
-const phaseLookup = {
+const phaseLookup: Partial<Record<NewMeetingPhaseTypeEnum, LazyPreloadedComponent>> = {
   checkin: lazyPreload(
     () => import(/* webpackChunkName: 'NewMeetingCheckIn' */ './NewMeetingCheckIn')
   ),
@@ -33,7 +33,7 @@ const phaseLookup = {
   lastcall: lazyPreload(
     () => import(/* webpackChunkName: 'ActionMeetingLastCall' */ './ActionMeetingLastCall')
   )
-} as Record<NewMeetingPhaseTypeEnum, LazyExoticPreload<any>>
+}
 
 export interface ActionMeetingPhaseProps {
   avatarGroup: ReactElement
@@ -41,7 +41,33 @@ export interface ActionMeetingPhaseProps {
 }
 
 const ActionMeeting = (props: Props) => {
-  const {meeting} = props
+  const {meeting: meetingRef} = props
+  const meeting = useFragment(
+    graphql`
+      fragment ActionMeeting_meeting on ActionMeeting {
+        ...useMeeting_meeting
+        ...ActionMeetingSidebar_meeting
+        ...NewMeetingCheckIn_meeting
+        ...ActionMeetingUpdates_meeting
+        ...ActionMeetingFirstCall_meeting
+        ...ActionMeetingAgendaItems_meeting
+        ...ActionMeetingLastCall_meeting
+        ...NewMeetingAvatarGroup_meeting
+        ...MeetingControlBar_meeting
+        ...MeetingLockedOverlay_meeting
+        localPhase {
+          id
+          phaseType
+        }
+        phases {
+          id
+          phaseType
+        }
+        showSidebar
+      }
+    `,
+    meetingRef
+  )
   const {localPhase, showSidebar} = meeting
   const {toggleSidebar, handleGotoNext, gotoStageId, safeRoute, handleMenuClick} =
     useMeeting(meeting)
@@ -50,7 +76,7 @@ const ActionMeeting = (props: Props) => {
   }, [])
   if (!safeRoute) return null
   const localPhaseType = (localPhase && localPhase.phaseType) || 'lobby'
-  const Phase = phaseLookup[localPhaseType]
+  const Phase = phaseLookup[localPhaseType]!
   return (
     <MeetingStyles>
       <ResponsiveDashSidebar isOpen={showSidebar} onToggle={toggleSidebar}>
@@ -80,28 +106,4 @@ const ActionMeeting = (props: Props) => {
   )
 }
 
-export default createFragmentContainer(ActionMeeting, {
-  meeting: graphql`
-    fragment ActionMeeting_meeting on ActionMeeting {
-      ...useMeeting_meeting
-      ...ActionMeetingSidebar_meeting
-      ...NewMeetingCheckIn_meeting
-      ...ActionMeetingUpdates_meeting
-      ...ActionMeetingFirstCall_meeting
-      ...ActionMeetingAgendaItems_meeting
-      ...ActionMeetingLastCall_meeting
-      ...NewMeetingAvatarGroup_meeting
-      ...MeetingControlBar_meeting
-      ...MeetingLockedOverlay_meeting
-      localPhase {
-        id
-        phaseType
-      }
-      phases {
-        id
-        phaseType
-      }
-      showSidebar
-    }
-  `
-})
+export default ActionMeeting

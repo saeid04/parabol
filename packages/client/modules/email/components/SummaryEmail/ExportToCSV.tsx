@@ -1,19 +1,18 @@
+import {Parser} from '@json2csv/plainjs'
+import {generateText} from '@tiptap/core'
 import graphql from 'babel-plugin-relay/macro'
-import type {Parser as JSON2CSVParser} from 'json2csv'
-import Parser from 'json2csv/lib/JSON2CSVParser' // only grab the sync parser
+import type {ExportToCSVQuery} from 'parabol-client/__generated__/ExportToCSVQuery.graphql'
 import {PALETTE} from 'parabol-client/styles/paletteV3'
-import extractTextFromDraftString from 'parabol-client/utils/draftjs/extractTextFromDraftString'
-import withMutationProps, {WithMutationProps} from 'parabol-client/utils/relay/withMutationProps'
-import {ExportToCSVQuery} from 'parabol-client/__generated__/ExportToCSVQuery.graphql'
-import React, {useEffect} from 'react'
+import {useEffect} from 'react'
 import useAtmosphere from '~/hooks/useAtmosphere'
+import useMutationProps from '~/hooks/useMutationProps'
+import {serverTipTapExtensions} from '../../../../shared/tiptap/serverTipTapExtensions'
 import {ExternalLinks, PokerCards} from '../../../../types/constEnums'
-import {CorsOptions} from '../../../../types/cors'
+import type {CorsOptions} from '../../../../types/cors'
 import AnchorIfEmail from './MeetingSummaryEmail/AnchorIfEmail'
-import EmailBorderBottom from './MeetingSummaryEmail/EmailBorderBottom'
-import {MeetingSummaryReferrer} from './MeetingSummaryEmail/MeetingSummaryEmail'
+import type {MeetingSummaryReferrer} from './MeetingSummaryEmail/MeetingSummaryEmail'
 
-interface Props extends WithMutationProps {
+interface Props {
   meetingId: string
   urlAction?: 'csv' | undefined
   emailCSVUrl: string
@@ -24,7 +23,7 @@ interface Props extends WithMutationProps {
 const query = graphql`
   query ExportToCSVQuery($meetingId: ID!) {
     viewer {
-      newMeeting(meetingId: $meetingId) {
+      meeting(meetingId: $meetingId) {
         meetingType
         team {
           name
@@ -77,6 +76,11 @@ const query = graphql`
                     number
                     title
                   }
+                  ... on _xLinearIssue {
+                    __typename
+                    identifier
+                    title
+                  }
                 }
                 title
               }
@@ -92,14 +96,24 @@ const query = graphql`
                   edges {
                     node {
                       __typename
-                      content
+                      ... on Task {
+                        content
+                      }
+                      ... on Comment {
+                        content
+                      }
                       createdAt
                       createdByUser {
                         preferredName
                       }
                       replies {
                         __typename
-                        content
+                        ... on Task {
+                          content
+                        }
+                        ... on Comment {
+                          content
+                        }
                         createdAt
                         createdByUser {
                           preferredName
@@ -117,7 +131,7 @@ const query = graphql`
   }
 `
 
-type Meeting = NonNullable<NonNullable<ExportToCSVQuery['response']['viewer']>['newMeeting']>
+type Meeting = NonNullable<NonNullable<ExportToCSVQuery['response']['viewer']>['meeting']>
 type ExportableTypeName = 'Task' | 'Reflection' | 'Comment' | 'Reply'
 
 interface CSVPokerRow {
@@ -163,18 +177,15 @@ const imageStyle = {
 }
 
 const ExportToCSV = (props: Props) => {
-  useEffect(() => {
-    if (props.urlAction === 'csv') {
-      exportToCSV().catch()
-    }
-  }, [props.urlAction])
+  const {meetingId, urlAction, emailCSVUrl, referrer, corsOptions} = props
   const atmosphere = useAtmosphere()
+  const {submitMutation, submitting, onCompleted} = useMutationProps()
 
   const handlePokerMeeting = (meeting: Meeting) => {
     const rows = [] as CSVPokerRow[]
     const {phases} = meeting
-    const estimatePhase = phases!.find((phase) => phase.phaseType === 'ESTIMATE')!
-    const stages = estimatePhase.stages!
+    const estimatePhase = phases.find((phase) => phase.phaseType === 'ESTIMATE')!
+    const stages = estimatePhase.stages
     stages.forEach((stage) => {
       if (stage.__typename !== 'EstimateStage') return
       const {finalScore, dimensionRef, task, scores} = stage
@@ -186,6 +197,8 @@ const ExportToCSV = (props: Props) => {
         story = `${integration.issueKey}: ${integration.summary}`
       } else if (integration?.__typename === '_xGitHubIssue') {
         story = `${integration.number}: ${integration.title}`
+      } else if (integration?.__typename === '_xLinearIssue') {
+        story = `${integration.identifier}: ${integration.title}`
       }
       const voteCount = scores!.filter((score) => score.label !== PokerCards.PASS_CARD).length
       rows.push({
@@ -210,6 +223,7 @@ const ExportToCSV = (props: Props) => {
         const {prompt, content} = reflection
         const createdAt = reflection.createdAt!
         const {question} = prompt
+        const contentJSON = JSON.parse(content!)
         rows.push({
           reflectionGroup: title!,
           author: 'Anonymous',
@@ -218,7 +232,7 @@ const ExportToCSV = (props: Props) => {
           createdAt,
           discussionThread: '',
           prompt: question,
-          content: extractTextFromDraftString(content)
+          content: generateText(contentJSON, serverTipTapExtensions)
         })
       })
     })
@@ -233,7 +247,8 @@ const ExportToCSV = (props: Props) => {
         const {node} = edge
         const {createdAt, createdByUser, __typename: type, replies, content} = node
         const author = createdByUser?.preferredName ?? 'Anonymous'
-        const discussionThread = extractTextFromDraftString(content)
+        const contentJSON = JSON.parse(content!)
+        const discussionThread = generateText(contentJSON, serverTipTapExtensions)
         rows.push({
           reflectionGroup: title!,
           author,
@@ -247,6 +262,7 @@ const ExportToCSV = (props: Props) => {
         replies.forEach((reply) => {
           const {createdAt, createdByUser} = reply
           const author = createdByUser?.preferredName ?? 'Anonymous'
+          const contentJSON = JSON.parse(reply.content!)
           rows.push({
             reflectionGroup: title!,
             author,
@@ -255,7 +271,7 @@ const ExportToCSV = (props: Props) => {
             createdAt,
             discussionThread,
             prompt: '',
-            content: extractTextFromDraftString(reply.content)
+            content: generateText(contentJSON, serverTipTapExtensions)
           })
         })
       })
@@ -265,7 +281,7 @@ const ExportToCSV = (props: Props) => {
 
   const handleActionMeeting = (newMeeting: Meeting) => {
     const {phases} = newMeeting
-    const agendaItemPhase = phases!.find((phase) => phase.phaseType === 'agendaitems')!
+    const agendaItemPhase = phases.find((phase) => phase.phaseType === 'agendaitems')!
     const {stages} = agendaItemPhase
     const rows = [] as CSVActionRow[]
     stages.forEach((stage) => {
@@ -278,7 +294,7 @@ const ExportToCSV = (props: Props) => {
         const {node} = edge
         const {createdAt, createdByUser, __typename: type, replies, content} = node
         const author = createdByUser?.preferredName ?? 'Anonymous'
-        const discussionThread = extractTextFromDraftString(content)
+        const discussionThread = generateText(JSON.parse(content!), serverTipTapExtensions)
         rows.push({
           author,
           status: 'present',
@@ -298,7 +314,7 @@ const ExportToCSV = (props: Props) => {
             type: reply.__typename === 'Task' ? 'Task' : 'Reply',
             createdAt,
             discussionThread,
-            content: extractTextFromDraftString(reply.content)
+            content: generateText(JSON.parse(reply.content!), serverTipTapExtensions)
           })
         })
       })
@@ -320,21 +336,25 @@ const ExportToCSV = (props: Props) => {
   }
 
   const exportToCSV = async () => {
-    const {meetingId, submitMutation, submitting, onCompleted} = props
     if (submitting) return
     submitMutation()
-    const data = await atmosphere.fetchQuery<ExportToCSVQuery>(query, {meetingId})
+    const data = await atmosphere.fetchQuery<ExportToCSVQuery>(query, {
+      meetingId
+    })
     onCompleted()
-    if (!data) return
+    if (!data || data instanceof Error) return
     const {viewer} = data
-    const {newMeeting} = viewer
+    const {meeting: newMeeting} = viewer
     if (!newMeeting) return
     const rows = getRows(newMeeting)
     if (rows.length === 0) return
     const {endedAt, team, meetingType} = newMeeting
     const {name: teamName} = team
     const label = meetingType[0]?.toUpperCase() + meetingType.slice(1)
-    const parser = new Parser({withBOM: true, eol: '\n'}) as JSON2CSVParser<any>
+    const parser = new Parser({
+      withBOM: true,
+      eol: '\n'
+    })
     const csv = parser.parse(rows)
     const date = new Date(endedAt!)
     const numDate = `${date.getFullYear()}-${date.getMonth() + 1}-${date.getDate()}`
@@ -350,25 +370,29 @@ const ExportToCSV = (props: Props) => {
     document.body.removeChild(link)
   }
 
-  const {emailCSVUrl, referrer, corsOptions} = props
+  useEffect(() => {
+    if (urlAction === 'csv') {
+      exportToCSV().catch(() => {
+        /*ignore*/
+      })
+    }
+  }, [urlAction])
+
   return (
-    <>
-      <tr>
-        <td align='center' style={iconLinkLabel} width='100%'>
-          <AnchorIfEmail isEmail={referrer === 'email'} href={emailCSVUrl} title={label}>
-            <img
-              alt={label}
-              src={`${ExternalLinks.EMAIL_CDN}cloud_download.png`}
-              style={imageStyle}
-              {...corsOptions}
-            />
-            <span style={labelStyle}>{label}</span>
-          </AnchorIfEmail>
-        </td>
-      </tr>
-      <EmailBorderBottom />
-    </>
+    <tr className='print:hidden'>
+      <td align='center' style={iconLinkLabel} width='100%'>
+        <AnchorIfEmail isEmail={referrer === 'email'} href={emailCSVUrl} title={label}>
+          <img
+            alt={label}
+            src={`${ExternalLinks.EMAIL_CDN}cloud_download.png`}
+            style={imageStyle}
+            {...corsOptions}
+          />
+          <span style={labelStyle}>{label}</span>
+        </AnchorIfEmail>
+      </td>
+    </tr>
   )
 }
 
-export default withMutationProps(ExportToCSV)
+export default ExportToCSV

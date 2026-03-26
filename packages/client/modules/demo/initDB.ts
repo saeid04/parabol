@@ -1,30 +1,23 @@
+import type {SlackNotificationEventEnum} from '~/__generated__/SlackNotificationList_viewer.graphql'
 import {PALETTE} from '~/styles/paletteV3'
-import {SlackNotificationEventEnum} from '~/__generated__/SlackNotificationList_viewer.graphql'
-import RetrospectiveMeeting from '../../../server/database/types/MeetingRetrospective'
-import RetrospectiveMeetingSettings from '../../../server/database/types/MeetingSettingsRetrospective'
-import ITask from '../../../server/database/types/Task'
 import JiraProjectId from '../../shared/gqlIds/JiraProjectId'
 import demoUserAvatar from '../../styles/theme/images/avatar-user.svg'
 import {ExternalLinks, MeetingSettingsThreshold, RetroDemo} from '../../types/constEnums'
 import {DISCUSS, GROUP, REFLECT, RETROSPECTIVE, VOTE} from '../../utils/constants'
 import getDemoAvatar from '../../utils/getDemoAvatar'
 import toTeamMemberId from '../../utils/relay/toTeamMemberId'
-import normalizeRawDraftJS from '../../validation/normalizeRawDraftJS'
-import {DemoReflection, DemoReflectionGroup, DemoTask} from './ClientGraphQLServer'
+import type {DemoReflection, DemoReflectionGroup, DemoTask} from './ClientGraphQLServer'
 import DemoDiscussStage from './DemoDiscussStage'
 import DemoGenericMeetingStage from './DemoGenericMeetingStage'
 import DemoUser from './DemoUser'
-import initBotScript from './initBotScript'
+import type initBotScript from './initBotScript'
 
 export const demoViewerId = 'demoUser'
 export const demoTeamId = 'demoTeam'
 export const demoOrgId = 'demoOrg'
 export const demoTeamName = 'Demo Team'
 
-type IRetrospectiveMeeting = Omit<
-  RetrospectiveMeeting,
-  'summarySentAt' | 'createdAt' | 'endedAt'
-> & {
+type IRetrospectiveMeeting = {
   __typename: string
   createdAt: string | Date
   endedAt: string | Date | null
@@ -33,9 +26,20 @@ type IRetrospectiveMeeting = Omit<
   settings: any
   summarySentAt: string | Date | null
   votesRemaining: number
+  commentCount: number
+  reflectionCount: number
+  taskCount: number
+  topicCount: number
+  teamId: string
+  facilitatorStageId: string
+  phases: any[]
+  totalVotes: number
+  maxVotesPerGroup: number
+  name: string
+  id: string
 }
 
-type IRetrospectiveMeetingSettings = RetrospectiveMeetingSettings & {
+type IRetrospectiveMeetingSettings = {
   team: any
 }
 
@@ -113,6 +117,7 @@ class DemoJiraRemoteProject {
     this.service = 'jira'
   }
 }
+const GitLabDemoKey = 'parabol/parabol-demo'
 export const GitHubDemoKey = 'ParabolInc/ParabolDemo'
 export const GitHubProjectKeyLookup = {
   [GitHubDemoKey]: {
@@ -214,8 +219,16 @@ const initDemoTeamMember = (
     preferredName,
     integrations: {
       id: 'demoTeamIntegrations',
-      atlassian: {id: 'demoTeamAtlassianIntegration', isActive: true, accessToken: '123'},
-      github: {id: 'demoTeamGitHubIntegration', isActive: true, accessToken: '123'},
+      atlassian: {
+        id: 'demoTeamAtlassianIntegration',
+        isActive: true,
+        accessToken: '123'
+      },
+      github: {
+        id: 'demoTeamGitHubIntegration',
+        isActive: true,
+        accessToken: '123'
+      },
       gitlab: {
         id: 'demoTeamGitLabIntegration',
         auth: {
@@ -261,7 +274,8 @@ const initDemoTeamMember = (
       hasMore: false,
       items: [
         new DemoJiraRemoteProject(JiraDemoProjectId),
-        makeRepoIntegrationGitHub(GitHubDemoKey)
+        makeRepoIntegrationGitHub(GitHubDemoKey),
+        makeRepoIntegrationGitLab(GitLabDemoKey)
       ]
     },
     prevUsedRepoIntegrations: {
@@ -281,10 +295,11 @@ const initDemoMeetingMember = (user: DemoUser) => {
     meetingType: RETROSPECTIVE,
     teamId: demoTeamId,
     teamMember: initDemoTeamMember(user, 0),
-    tasks: [] as ITask[],
+    tasks: [] as any[],
     user,
     userId: user.id,
-    votesRemaining: 5
+    votesRemaining: 5,
+    isConnectedAt: new Date().toJSON()
   }
 }
 
@@ -293,11 +308,17 @@ const initDemoOrg = () => {
     id: demoOrgId,
     name: 'Demo Organization',
     tier: 'team',
+    billingTier: 'team',
+    isPaid: true,
     orgUserCount: {
       activeUserCount: 5,
       inactiveUserCount: 0
     },
-    showConversionModal: false
+    hasSuggestGroupsFlag: false,
+    hasZoomFlag: false,
+    tierLimitExceededAt: null,
+    useAI: true
+    // viewerOrganizationUser
   } as const
 }
 
@@ -310,7 +331,6 @@ const initDemoTeam = (
     __typename: 'Team',
     id: demoTeamId,
     isArchived: false,
-    isPaid: true,
     activeMeetings: [newMeeting],
     agendaItems: [],
     massInviteToken: '42',
@@ -318,6 +338,7 @@ const initDemoTeam = (
     teamName: demoTeamName,
     orgId: demoOrgId,
     tier: 'team',
+    billingTier: 'team',
     teamId: demoTeamId,
     organization,
     meetingSettings: initMeetingSettings(),
@@ -432,7 +453,7 @@ export class DemoComment {
     },
     db: RetroDemoDB
   ) {
-    this.content = normalizeRawDraftJS(content)
+    this.content = content
     this.createdAt = new Date().toJSON()
     this.updatedAt = new Date().toJSON()
     this.createdBy = isAnonymous ? null : userId
@@ -474,6 +495,10 @@ export class DemoDiscussion {
   id: string
   thread = new DemoDiscussionThread()
   commentCount = 0
+  team = {
+    id: demoTeamId,
+    organization: initDemoOrg()
+  }
   constructor(reflectionGroupId: string) {
     this.createdAt = new Date().toJSON()
     this.id = `discussion:${reflectionGroupId}`
@@ -494,6 +519,8 @@ const initNewMeeting = (
     __isNewMeeting: 'RetrospectiveMeeting',
     createdAt: now,
     createdBy: demoViewerId,
+    createdByUser: viewerMeetingMember?.user,
+    disableAnonymity: false,
     endedAt: null,
     facilitatorStageId: RetroDemo.REFLECT_STAGE_ID,
     facilitatorUserId: demoViewerId,
@@ -506,7 +533,6 @@ const initNewMeeting = (
     meetingMember: viewerMeetingMember,
     name: 'Retro Meeting',
     organization,
-    showConversionModal: false,
     meetingMembers,
     nextAutoGroupThreshold: null,
     viewerMeetingMember,
@@ -514,9 +540,13 @@ const initNewMeeting = (
     votesRemaining: teamMembers.length * 5,
     phases: initPhases() as any[],
     summarySentAt: null,
+    summary: `The team are feeling the strain of too many meetings and over-packed sprints, which is stifling creativity, especially for the interns and junior staff. Clarifying processes, reducing unproductive group chats, and giving everyone more space to share ideas should help.`,
     totalVotes: MeetingSettingsThreshold.RETROSPECTIVE_TOTAL_VOTES_DEFAULT,
     maxVotesPerGroup: MeetingSettingsThreshold.RETROSPECTIVE_MAX_VOTES_PER_GROUP_DEFAULT,
-    teamId: demoTeamId
+    teamId: demoTeamId,
+    videoMeetingURL: null,
+    transcription: null,
+    locked: false
   } as Partial<IRetrospectiveMeeting>
 }
 
@@ -554,6 +584,9 @@ const initDB = (botScript: ReturnType<typeof initBotScript>) => {
   teamMembers.forEach((teamMember) => {
     ;(teamMember as any).team = team
   })
+  users.forEach((user) => {
+    ;(user as any).teams = [team]
+  })
   team.meetingSettings.team = team as any
   newMeeting.commentCount = 0
   newMeeting.reflectionCount = 0
@@ -583,3 +616,14 @@ const initDB = (botScript: ReturnType<typeof initBotScript>) => {
 
 export type RetroDemoDB = ReturnType<typeof initDB>
 export default initDB
+
+const makeRepoIntegrationGitLab = (fullPath: string) => {
+  return {
+    __typename: '_xGitLabProject',
+    id: fullPath,
+    service: 'gitlab',
+    fullPath,
+    name: fullPath.split('/')[1],
+    description: 'Parabol GitLab Demo Project'
+  }
+}

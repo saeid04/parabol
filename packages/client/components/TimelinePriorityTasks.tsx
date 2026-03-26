@@ -1,10 +1,15 @@
 import styled from '@emotion/styled'
+import {
+  DragDropContext,
+  Droppable,
+  type DroppableProvided,
+  type DropResult
+} from '@hello-pangea/dnd'
 import {Whatshot} from '@mui/icons-material'
 import graphql from 'babel-plugin-relay/macro'
-import React, {useMemo} from 'react'
-import {DragDropContext, Droppable, DroppableProvided, DropResult} from 'react-beautiful-dnd'
-import {createFragmentContainer} from 'react-relay'
-import DraggableTask from '../containers/TaskCard/DraggableTask'
+import {useMemo} from 'react'
+import {useFragment} from 'react-relay'
+import type {TimelinePriorityTasks_viewer$key} from '../__generated__/TimelinePriorityTasks_viewer.graphql'
 import useAtmosphere from '../hooks/useAtmosphere'
 import useEventCallback from '../hooks/useEventCallback'
 import UpdateTaskMutation from '../mutations/UpdateTaskMutation'
@@ -12,11 +17,11 @@ import {PALETTE} from '../styles/paletteV3'
 import {DroppableType} from '../types/constEnums'
 import {ACTIVE, ACTIVE_TASK, SORT_STEP} from '../utils/constants'
 import dndNoise from '../utils/dndNoise'
-import {TimelinePriorityTasks_viewer} from '../__generated__/TimelinePriorityTasks_viewer.graphql'
+import NullableTask from './NullableTask/NullableTask'
 import TimelineNoTasks from './TimelineNoTasks'
 
 interface Props {
-  viewer: TimelinePriorityTasks_viewer
+  viewer: TimelinePriorityTasks_viewer$key
 }
 
 const PriorityTasksHeader = styled('div')({
@@ -46,7 +51,30 @@ const PriorityTaskBody = styled('div')({
 })
 
 const TimelinePriorityTasks = (props: Props) => {
-  const {viewer} = props
+  const {viewer: viewerRef} = props
+  const viewer = useFragment(
+    graphql`
+      fragment TimelinePriorityTasks_viewer on User {
+        tasks(first: 1000, userIds: $userIds) @connection(key: "UserColumnsContainer_tasks") {
+          __typename
+          edges {
+            node {
+              id
+              content
+              plaintextContent
+              status
+              sortOrder
+              team {
+                id
+              }
+              ...NullableTask_task
+            }
+          }
+        }
+      }
+    `,
+    viewerRef
+  )
   const {tasks} = viewer
   const atmosphere = useAtmosphere()
   const activeTasks = useMemo(() => {
@@ -92,7 +120,13 @@ const TimelinePriorityTasks = (props: Props) => {
             </PriorityTasksHeader>
             <PriorityTaskBody {...dropProvided.droppableProps} ref={dropProvided.innerRef}>
               {activeTasks.map((task, idx) => (
-                <DraggableTask key={task.id} area='userDash' task={task} idx={idx} />
+                <NullableTask
+                  key={task.id}
+                  area='userDash'
+                  task={task}
+                  isDraggable
+                  draggableIndex={idx}
+                />
               ))}
               {dropProvided.placeholder}
             </PriorityTaskBody>
@@ -103,25 +137,4 @@ const TimelinePriorityTasks = (props: Props) => {
   )
 }
 
-export default createFragmentContainer(TimelinePriorityTasks, {
-  viewer: graphql`
-    fragment TimelinePriorityTasks_viewer on User {
-      tasks(first: 1000, userIds: $userIds) @connection(key: "UserColumnsContainer_tasks") {
-        __typename
-        edges {
-          node {
-            id
-            content
-            plaintextContent
-            status
-            sortOrder
-            team {
-              id
-            }
-            ...DraggableTask_task
-          }
-        }
-      }
-    }
-  `
-})
+export default TimelinePriorityTasks

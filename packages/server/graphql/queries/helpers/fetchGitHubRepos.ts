@@ -1,9 +1,10 @@
-import {GraphQLResolveInfo} from 'graphql'
-import {GetRepositoriesQuery} from '../../../types/githubTypes'
+import type {GraphQLResolveInfo} from 'graphql'
+import type {GetRepositoriesQuery} from '../../../types/githubTypes'
 import getGitHubRequest from '../../../utils/getGitHubRequest'
 import getRepositories from '../../../utils/githubQueries/getRepositories.graphql'
-import {DataLoaderWorker} from '../../graphql'
-import {GQLContext} from './../../graphql'
+import {Logger} from '../../../utils/Logger'
+import type {GQLContext} from './../../graphql'
+import type {DataLoaderWorker} from '../../graphql'
 
 export interface GitHubRepo {
   id: string
@@ -25,7 +26,7 @@ const fetchGitHubRepos = async (
   const githubRequest = getGitHubRequest(info, context, {accessToken})
   const [data, error] = await githubRequest<GetRepositoriesQuery>(getRepositories)
   if (error) {
-    console.error(error.message)
+    Logger.error(error.message)
     return []
   }
   const {viewer} = data
@@ -35,7 +36,11 @@ const fetchGitHubRepos = async (
   const viewerRepos = repositories.nodes || []
   const allRepos = [...viewerRepos, ...orgRepos]
   const repoSet = new Set<string>()
-  const repos = [] as {id: string; service: 'github'; nameWithOwner: string}[]
+  const repos = [] as {
+    id: string
+    service: 'github'
+    nameWithOwner: string
+  }[]
   allRepos.forEach((repo) => {
     if (!repo) return
     const {nameWithOwner, hasIssuesEnabled} = repo

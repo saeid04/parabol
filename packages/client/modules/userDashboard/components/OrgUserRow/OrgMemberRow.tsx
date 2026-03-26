@@ -1,49 +1,28 @@
 import styled from '@emotion/styled'
 import graphql from 'babel-plugin-relay/macro'
-import React, {forwardRef, Ref} from 'react'
-import {createFragmentContainer} from 'react-relay'
-import useAtmosphere from '~/hooks/useAtmosphere'
+import {format} from 'date-fns'
+import type * as React from 'react'
+import {useFragment} from 'react-relay'
+import type {
+  OrgMemberRow_organization$data,
+  OrgMemberRow_organization$key
+} from '../../../../__generated__/OrgMemberRow_organization.graphql'
+import type {
+  OrgMemberRow_organizationUser$data,
+  OrgMemberRow_organizationUser$key
+} from '../../../../__generated__/OrgMemberRow_organizationUser.graphql'
 import Avatar from '../../../../components/Avatar/Avatar'
-import FlatButton, {FlatButtonProps} from '../../../../components/FlatButton'
-import IconLabel from '../../../../components/IconLabel'
-import Row from '../../../../components/Row/Row'
 import RowActions from '../../../../components/Row/RowActions'
 import RowInfo from '../../../../components/Row/RowInfo'
 import RowInfoHeader from '../../../../components/Row/RowInfoHeader'
 import RowInfoHeading from '../../../../components/Row/RowInfoHeading'
 import RowInfoLink from '../../../../components/Row/RowInfoLink'
-import EmphasisTag from '../../../../components/Tag/EmphasisTag'
+import BaseTag from '../../../../components/Tag/BaseTag'
 import InactiveTag from '../../../../components/Tag/InactiveTag'
 import RoleTag from '../../../../components/Tag/RoleTag'
-import {MenuPosition} from '../../../../hooks/useCoords'
-import useMenu from '../../../../hooks/useMenu'
 import useModal from '../../../../hooks/useModal'
-import useTooltip from '../../../../hooks/useTooltip'
 import defaultUserAvatar from '../../../../styles/theme/images/avatar-user.svg'
-import {Breakpoint} from '../../../../types/constEnums'
 import lazyPreload from '../../../../utils/lazyPreload'
-import withMutationProps, {WithMutationProps} from '../../../../utils/relay/withMutationProps'
-import {OrgMemberRow_organization} from '../../../../__generated__/OrgMemberRow_organization.graphql'
-import {OrgMemberRow_organizationUser} from '../../../../__generated__/OrgMemberRow_organizationUser.graphql'
-
-const AvatarBlock = styled('div')({
-  display: 'none',
-  [`@media screen and (min-width: ${Breakpoint.SIDEBAR_LEFT}px)`]: {
-    display: 'block',
-    marginRight: 16
-  }
-})
-
-const StyledRow = styled(Row)({
-  padding: '12px 8px 12px 16px',
-  [`@media screen and (min-width: ${Breakpoint.SIDEBAR_LEFT}px)`]: {
-    padding: '16px 8px 16px 16px'
-  }
-})
-
-const StyledRowInfo = styled(RowInfo)({
-  paddingLeft: 0
-})
 
 const ActionsBlock = styled('div')({
   alignItems: 'center',
@@ -51,43 +30,22 @@ const ActionsBlock = styled('div')({
   justifyContent: 'flex-end'
 })
 
-const MenuToggleBlock = styled('div')({
-  marginLeft: 8,
-  width: '2rem'
-})
-
-interface Props extends WithMutationProps {
+interface Props {
   billingLeaderCount: number
-  organizationUser: OrgMemberRow_organizationUser
-  organization: OrgMemberRow_organization
+  orgAdminCount: number
+  organizationUser: OrgMemberRow_organizationUser$key
+  organization: OrgMemberRow_organization$key
+  isSelected?: boolean
+  onSelectUser?: (userId: string, isSelected: boolean) => void
 }
-
-const StyledButton = styled(FlatButton)({
-  paddingLeft: 0,
-  paddingRight: 0,
-  width: '100%'
-})
-
-const StyledFlatButton = styled(FlatButton)({
-  paddingLeft: 16,
-  paddingRight: 16
-})
-
-const MenuButton = forwardRef((props: FlatButtonProps, ref: Ref<HTMLButtonElement>) => (
-  <StyledButton {...props} disabled={props.disabled} ref={ref}>
-    <IconLabel icon='more_vert' />
-  </StyledButton>
-))
 
 const LeaveOrgModal = lazyPreload(
   () => import(/* webpackChunkName: 'LeaveOrgModal' */ '../LeaveOrgModal/LeaveOrgModal')
 )
 
-const BillingLeaderActionMenu = lazyPreload(
+const OrgAdminActionMenu = lazyPreload(
   () =>
-    import(
-      /* webpackChunkName: 'BillingLeaderActionMenu' */ '../../../../components/BillingLeaderActionMenu'
-    )
+    import(/* webpackChunkName: 'OrgAdminActionMenu' */ '../../../../components/OrgAdminActionMenu')
 )
 
 const RemoveFromOrgModal = lazyPreload(
@@ -95,119 +53,178 @@ const RemoveFromOrgModal = lazyPreload(
     import(/* webpackChunkName: 'RemoveFromOrgModal' */ '../RemoveFromOrgModal/RemoveFromOrgModal')
 )
 
-const OrgMemberRow = (props: Props) => {
-  const atmosphere = useAtmosphere()
-  const {billingLeaderCount, organizationUser, organization} = props
-  const {orgId, isViewerBillingLeader} = organization
-  const {newUserUntil, user, role} = organizationUser
-  const isBillingLeader = role === 'BILLING_LEADER'
-  const {email, inactive, picture, preferredName, userId} = user
-  const isViewerLastBillingLeader =
-    isViewerBillingLeader && isBillingLeader && billingLeaderCount === 1
-  const {viewerId} = atmosphere
-  const {togglePortal, originRef, menuPortal, menuProps} = useMenu(MenuPosition.UPPER_RIGHT)
-  const {togglePortal: toggleLeave, modalPortal: leaveModal} = useModal()
-  const {togglePortal: toggleRemove, modalPortal: removeModal} = useModal()
+interface UserAvatarProps {
+  picture?: string
+}
+
+const UserAvatar = ({picture}: UserAvatarProps) => (
+  <div className='mr-4 hidden md:block'>
+    {picture ? (
+      <Avatar picture={picture} className='h-11 w-11' />
+    ) : (
+      <img alt='default avatar' src={defaultUserAvatar} />
+    )}
+  </div>
+)
+
+interface UserInfoProps {
+  preferredName: string
+  email: string
+  isBillingLeader: boolean
+  isOrgAdmin: boolean
+  inactive: boolean | null | undefined
+}
+
+const UserInfo = ({preferredName, email, isBillingLeader, isOrgAdmin, inactive}: UserInfoProps) => (
+  <RowInfo className='pl-0'>
+    <RowInfoHeader>
+      <RowInfoHeading>{preferredName}</RowInfoHeading>
+      {isBillingLeader && <RoleTag>Billing Leader</RoleTag>}
+      {isOrgAdmin && <BaseTag className='bg-gold-500 text-white'>Org Admin</BaseTag>}
+      {inactive && !isBillingLeader && !isOrgAdmin && <InactiveTag>Inactive</InactiveTag>}
+    </RowInfoHeader>
+    <RowInfoLink href={`mailto:${email}`} title='Send an email'>
+      {email}
+    </RowInfoLink>
+  </RowInfo>
+)
+
+interface UserActionsProps {
+  organization: OrgMemberRow_organization$data
+  organizationUser: OrgMemberRow_organizationUser$data
+}
+
+const UserActions = ({organizationUser, organization}: UserActionsProps) => {
+  const {id: orgId} = organization
   const {
-    tooltipPortal,
-    openTooltip,
-    closeTooltip,
-    originRef: tooltipRef
-  } = useTooltip<HTMLDivElement>(MenuPosition.LOWER_RIGHT)
+    user: {id: userId}
+  } = organizationUser
+  const {
+    togglePortal: toggleLeave,
+    modalPortal: leaveModal,
+    closePortal: closeLeaveModal
+  } = useModal()
+  const {
+    togglePortal: toggleRemove,
+    modalPortal: removeModal,
+    closePortal: closeRemoveModal
+  } = useModal()
+
+  // For the RemoveFromOrgModal
+  const organizationUserForModal = [organizationUser]
 
   return (
-    <StyledRow>
-      <AvatarBlock>
-        {picture ? (
-          <Avatar hasBadge={false} picture={picture} size={44} />
-        ) : (
-          <img alt='' src={defaultUserAvatar} />
+    <RowActions>
+      <ActionsBlock>
+        <OrgAdminActionMenu
+          organization={organization}
+          organizationUser={organizationUser}
+          toggleLeave={toggleLeave}
+          toggleRemove={toggleRemove}
+        />
+        {leaveModal(<LeaveOrgModal orgId={orgId} closePortal={closeLeaveModal} />)}
+        {removeModal(
+          <RemoveFromOrgModal
+            orgId={orgId}
+            userIds={[userId]}
+            organizationUsers={organizationUserForModal}
+            closePortal={closeRemoveModal}
+          />
         )}
-      </AvatarBlock>
-      <StyledRowInfo>
-        <RowInfoHeader>
-          <RowInfoHeading>{preferredName}</RowInfoHeading>
-          {isBillingLeader && <RoleTag>{'Billing Leader'}</RoleTag>}
-          {inactive && !isBillingLeader && <InactiveTag>{'Inactive'}</InactiveTag>}
-          {new Date(newUserUntil) > new Date() && <EmphasisTag>{'New'}</EmphasisTag>}
-        </RowInfoHeader>
-        <RowInfoLink href={`mailto:${email}`} title='Send an email'>
-          {email}
-        </RowInfoLink>
-      </StyledRowInfo>
-      <RowActions>
-        <ActionsBlock>
-          {!isBillingLeader && viewerId === userId && (
-            <StyledFlatButton onClick={toggleLeave} onMouseEnter={LeaveOrgModal.preload}>
-              Leave Organization
-            </StyledFlatButton>
-          )}
-          {isViewerLastBillingLeader && userId === viewerId && (
-            <MenuToggleBlock
-              onClick={closeTooltip}
-              onMouseOver={openTooltip}
-              onMouseOut={closeTooltip}
-              ref={tooltipRef}
-            >
-              {tooltipPortal(
-                <div>
-                  {'You need to promote another Billing Leader'}
-                  <br />
-                  {'before you can leave this role or Organization.'}
-                </div>
-              )}
-              <MenuButton disabled />
-            </MenuToggleBlock>
-          )}
-          {isViewerBillingLeader && !(isViewerLastBillingLeader && userId === viewerId) && (
-            <MenuToggleBlock>
-              <MenuButton
-                onClick={togglePortal}
-                onMouseEnter={BillingLeaderActionMenu.preload}
-                ref={originRef}
-              />
-            </MenuToggleBlock>
-          )}
-          {menuPortal(
-            <BillingLeaderActionMenu
-              menuProps={menuProps}
-              isViewerLastBillingLeader={isViewerLastBillingLeader}
-              organizationUser={organizationUser}
-              organization={organization}
-              toggleLeave={toggleLeave}
-              toggleRemove={toggleRemove}
-            />
-          )}
-          {leaveModal(<LeaveOrgModal orgId={orgId} />)}
-          {removeModal(
-            <RemoveFromOrgModal orgId={orgId} userId={userId} preferredName={preferredName} />
-          )}
-        </ActionsBlock>
-      </RowActions>
-    </StyledRow>
+      </ActionsBlock>
+    </RowActions>
   )
 }
 
-export default createFragmentContainer(withMutationProps(OrgMemberRow), {
-  organization: graphql`
-    fragment OrgMemberRow_organization on Organization {
-      isViewerBillingLeader: isBillingLeader
-      orgId: id
-      ...BillingLeaderActionMenu_organization
-    }
-  `,
-  organizationUser: graphql`
-    fragment OrgMemberRow_organizationUser on OrganizationUser {
-      user {
-        userId: id
-        email
-        inactive
-        picture
-        preferredName
+const OrgMemberRow = (props: Props) => {
+  const {
+    organizationUser: organizationUserRef,
+    organization: organizationRef,
+    isSelected = false,
+    onSelectUser
+  } = props
+
+  const organization = useFragment(
+    graphql`
+      fragment OrgMemberRow_organization on Organization {
+        id
+        isOrgAdmin
+        ...OrgAdminActionMenu_organization
       }
-      role
-      newUserUntil
-      ...BillingLeaderActionMenu_organizationUser
-    }
-  `
-})
+    `,
+    organizationRef
+  )
+
+  const organizationUser = useFragment(
+    graphql`
+      fragment OrgMemberRow_organizationUser on OrganizationUser {
+        id
+        user {
+          id
+          email
+          inactive
+          picture
+          preferredName
+          lastSeenAt
+        }
+        role
+        ...OrgAdminActionMenu_organizationUser
+        ...RemoveFromOrgModal_organizationUsers
+      }
+    `,
+    organizationUserRef
+  )
+
+  const {
+    user: {email, inactive, picture, preferredName, lastSeenAt},
+    role
+  } = organizationUser
+
+  const isBillingLeader = role === 'BILLING_LEADER'
+  const isOrgAdmin = role === 'ORG_ADMIN'
+  const {isOrgAdmin: isViewerOrgAdmin} = organization
+  const formattedLastSeenAt = lastSeenAt ? format(new Date(lastSeenAt), 'yyyy-MM-dd') : 'Never'
+
+  const handleCheckboxChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    onSelectUser?.(organizationUser.user.id, e.target.checked)
+  }
+
+  return (
+    <tr className='border-slate-300 border-b last:border-b-0'>
+      <td className='px-2 py-3 align-middle'>
+        <div className='flex items-center justify-center'>
+          {isViewerOrgAdmin && (
+            <input
+              type='checkbox'
+              checked={isSelected}
+              onChange={handleCheckboxChange}
+              className='h-4 w-4 rounded border-slate-300 text-grape-700 focus:ring-grape-500'
+            />
+          )}
+        </div>
+      </td>
+      <td className='w-1/2 px-2 py-3 align-middle'>
+        <div className='flex w-full items-center overflow-hidden'>
+          <UserAvatar picture={picture} />
+          <div className='min-w-0 grow'>
+            <UserInfo
+              preferredName={preferredName}
+              email={email}
+              isBillingLeader={isBillingLeader}
+              isOrgAdmin={isOrgAdmin}
+              inactive={inactive}
+            />
+          </div>
+        </div>
+      </td>
+      <td className='w-3/10 px-2 py-3 align-middle'>
+        <RowInfo className='pl-0'>{formattedLastSeenAt}</RowInfo>
+      </td>
+      <td className='w-1/5 px-2 py-3 align-middle'>
+        <UserActions organizationUser={organizationUser} organization={organization} />
+      </td>
+    </tr>
+  )
+}
+
+export default OrgMemberRow

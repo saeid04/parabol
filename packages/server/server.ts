@@ -1,69 +1,122 @@
-import tracer from 'dd-trace'
-import {r} from 'rethinkdb-ts'
-import uws, {SHARED_COMPRESSOR} from 'uWebSockets.js'
+import './hocusPocus'
+import uws from 'uWebSockets.js'
+import {assetProxyHandler} from './assetProxyHandler'
 import stripeWebhookHandler from './billing/stripeWebhookHandler'
+import {buildProxyHandler} from './buildProxyHandler'
+import {stopChronos} from './chronos'
 import createSSR from './createSSR'
-import httpGraphQLHandler from './graphql/httpGraphQLHandler'
-import intranetGraphQLHandler from './graphql/intranetGraphQLHandler'
-import webhookGraphQLHandler from './graphql/webhookGraphQLHandler'
+import {disconnectAllSockets} from './disconnectAllSockets'
+import {setIsShuttingDown} from './getIsShuttingDown'
+import {hocusPocusHandler} from './hocusPocusHandler'
 import ICSHandler from './ICSHandler'
-import './initSentry'
-import githubWebhookHandler from './integrations/githubWebhookHandler'
+import mattermostWebhookHandler from './integrations/mattermost/mattermostWebhookHandler'
 import jiraImagesHandler from './jiraImagesHandler'
 import listenHandler from './listenHandler'
-import PROD from './PROD'
+import {metricsHandler} from './metricsHandler'
+import authorizeHandler from './oauth2/authorizeHandler'
+import tokenHandler from './oauth2/tokenHandler'
 import PWAHandler from './PWAHandler'
+import {registerSCIMHandlers} from './scim/SCIMHandler'
 import selfHostedHandler from './selfHostedHandler'
-import handleClose from './socketHandlers/handleClose'
-import handleMessage from './socketHandlers/handleMessage'
-import handleOpen from './socketHandlers/handleOpen'
-import handleUpgrade from './socketHandlers/handleUpgrade'
-import SSEConnectionHandler from './sse/SSEConnectionHandler'
-import SSEPingHandler from './sse/SSEPingHandler'
-import staticFileHandler from './staticFileHandler'
+import {createStaticFileHandler} from './staticFileHandler'
+import getReqAuth from './utils/getReqAuth'
+import {Logger} from './utils/Logger'
 import SAMLHandler from './utils/SAMLHandler'
+import uwsGetIP from './utils/uwsGetIP'
+import {wsHandler} from './wsHandler'
+import {yoga} from './yoga'
 
-tracer.init({
-  service: `Web ${process.env.SERVER_ID}`,
-  appsec: process.env.DD_APPSEC_ENABLED === 'true',
-  plugins: false
-})
+export const RECONNECT_WINDOW = process.env.WEB_SERVER_RECONNECT_WINDOW
+  ? parseInt(process.env.WEB_SERVER_RECONNECT_WINDOW, 10) * 1000
+  : 60_000
 
-const PORT = Number(PROD ? process.env.PORT : process.env.SOCKET_PORT)
-if (!PROD) {
-  process.on('SIGINT', async () => {
-    await r.getPoolMaster()?.drain()
-    process.exit()
-  })
+const PORT = Number(__PRODUCTION__ ? process.env.PORT : process.env.SOCKET_PORT)
+
+export const ENABLE_METRICS = process.env.ENABLE_METRICS === 'true'
+export const METRICS_PORT = process.env.METRICS_PORT ? parseInt(process.env.METRICS_PORT, 10) : NaN
+if (ENABLE_METRICS) {
+  if (isNaN(METRICS_PORT)) {
+    throw new Error('ENABLE_METRICS is true but METRICS_PORT is invalid')
+  }
+  if (METRICS_PORT === PORT) {
+    throw new Error('METRICS_PORT cannot be the same as PORT')
+  }
 }
 
-uws
+const ENABLE_STATIC_FILE_HANDLER = !__PRODUCTION__ || process.env.FILE_STORE_PROVIDER === 'local'
+const ENABLE_MATTERMOST_FILE_HANDLER =
+  !__PRODUCTION__ || (process.env.MATTERMOST_SECRET && process.env.MATTERMOST_URL)
+
+process.on('SIGTERM', async (signal) => {
+  Logger.log(
+    `Server ID: ${process.env.SERVER_ID}. Kill signal received: ${signal}, starting graceful shutdown of ${RECONNECT_WINDOW}ms.`
+  )
+  setIsShuttingDown()
+  stopChronos()
+  await disconnectAllSockets()
+  Logger.log(`Server ID: ${process.env.SERVER_ID}. Graceful shutdown complete, exiting.`)
+  process.exit()
+})
+
+const app = uws
   .App()
   .get('/favicon.ico', PWAHandler)
   .get('/sw.js', PWAHandler)
   .get('/manifest.json', PWAHandler)
-  .get('/static/*', staticFileHandler)
   .get('/email/createics', ICSHandler)
-  .get('/sse/*', SSEConnectionHandler)
-  .get('/sse-ping', SSEPingHandler)
   .get('/self-hosted/*', selfHostedHandler)
   .get('/jira-attachments/:fileName', jiraImagesHandler)
-  .post('/sse-ping', SSEPingHandler)
+  .get('/assets/*', assetProxyHandler)
+  .get('/build/*', buildProxyHandler)
+  .get('/health', yoga)
+  .get('/ready', yoga)
   .post('/stripe', stripeWebhookHandler)
-  .post('/webhooks/github', githubWebhookHandler)
-  .post('/webhooks/graphql', webhookGraphQLHandler)
-  .post('/graphql', httpGraphQLHandler)
-  .post('/intranet-graphql', intranetGraphQLHandler)
-  .post('/saml/:domain', SAMLHandler)
-  .ws('/*', {
-    compression: SHARED_COMPRESSOR,
-    idleTimeout: 0,
-    maxPayloadLength: 5 * 2 ** 20,
-    upgrade: handleUpgrade,
-    open: handleOpen,
-    message: handleMessage,
-    // today, we don't send folks enough data to worry about backpressure
-    close: handleClose
+  .post('/mattermost', mattermostWebhookHandler)
+  .post('/graphql', async (res, req) => {
+    // uWS deletes the req before the first await, so we must read it now
+    const ip = uwsGetIP(res, req)
+    const authToken = getReqAuth(req)
+    return yoga(res, req, {authToken, ip})
   })
-  .any('/*', createSSR)
-  .listen(PORT, listenHandler)
+  .post('/saml/:domain', SAMLHandler)
+  .get('/oauth/authorize', authorizeHandler)
+  .post('/oauth/token', tokenHandler)
+  .ws('/yjs', hocusPocusHandler)
+  .ws('/*', wsHandler)
+registerSCIMHandlers(app, '/scim')
+
+if (ENABLE_STATIC_FILE_HANDLER) {
+  app.get('/static/*', createStaticFileHandler('/static/'))
+} else {
+  app.get('/static/*', (res) => {
+    res.writeStatus('404 Not Found').end()
+  })
+}
+if (ENABLE_MATTERMOST_FILE_HANDLER) {
+  app.get('/components/*', createStaticFileHandler('/components/'))
+} else {
+  app.get('/components/*', (res) => {
+    res.writeStatus('404 Not Found').end()
+  })
+}
+
+if (ENABLE_METRICS) {
+  uws
+    .App()
+    .get('/metrics', metricsHandler)
+    .get('/health', (res) => {
+      res.writeStatus('200 OK')
+      res.writeHeader('Content-Type', 'text/plain')
+      res.end('OK')
+    })
+    .listen(METRICS_PORT, (socket) => {
+      if (socket) {
+        console.log(`Metrics server listening on port ${METRICS_PORT}`)
+      } else {
+        console.error(`Failed to bind metrics server on port ${METRICS_PORT}`)
+        process.exit(1)
+      }
+    })
+}
+
+app.any('/*', createSSR).listen(PORT, listenHandler)

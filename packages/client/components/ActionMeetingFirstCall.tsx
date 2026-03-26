@@ -1,16 +1,15 @@
 import styled from '@emotion/styled'
 import graphql from 'babel-plugin-relay/macro'
-import React from 'react'
-import {createFragmentContainer} from 'react-relay'
+import {useFragment} from 'react-relay'
+import type {ActionMeetingFirstCall_meeting$key} from '../__generated__/ActionMeetingFirstCall_meeting.graphql'
 import useAtmosphere from '../hooks/useAtmosphere'
 import AgendaShortcutHint from '../modules/meeting/components/AgendaShortcutHint/AgendaShortcutHint'
 import MeetingCopy from '../modules/meeting/components/MeetingCopy/MeetingCopy'
 import MeetingFacilitationHint from '../modules/meeting/components/MeetingFacilitationHint/MeetingFacilitationHint'
 import MeetingPhaseHeading from '../modules/meeting/components/MeetingPhaseHeading/MeetingPhaseHeading'
-import {AGENDA_ITEMS, AGENDA_ITEM_LABEL} from '../utils/constants'
+import {AGENDA_ITEM_LABEL, AGENDA_ITEMS} from '../utils/constants'
 import {phaseLabelLookup} from '../utils/meetings/lookups'
-import {ActionMeetingFirstCall_meeting} from '../__generated__/ActionMeetingFirstCall_meeting.graphql'
-import {ActionMeetingPhaseProps} from './ActionMeeting'
+import type {ActionMeetingPhaseProps} from './ActionMeeting'
 import MeetingContent from './MeetingContent'
 import MeetingHeaderAndPhase from './MeetingHeaderAndPhase'
 import MeetingTopBar from './MeetingTopBar'
@@ -18,7 +17,7 @@ import PhaseHeaderTitle from './PhaseHeaderTitle'
 import PhaseWrapper from './PhaseWrapper'
 
 interface Props extends ActionMeetingPhaseProps {
-  meeting: ActionMeetingFirstCall_meeting
+  meeting: ActionMeetingFirstCall_meeting$key
 }
 
 const FirstCallWrapper = styled('div')({
@@ -30,11 +29,32 @@ const FirstCallWrapper = styled('div')({
 })
 
 const ActionMeetingFirstCall = (props: Props) => {
-  const {avatarGroup, toggleSidebar, meeting} = props
+  const {avatarGroup, toggleSidebar, meeting: meetingRef} = props
+  const meeting = useFragment(
+    graphql`
+      fragment ActionMeetingFirstCall_meeting on ActionMeeting {
+        showSidebar
+        endedAt
+        facilitatorUserId
+        facilitator {
+          user {
+            preferredName
+          }
+        }
+        phases {
+          phaseType
+          stages {
+            isComplete
+          }
+        }
+      }
+    `,
+    meetingRef
+  )
   const atmosphere = useAtmosphere()
   const {viewerId} = atmosphere
   const {endedAt, facilitator, facilitatorUserId, phases, showSidebar} = meeting
-  const {preferredName} = facilitator
+  const {preferredName} = facilitator.user
   const isFacilitating = facilitatorUserId === viewerId && !endedAt
   const phaseName = phaseLabelLookup[AGENDA_ITEMS]
   const agendaItemPhase = phases.find((phase) => phase.phaseType === 'agendaitems')!
@@ -79,21 +99,4 @@ const ActionMeetingFirstCall = (props: Props) => {
   )
 }
 
-export default createFragmentContainer(ActionMeetingFirstCall, {
-  meeting: graphql`
-    fragment ActionMeetingFirstCall_meeting on ActionMeeting {
-      showSidebar
-      endedAt
-      facilitatorUserId
-      facilitator {
-        preferredName
-      }
-      phases {
-        phaseType
-        stages {
-          isComplete
-        }
-      }
-    }
-  `
-})
+export default ActionMeetingFirstCall

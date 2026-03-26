@@ -1,15 +1,21 @@
 import styled from '@emotion/styled'
 import {CreditCard} from '@mui/icons-material'
+import {Elements} from '@stripe/react-stripe-js'
+import {loadStripe} from '@stripe/stripe-js'
 import graphql from 'babel-plugin-relay/macro'
-import React from 'react'
-import {createFragmentContainer} from 'react-relay'
-import {OrgBillingCreditCardInfo_organization} from '~/__generated__/OrgBillingCreditCardInfo_organization.graphql'
+import {useState} from 'react'
+import {useFragment} from 'react-relay'
+import type {OrgBillingCreditCardInfo_organization$key} from '~/__generated__/OrgBillingCreditCardInfo_organization.graphql'
 import Panel from '../../../../components/Panel/Panel'
+import Row from '../../../../components/Row/Row'
 import SecondaryButton from '../../../../components/SecondaryButton'
-import useModal from '../../../../hooks/useModal'
 import {PALETTE} from '../../../../styles/paletteV3'
-import {Breakpoint, Layout} from '../../../../types/constEnums'
-import lazyPreload from '../../../../utils/lazyPreload'
+import {Breakpoint, ElementWidth, Layout} from '../../../../types/constEnums'
+import UpdatePayment from './UpdatePayment'
+
+const StyledPanel = styled(Panel)({
+  maxWidth: ElementWidth.PANEL_WIDTH
+})
 
 const CreditCardInfo = styled('div')({
   alignItems: 'center',
@@ -46,6 +52,10 @@ const InfoAndUpdate = styled('div')({
   justifyContent: 'space-between'
 })
 
+const StyledRow = styled(Row)({
+  flexWrap: 'nowrap'
+})
+
 const InfoBlocks = styled('div')({
   [`@media screen and (min-width: ${Breakpoint.SIDEBAR_LEFT}px)`]: {
     alignItems: 'center',
@@ -53,27 +63,54 @@ const InfoBlocks = styled('div')({
   }
 })
 
-const CreditCardModal = lazyPreload(
-  () =>
-    import(
-      /* webpackChunkName: 'CreditCardModal' */
-      '../CreditCardModal/CreditCardModal'
-    )
-)
+const stripePromise = loadStripe(window.__ACTION__.stripe)
 
 interface Props {
-  organization: OrgBillingCreditCardInfo_organization
+  organizationRef: OrgBillingCreditCardInfo_organization$key
 }
 
 const OrgBillingCreditCardInfo = (props: Props) => {
-  const {organization} = props
-  const {creditCard, id: orgId, orgUserCount} = organization
-  const {modalPortal, closePortal, togglePortal} = useModal()
+  const {organizationRef} = props
+  const organization = useFragment(
+    graphql`
+      fragment OrgBillingCreditCardInfo_organization on Organization {
+        id
+        creditCard {
+          brand
+          expiry
+          last4
+        }
+      }
+    `,
+    organizationRef
+  )
+  const {id: orgId, creditCard} = organization
+  const [isUpdating, setIsUpdating] = useState(false)
   if (!creditCard) return null
-  const {activeUserCount} = orgUserCount
   const {brand, last4, expiry} = creditCard
+
+  const handleClose = () => {
+    setIsUpdating(false)
+  }
+
+  const handleStartUpdating = () => {
+    setIsUpdating(true)
+  }
+
+  if (isUpdating) {
+    return (
+      <StyledPanel label='Credit Card'>
+        <StyledRow>
+          <Elements stripe={stripePromise}>
+            <UpdatePayment handleClose={handleClose} orgId={orgId} />
+          </Elements>
+        </StyledRow>
+      </StyledPanel>
+    )
+  }
+
   return (
-    <Panel label='Credit Card Information'>
+    <StyledPanel label='Credit Card'>
       <InfoAndUpdate>
         <CreditCardInfo>
           <CreditCardIcon />
@@ -91,34 +128,10 @@ const OrgBillingCreditCardInfo = (props: Props) => {
             </div>
           </InfoBlocks>
         </CreditCardInfo>
-        <SecondaryButton onClick={togglePortal} onMouseEnter={CreditCardModal.preload}>
-          {'Update'}
-        </SecondaryButton>
-        {modalPortal(
-          <CreditCardModal
-            activeUserCount={activeUserCount}
-            orgId={orgId}
-            actionType={'update'}
-            closePortal={closePortal}
-          />
-        )}
+        <SecondaryButton onClick={handleStartUpdating}>{'Update'}</SecondaryButton>
       </InfoAndUpdate>
-    </Panel>
+    </StyledPanel>
   )
 }
 
-export default createFragmentContainer(OrgBillingCreditCardInfo, {
-  organization: graphql`
-    fragment OrgBillingCreditCardInfo_organization on Organization {
-      id
-      orgUserCount {
-        activeUserCount
-      }
-      creditCard {
-        brand
-        expiry
-        last4
-      }
-    }
-  `
-})
+export default OrgBillingCreditCardInfo

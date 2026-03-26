@@ -1,9 +1,8 @@
 import graphql from 'babel-plugin-relay/macro'
-import ReactGA from 'react-ga4'
 import {commitMutation} from 'react-relay'
-import handleSuccessfulLogin from '~/utils/handleSuccessfulLogin'
-import {HistoryLocalHandler, StandardMutation} from '../types/relayMutations'
-import {SignUpWithPasswordMutation as TSignUpWithPasswordMutation} from '../__generated__/SignUpWithPasswordMutation.graphql'
+import {handleSuccessfulLogin} from '~/utils/handleSuccessfulLogin'
+import type {SignUpWithPasswordMutation as TSignUpWithPasswordMutation} from '../__generated__/SignUpWithPasswordMutation.graphql'
+import type {NavigateLocalHandler, StandardMutation} from '../types/relayMutations'
 import {handleAcceptTeamInvitationErrors} from './AcceptTeamInvitationMutation'
 import handleAuthenticationRedirect from './handlers/handleAuthenticationRedirect'
 
@@ -11,25 +10,22 @@ const mutation = graphql`
   mutation SignUpWithPasswordMutation(
     $email: ID!
     $password: String!
-    $invitationToken: ID! = ""
-    $segmentId: ID
+    $invitationToken: ID!
+    $pseudoId: ID
     $isInvitation: Boolean!
+    $params: String!
   ) {
     signUpWithPassword(
       email: $email
       password: $password
       invitationToken: $invitationToken
-      segmentId: $segmentId
+      pseudoId: $pseudoId
+      params: $params
     ) {
       error {
         message
       }
-      authToken
-      user {
-        tms
-        isPatient0
-        ...UserAnalyticsFrag @relay(mask: false)
-      }
+      ...handleSuccessfulLogin_UserLogInPayload @relay(mask: false)
     }
     acceptTeamInvitation(invitationToken: $invitationToken) @include(if: $isInvitation) {
       ...AcceptTeamInvitationMutationReply @relay(mask: false)
@@ -38,23 +34,26 @@ const mutation = graphql`
 `
 const SignUpWithPasswordMutation: StandardMutation<
   TSignUpWithPasswordMutation,
-  HistoryLocalHandler
-> = (atmosphere, variables, {onError, onCompleted, history}) => {
+  NavigateLocalHandler
+> = (atmosphere, variables, {onError, onCompleted, navigate}) => {
   return commitMutation<TSignUpWithPasswordMutation>(atmosphere, {
     mutation,
     variables: {...variables, isInvitation: !!variables.invitationToken},
     onError,
     onCompleted: (res, errors) => {
       const {acceptTeamInvitation, signUpWithPassword} = res
-      const {error: uiError, user} = signUpWithPassword
+      const {error: uiError} = signUpWithPassword
       onCompleted({signUpWithPassword}, errors)
       handleAcceptTeamInvitationErrors(atmosphere, acceptTeamInvitation)
       if (!uiError && !errors) {
-        ReactGA.event('sign_up', {isPatient0: user!.isPatient0})
-        handleSuccessfulLogin(signUpWithPassword)
-        const authToken = acceptTeamInvitation?.authToken ?? signUpWithPassword.authToken
-        atmosphere.setAuthToken(authToken)
-        handleAuthenticationRedirect(acceptTeamInvitation, {atmosphere, history})
+        handleSuccessfulLogin(atmosphere, signUpWithPassword)
+        const redirectPath = '/meetings'
+
+        handleAuthenticationRedirect(acceptTeamInvitation, {
+          atmosphere,
+          navigate,
+          redirectPath
+        })
       }
     }
   })

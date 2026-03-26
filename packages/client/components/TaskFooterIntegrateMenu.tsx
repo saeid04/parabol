@@ -1,13 +1,13 @@
 import graphql from 'babel-plugin-relay/macro'
-import React from 'react'
-import {PreloadedQuery, useFragment, usePreloadedQuery} from 'react-relay'
-import {MenuProps} from '../hooks/useMenu'
-import {MenuMutationProps} from '../hooks/useMutationProps'
-import {
-  TaskFooterIntegrateMenuQuery,
-  TaskFooterIntegrateMenuQueryResponse
-} from '../__generated__/TaskFooterIntegrateMenuQuery.graphql'
-import {TaskFooterIntegrateMenu_task$key} from '../__generated__/TaskFooterIntegrateMenu_task.graphql'
+import {type PreloadedQuery, useFragment, usePreloadedQuery} from 'react-relay'
+import type {IntegrationProviderServiceEnum} from '../__generated__/CreateTaskIntegrationMutation.graphql'
+import type {TaskFooterIntegrateMenu_task$key} from '../__generated__/TaskFooterIntegrateMenu_task.graphql'
+import type {TaskFooterIntegrateMenuQuery} from '../__generated__/TaskFooterIntegrateMenuQuery.graphql'
+import useAtmosphere from '../hooks/useAtmosphere'
+import {makePlaceholder, useIsIntegrated} from '../hooks/useIsIntegrated'
+import type {MenuProps} from '../hooks/useMenu'
+import type {MenuMutationProps} from '../hooks/useMutationProps'
+import CreateTaskIntegrationMutation from '../mutations/CreateTaskIntegrationMutation'
 import TaskFooterIntegrateMenuList from './TaskFooterIntegrateMenuList'
 import TaskFooterIntegrateMenuSignup from './TaskFooterIntegrateMenuSignup'
 
@@ -18,61 +18,29 @@ interface Props {
   queryRef: PreloadedQuery<TaskFooterIntegrateMenuQuery>
 }
 
-type IntegrationLookup = {
-  hasGitHub: boolean
-  hasAtlassian: boolean
-  hasGitLab: boolean
-  hasJiraServer: boolean
-  hasAzureDevOps: boolean
-}
-
-const makePlaceholder = (integrationLookup: IntegrationLookup) => {
-  const {hasGitHub, hasAtlassian, hasGitLab, hasAzureDevOps} = integrationLookup
-  const names = [] as string[]
-  if (hasGitHub) names.push('GitHub')
-  if (hasAtlassian) names.push('Jira')
-  if (hasGitLab) names.push('GitLab')
-  if (hasAzureDevOps) names.push('Azure DevOps')
-  return `Search ${names.join(' & ')}`
-}
-
-type Integrations = NonNullable<
-  TaskFooterIntegrateMenuQueryResponse['viewer']['viewerTeamMember']
->['integrations']
-
-const isIntegrated = (integrations: Integrations) => {
-  const {atlassian, github, jiraServer, gitlab, azureDevOps} = integrations
-  const hasAtlassian = atlassian?.isActive ?? false
-  const hasGitHub = github?.isActive ?? false
-  const hasGitLab = gitlab?.auth?.isActive ?? false
-  const hasJiraServer = jiraServer?.auth?.isActive ?? false
-  const hasAzureDevOps = azureDevOps?.auth?.isActive ?? false
-  return hasAtlassian || hasGitHub || hasJiraServer || hasGitLab || hasAzureDevOps
-    ? {
-        hasAtlassian,
-        hasGitHub,
-        hasJiraServer,
-        hasGitLab,
-        hasAzureDevOps
-      }
-    : null
-}
-
 const query = graphql`
   query TaskFooterIntegrateMenuQuery($teamId: ID!, $userId: ID!) {
     viewer {
       id
       assigneeTeamMember: teamMember(userId: $userId, teamId: $teamId) {
-        preferredName
+        user {
+          preferredName
+        }
         prevUsedRepoIntegrations(first: 1) {
           items {
             id
           }
         }
-        ...TaskFooterIntegrateMenuTeamMemberIntegrations @relay(mask: false)
+        integrations {
+          ...useIsIntegrated_integrations
+          ...TaskFooterIntegrateMenuSignup_TeamMemberIntegrations
+        }
       }
       viewerTeamMember: teamMember(userId: null, teamId: $teamId) {
-        ...TaskFooterIntegrateMenuTeamMemberIntegrations @relay(mask: false)
+        integrations {
+          ...useIsIntegrated_integrations
+          ...TaskFooterIntegrateMenuSignup_TeamMemberIntegrations
+        }
       }
     }
   }
@@ -80,45 +48,59 @@ const query = graphql`
 
 const TaskFooterIntegrateMenu = (props: Props) => {
   const {menuProps, mutationProps, task: taskRef, queryRef} = props
-  const data = usePreloadedQuery<TaskFooterIntegrateMenuQuery>(query, queryRef, {
-    UNSTABLE_renderPolicy: 'full'
-  })
+  const data = usePreloadedQuery<TaskFooterIntegrateMenuQuery>(query, queryRef)
   const {viewer} = data
   const task = useFragment(
     graphql`
       fragment TaskFooterIntegrateMenu_task on Task {
-        ...TaskFooterIntegrateMenuList_task
+        id
         teamId
         userId
       }
     `,
     taskRef
   )
+  const atmosphere = useAtmosphere()
 
   const {id: viewerId, viewerTeamMember, assigneeTeamMember} = viewer
+  const isViewerIntegrated = useIsIntegrated(viewerTeamMember?.integrations)
+  const isAssigneeIntegrated = useIsIntegrated(assigneeTeamMember?.integrations)
   if (!assigneeTeamMember || !viewerTeamMember) return null
   const {integrations: viewerIntegrations} = viewerTeamMember
-  const {
-    integrations: assigneeIntegrations,
-    preferredName: assigneeName,
-    prevUsedRepoIntegrations
-  } = assigneeTeamMember
-  const {teamId, userId} = task
+  const {user: assigneeUser, prevUsedRepoIntegrations} = assigneeTeamMember
+  const {preferredName: assigneeName} = assigneeUser
+  const {teamId, userId, id: taskId} = task
   const isViewerAssignee = viewerId === userId
-  const isViewerIntegrated = isIntegrated(viewerIntegrations)
-  const isAssigneeIntegrated = isIntegrated(assigneeIntegrations)
   const showAssigneeIntegrations = !!(
     isAssigneeIntegrated && prevUsedRepoIntegrations.items?.length
   )
+  const {submitMutation, onError, onCompleted} = mutationProps
+
+  const handlePushToIntegration = (
+    integrationRepoId: string,
+    integrationProviderService: IntegrationProviderServiceEnum
+  ) => {
+    const variables = {
+      integrationRepoId,
+      taskId: taskId,
+      integrationProviderService: integrationProviderService
+    }
+    submitMutation()
+    CreateTaskIntegrationMutation(atmosphere, variables, {
+      onError,
+      onCompleted
+    })
+  }
+
   if (isViewerIntegrated) {
     const placeholder = makePlaceholder(isViewerIntegrated)
     const label = 'Push with your credentials'
     return (
       <TaskFooterIntegrateMenuList
         menuProps={menuProps}
-        mutationProps={mutationProps}
         placeholder={placeholder}
-        task={task}
+        teamId={task.teamId}
+        onPushToIntegration={handlePushToIntegration}
         label={label}
       />
     )
@@ -130,9 +112,9 @@ const TaskFooterIntegrateMenu = (props: Props) => {
     return (
       <TaskFooterIntegrateMenuList
         menuProps={menuProps}
-        mutationProps={mutationProps}
         placeholder={placeholder}
-        task={task}
+        teamId={task.teamId}
+        onPushToIntegration={handlePushToIntegration}
         label={label}
       />
     )
@@ -151,60 +133,5 @@ const TaskFooterIntegrateMenu = (props: Props) => {
     />
   )
 }
-
-graphql`
-  fragment TaskFooterIntegrateMenuViewerJiraServerIntegration on JiraServerIntegration {
-    auth {
-      isActive
-    }
-  }
-`
-graphql`
-  fragment TaskFooterIntegrateMenuViewerAtlassianIntegration on AtlassianIntegration {
-    isActive
-  }
-`
-graphql`
-  fragment TaskFooterIntegrateMenuViewerGitHubIntegration on GitHubIntegration {
-    isActive
-  }
-`
-graphql`
-  fragment TaskFooterIntegrateMenuViewerGitLabIntegration on GitLabIntegration {
-    auth {
-      isActive
-    }
-  }
-`
-graphql`
-  fragment TaskFooterIntegrateMenuViewerAzureDevOpsIntegration on AzureDevOpsIntegration {
-    auth {
-      isActive
-    }
-  }
-`
-
-graphql`
-  fragment TaskFooterIntegrateMenuTeamMemberIntegrations on TeamMember {
-    integrations {
-      ...TaskFooterIntegrateMenuSignup_TeamMemberIntegrations
-      jiraServer {
-        ...TaskFooterIntegrateMenuViewerJiraServerIntegration @relay(mask: false)
-      }
-      atlassian {
-        ...TaskFooterIntegrateMenuViewerAtlassianIntegration @relay(mask: false)
-      }
-      github {
-        ...TaskFooterIntegrateMenuViewerGitHubIntegration @relay(mask: false)
-      }
-      gitlab {
-        ...TaskFooterIntegrateMenuViewerGitLabIntegration @relay(mask: false)
-      }
-      azureDevOps {
-        ...TaskFooterIntegrateMenuViewerAzureDevOpsIntegration @relay(mask: false)
-      }
-    }
-  }
-`
 
 export default TaskFooterIntegrateMenu

@@ -1,94 +1,66 @@
-import styled from '@emotion/styled'
+import {datadogRum} from '@datadog/browser-rum'
 import {
   ArrowForward as ArrowForwardIcon,
   ChangeHistory,
   GroupWork,
   History
 } from '@mui/icons-material'
-import * as Sentry from '@sentry/browser'
 import graphql from 'babel-plugin-relay/macro'
-import React from 'react'
-import {createFragmentContainer} from 'react-relay'
-import useRouter from '~/hooks/useRouter'
-import {PALETTE} from '~/styles/paletteV3'
+import {useFragment} from 'react-relay'
+import {useNavigate} from 'react-router'
+import type {SelectMeetingDropdownItem_meeting$key} from '~/__generated__/SelectMeetingDropdownItem_meeting.graphql'
 import getMeetingPhase from '~/utils/getMeetingPhase'
 import {meetingTypeToIcon, phaseLabelLookup} from '~/utils/meetings/lookups'
-import {SelectMeetingDropdownItem_meeting} from '~/__generated__/SelectMeetingDropdownItem_meeting.graphql'
-
-const Wrapper = styled('div')({
-  alignItems: 'center',
-  display: 'flex',
-  width: '100%'
-})
-
-const MeetingIcon = styled('div')({
-  color: PALETTE.SLATE_600,
-  height: 24,
-  width: 24,
-  margin: 16
-})
-
-const MeetingSVG = styled('div')({
-  padding: 16
-})
-
-const MeetingInfo = styled('div')({
-  display: 'flex',
-  flexDirection: 'column'
-})
-
-const Title = styled('div')({
-  color: PALETTE.SLATE_700,
-  fontSize: 16,
-  lineHeight: '24px',
-  fontWeight: 600
-})
-
-const Subtitle = styled('div')({
-  color: PALETTE.SLATE_600,
-  fontSize: 12
-})
-
-const Action = styled('div')({
-  flex: 1,
-  display: 'flex',
-  justifyContent: 'end',
-  alignItems: 'center',
-  height: 24,
-  marginRight: 16,
-  width: 24
-})
+import {MenuItem} from '../ui/Menu/MenuItem'
 
 interface Props {
-  meeting: SelectMeetingDropdownItem_meeting
+  meeting: SelectMeetingDropdownItem_meeting$key
 }
 
 const SelectMeetingDropdownItem = (props: Props) => {
-  const {meeting} = props
-  const {history} = useRouter()
-  const {name, team, id: meetingId, meetingType, phases} = meeting
+  const {meeting: meetingRef} = props
+  const meeting = useFragment(
+    graphql`
+      fragment SelectMeetingDropdownItem_meeting on NewMeeting {
+        id
+        name
+        meetingType
+        phases {
+          phaseType
+          stages {
+            id
+            isComplete
+          }
+        }
+        facilitatorStageId
+        team {
+          name
+        }
+      }
+    `,
+    meetingRef
+  )
+  const navigate = useNavigate()
+  const {name, team, id: meetingId, meetingType, phases, facilitatorStageId} = meeting
   if (!team) {
     // 95% sure there's a bug in relay causing this
     const errObj = {id: meetingId} as any
-    if (meeting.hasOwnProperty('team')) {
-      errObj.team = team
-    }
-    Sentry.captureException(new Error(`Missing Team on Meeting ${JSON.stringify(errObj)}`))
+    datadogRum.addError(new Error(`Missing Team on Meeting ${JSON.stringify(errObj)}`))
     return null
   }
   const {name: teamName} = team
   const gotoMeeting = () => {
-    history.push(`/meet/${meetingId}`)
+    navigate(`/meet/${meetingId}`)
   }
   //FIXME 6062: change to React.ComponentType
-  const IconOrSVG = meetingTypeToIcon[meetingType]
-  const meetingPhase = getMeetingPhase(phases)
+  const IconOrSVG = meetingTypeToIcon[meetingType]!
+  const meetingPhase = getMeetingPhase(phases, facilitatorStageId)
   const meetingPhaseLabel = (meetingPhase && phaseLabelLookup[meetingPhase.phaseType]) || 'Complete'
 
   return (
-    <Wrapper onClick={gotoMeeting}>
+    <MenuItem onSelect={gotoMeeting}>
       {typeof IconOrSVG === 'string' ? (
-        <MeetingIcon>
+        <div className='m-2 size-6 text-slate-600'>
           {
             {
               group_work: <GroupWork />,
@@ -96,40 +68,23 @@ const SelectMeetingDropdownItem = (props: Props) => {
               history: <History />
             }[IconOrSVG]
           }
-        </MeetingIcon>
+        </div>
       ) : (
-        <MeetingSVG>
+        <div className='p-2'>
           <IconOrSVG />
-        </MeetingSVG>
+        </div>
       )}
-      <MeetingInfo>
-        <Title>{name}</Title>
-        <Subtitle>
-          {meetingPhaseLabel} • {teamName}
-        </Subtitle>
-      </MeetingInfo>
-      <Action>
+      <div className='flex flex-col px-2'>
+        <div className='font-semibold text-base text-slate-700'>{name}</div>
+        <div className='text-slate-600 text-xs'>
+          {teamName} • {meetingPhaseLabel}
+        </div>
+      </div>
+      <div className='flex size-6 grow items-center justify-end'>
         <ArrowForwardIcon />
-      </Action>
-    </Wrapper>
+      </div>
+    </MenuItem>
   )
 }
 
-export default createFragmentContainer(SelectMeetingDropdownItem, {
-  meeting: graphql`
-    fragment SelectMeetingDropdownItem_meeting on NewMeeting {
-      id
-      name
-      meetingType
-      phases {
-        phaseType
-        stages {
-          isComplete
-        }
-      }
-      team {
-        name
-      }
-    }
-  `
-})
+export default SelectMeetingDropdownItem

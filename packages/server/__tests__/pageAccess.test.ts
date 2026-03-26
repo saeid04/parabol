@@ -1,0 +1,883 @@
+import faker from 'faker'
+import type {Doc, YXmlEvent} from 'yjs'
+import {createPageLinkElement} from '../../client/shared/tiptap/createPageLinkElement'
+import getKysely from '../postgres/getKysely'
+import {sendPublic, sendTipTap, signUp, signUpWithEmail} from './common'
+
+afterAll(async () => {
+  await getKysely().destroy()
+})
+
+const UPDATE_PAGE_ACCESS = `
+  mutation UpdatePageAccess(
+    $pageId: ID!
+    $subjectType: PageSubjectEnum!
+    $subjectId: ID!
+    $role: PageRoleEnum
+    $unlinkApproved: Boolean
+  ) {
+    updatePageAccess(
+      pageId: $pageId
+      subjectType: $subjectType
+      subjectId: $subjectId
+      role: $role
+      unlinkApproved: $unlinkApproved
+    ) {
+      page {
+        id
+        isParentLinked
+        access {
+          public
+          guests {
+            email
+          }
+          users {
+            user {
+              id
+            }
+          }
+          teams {
+            team {
+              id
+            }
+          }
+          organizations {
+            organization {
+              id
+            }
+          }
+        }
+      }
+    }
+  }
+    `
+test('Access propagates to linked children', async () => {
+  const [user1, user2] = await Promise.all([signUp(), signUp()])
+  const {cookie} = user1
+
+  const parentPage = await sendPublic({
+    query: `
+      mutation CreatePage {
+        createPage {
+          page {
+            id
+          }
+        }
+      }
+    `,
+    variables: {},
+    cookie
+  })
+
+  expect(parentPage).toMatchObject({
+    data: {
+      createPage: {
+        page: {
+          id: expect.anything()
+        }
+      }
+    }
+  })
+  const parentPageId = parentPage.data.createPage.page.id
+
+  const childPageCode = await sendTipTap({cookie, pageId: parentPageId}, async (document: Doc) => {
+    return new Promise((resolve) => {
+      const frag = document.getXmlFragment('default')
+      const pageLinkBlock = createPageLinkElement(-1, '<Untitled>', false)
+      pageLinkBlock.observe((e: YXmlEvent) => {
+        for (const [key] of e.keys) {
+          if (key === 'pageCode') {
+            const pageCode = pageLinkBlock.getAttribute('pageCode')
+            resolve(pageCode)
+          }
+        }
+      })
+      frag.insert(1, [pageLinkBlock] as any)
+    })
+  })
+  const childPageId = `page:${childPageCode}`
+  const childPage = {childPageId}
+
+  expect(childPage).toMatchObject({
+    childPageId: expect.toBeString()
+  })
+
+  const pageUpdatesUser = await sendPublic({
+    query: UPDATE_PAGE_ACCESS,
+    variables: {
+      pageId: parentPageId,
+      subjectType: 'user',
+      subjectId: user2.userId,
+      role: 'owner'
+    },
+    cookie
+  })
+
+  expect(pageUpdatesUser).toMatchObject({
+    data: {
+      updatePageAccess: {
+        page: {
+          access: {
+            users: expect.toIncludeSameMembers([
+              {
+                user: {
+                  id: `preview:${user1.userId}`
+                }
+              },
+              {
+                user: {
+                  id: `preview:${user2.userId}`
+                }
+              }
+            ])
+          }
+        }
+      }
+    }
+  })
+
+  const pageUpdatesTeam = await sendPublic({
+    query: UPDATE_PAGE_ACCESS,
+    variables: {
+      pageId: parentPageId,
+      subjectType: 'team',
+      subjectId: user1.teamId,
+      role: 'owner'
+    },
+    cookie
+  })
+
+  expect(pageUpdatesTeam).toMatchObject({
+    data: {
+      updatePageAccess: {
+        page: {
+          access: {
+            teams: [
+              {
+                team: {
+                  id: `preview:${user1.teamId}`
+                }
+              }
+            ]
+          }
+        }
+      }
+    }
+  })
+
+  const pageUpdatesOrg = await sendPublic({
+    query: UPDATE_PAGE_ACCESS,
+    variables: {
+      pageId: parentPageId,
+      subjectType: 'organization',
+      subjectId: user1.orgId,
+      role: 'owner'
+    },
+    cookie
+  })
+
+  expect(pageUpdatesOrg).toMatchObject({
+    data: {
+      updatePageAccess: {
+        page: {
+          access: {
+            organizations: [
+              {
+                organization: {
+                  id: `preview:${user1.orgId}`
+                }
+              }
+            ]
+          }
+        }
+      }
+    }
+  })
+
+  const pageUpdatesExt = await sendPublic({
+    query: UPDATE_PAGE_ACCESS,
+    variables: {
+      pageId: parentPageId,
+      subjectType: 'external',
+      subjectId: 'foo@example.com',
+      role: 'owner'
+    },
+    cookie
+  })
+
+  expect(pageUpdatesExt).toMatchObject({
+    data: {
+      updatePageAccess: {
+        page: {
+          access: {
+            guests: [
+              {
+                email: 'foo@example.com'
+              }
+            ]
+          }
+        }
+      }
+    }
+  })
+
+  const pageUpdatesGlobal = await sendPublic({
+    query: UPDATE_PAGE_ACCESS,
+    variables: {
+      pageId: parentPageId,
+      subjectType: 'external',
+      subjectId: '*',
+      role: 'owner'
+    },
+    cookie
+  })
+
+  expect(pageUpdatesGlobal).toMatchObject({
+    data: {
+      updatePageAccess: {
+        page: {
+          access: {
+            public: 'owner'
+          }
+        }
+      }
+    }
+  })
+
+  const childPageRes = await sendPublic({
+    query: `
+      query Page($pageId: ID!) {
+        public {
+          page(pageId: $pageId) {
+            access {
+              public
+              guests {
+                email
+              }
+              users {
+                user {
+                  id
+                }
+              }
+              teams {
+                team {
+                  id
+                }
+              }
+              organizations {
+                organization {
+                  id
+                }
+              }
+            }
+          }
+        }
+      }
+    `,
+    variables: {
+      pageId: childPageId
+    },
+    cookie
+  })
+
+  expect(childPageRes).toMatchObject({
+    data: {
+      public: {
+        page: {
+          access: {
+            guests: [
+              {
+                email: 'foo@example.com'
+              }
+            ],
+            public: 'owner',
+            organizations: [
+              {
+                organization: {
+                  id: `preview:${user1.orgId}`
+                }
+              }
+            ],
+            teams: [
+              {
+                team: {
+                  id: `preview:${user1.teamId}`
+                }
+              }
+            ]
+          }
+        }
+      }
+    }
+  })
+})
+
+test('Revoking access unlinks children', async () => {
+  const [user1] = await Promise.all([signUp()])
+  const {cookie} = user1
+
+  const parentPage = await sendPublic({
+    query: `
+      mutation CreatePage {
+        createPage {
+          page {
+            id
+          }
+        }
+      }
+    `,
+    variables: {},
+    cookie
+  })
+  const parentPageId = parentPage.data.createPage.page.id
+  const childPageCode = await sendTipTap({cookie, pageId: parentPageId}, async (document: Doc) => {
+    return new Promise((resolve) => {
+      const frag = document.getXmlFragment('default')
+      const pageLinkBlock = createPageLinkElement(-1, '<Untitled>', false)
+      pageLinkBlock.observe((e: YXmlEvent) => {
+        for (const [key] of e.keys) {
+          if (key === 'pageCode') {
+            const pageCode = pageLinkBlock.getAttribute('pageCode')
+            resolve(pageCode)
+          }
+        }
+      })
+      frag.insert(1, [pageLinkBlock] as any)
+    })
+  })
+  const childPageId = `page:${childPageCode}`
+
+  await sendPublic({
+    query: UPDATE_PAGE_ACCESS,
+    variables: {
+      pageId: parentPageId,
+      subjectType: 'external',
+      subjectId: '*',
+      role: 'owner'
+    },
+    cookie
+  })
+
+  const childPageRevokeError = await sendPublic({
+    query: UPDATE_PAGE_ACCESS,
+    variables: {
+      pageId: childPageId,
+      subjectType: 'external',
+      subjectId: '*',
+      role: 'editor'
+    },
+    cookie
+  })
+
+  expect(childPageRevokeError).toMatchObject({
+    errors: [
+      {
+        extensions: {
+          code: 'UNAPPROVED_UNLINK'
+        }
+      }
+    ]
+  })
+
+  const childPageRevokeGood = await sendPublic({
+    query: UPDATE_PAGE_ACCESS,
+    variables: {
+      pageId: childPageId,
+      subjectType: 'external',
+      subjectId: '*',
+      role: 'viewer',
+      unlinkApproved: true
+    },
+    cookie
+  })
+
+  expect(childPageRevokeGood).toMatchObject({
+    data: {
+      updatePageAccess: {
+        page: {
+          isParentLinked: false,
+          access: {
+            public: 'viewer'
+          }
+        }
+      }
+    }
+  })
+
+  await sendPublic({
+    query: UPDATE_PAGE_ACCESS,
+    variables: {
+      pageId: parentPageId,
+      subjectType: 'external',
+      subjectId: '*',
+      role: 'editor'
+    },
+    cookie
+  })
+
+  await sendPublic({
+    query: `
+      query Page($pageId: ID!) {
+        public {
+          page(pageId: $pageId) {
+            access {
+              public
+              guests {
+                email
+              }
+              users {
+                user {
+                  id
+                }
+              }
+              teams {
+                team {
+                  id
+                }
+              }
+              organizations {
+                organization {
+                  id
+                }
+              }
+            }
+          }
+        }
+      }
+    `,
+    variables: {
+      pageId: parentPageId
+    },
+    cookie
+  })
+
+  expect(childPageRevokeGood).toMatchObject({
+    data: {
+      updatePageAccess: {
+        page: {
+          access: {
+            public: 'viewer'
+          }
+        }
+      }
+    }
+  })
+})
+
+test('New User adopts external access', async () => {
+  const owner = await signUp()
+  const inviteeEmail = faker.internet.email().toLowerCase()
+  const {cookie} = owner
+
+  const page = await sendPublic({
+    query: `
+      mutation CreatePage {
+        createPage {
+          page {
+            id
+          }
+        }
+      }
+    `,
+    variables: {},
+    cookie
+  })
+
+  expect(page).toMatchObject({
+    data: {
+      createPage: {
+        page: {
+          id: expect.anything()
+        }
+      }
+    }
+  })
+  const pageId = page.data.createPage.page.id
+  const updatedAccess = await sendPublic({
+    query: UPDATE_PAGE_ACCESS,
+    variables: {
+      pageId,
+      subjectType: 'external',
+      subjectId: inviteeEmail,
+      role: 'editor'
+    },
+    cookie
+  })
+
+  expect(updatedAccess).toEqual({
+    data: {
+      updatePageAccess: {
+        page: expect.objectContaining({
+          id: pageId,
+          access: expect.objectContaining({
+            guests: [
+              {
+                email: inviteeEmail
+              }
+            ]
+          })
+        })
+      }
+    }
+  })
+
+  const invitee = await signUpWithEmail(inviteeEmail)
+  const pageAccess = await sendPublic({
+    query: `
+      query Page($pageId: ID!) {
+        public {
+          page(pageId: $pageId) {
+            id
+          }
+        }
+      }
+    `,
+    variables: {
+      pageId
+    },
+    cookie: invitee.cookie
+  })
+
+  expect(pageAccess).toEqual({
+    data: {
+      public: {
+        page: {
+          id: pageId
+        }
+      }
+    }
+  })
+})
+
+test('Rando has no access', async () => {
+  const [owner, rando] = await Promise.all([signUp(), signUp()])
+  const {cookie} = owner
+
+  const page = await sendPublic({
+    query: `
+      mutation CreatePage {
+        createPage {
+          page {
+            id
+          }
+        }
+      }
+    `,
+    variables: {},
+    cookie
+  })
+
+  expect(page).toMatchObject({
+    data: {
+      createPage: {
+        page: {
+          id: expect.anything()
+        }
+      }
+    }
+  })
+  const pageId = page.data.createPage.page.id
+
+  const pageAccess = await sendPublic({
+    query: `
+      query Page($pageId: ID!) {
+        public {
+          page(pageId: $pageId) {
+            id
+          }
+        }
+      }
+    `,
+    variables: {
+      pageId
+    },
+    cookie: rando.cookie
+  })
+
+  expect(pageAccess).toEqual({
+    data: {
+      public: {
+        page: null
+      }
+    },
+    errors: [
+      expect.objectContaining({
+        message: expect.stringMatching('Insufficient permission.')
+      })
+    ]
+  })
+})
+
+test('Rando has access to public page', async () => {
+  const [owner, rando] = await Promise.all([signUp(), signUp()])
+  const {cookie} = owner
+
+  const page = await sendPublic({
+    query: `
+      mutation CreatePage {
+        createPage {
+          page {
+            id
+          }
+        }
+      }
+    `,
+    variables: {},
+    cookie
+  })
+
+  expect(page).toMatchObject({
+    data: {
+      createPage: {
+        page: {
+          id: expect.anything()
+        }
+      }
+    }
+  })
+  const pageId = page.data.createPage.page.id
+
+  await sendPublic({
+    query: UPDATE_PAGE_ACCESS,
+    variables: {
+      pageId,
+      subjectType: 'external',
+      subjectId: '*',
+      role: 'editor'
+    },
+    cookie
+  })
+
+  const pageAccess = await sendPublic({
+    query: `
+      query Page($pageId: ID!) {
+        public {
+          page(pageId: $pageId) {
+            id
+          }
+        }
+      }
+    `,
+    variables: {
+      pageId
+    },
+    cookie: rando.cookie
+  })
+
+  expect(pageAccess).toEqual({
+    data: {
+      public: {
+        page: {
+          id: pageId
+        }
+      }
+    }
+  })
+})
+
+test('Public has access to public page', async () => {
+  const owner = await signUp()
+  const {cookie} = owner
+
+  const page = await sendPublic({
+    query: `
+      mutation CreatePage {
+        createPage {
+          page {
+            id
+          }
+        }
+      }
+    `,
+    variables: {},
+    cookie
+  })
+
+  expect(page).toMatchObject({
+    data: {
+      createPage: {
+        page: {
+          id: expect.anything()
+        }
+      }
+    }
+  })
+  const pageId = page.data.createPage.page.id
+
+  await sendPublic({
+    query: UPDATE_PAGE_ACCESS,
+    variables: {
+      pageId,
+      subjectType: 'external',
+      subjectId: '*',
+      role: 'editor'
+    },
+    cookie
+  })
+
+  const pageAccess = await sendPublic({
+    query: `
+      query Page($pageId: ID!) {
+        public {
+          page(pageId: $pageId) {
+            id
+          }
+        }
+      }
+    `,
+    variables: {
+      pageId
+    }
+  })
+
+  expect(pageAccess).toEqual({
+    data: {
+      public: {
+        page: {
+          id: pageId
+        }
+      }
+    }
+  })
+})
+
+test('Page can be made private again', async () => {
+  const owner = await signUp()
+  const {cookie} = owner
+
+  const page = await sendPublic({
+    query: `
+      mutation CreatePage {
+        createPage {
+          page {
+            id
+          }
+        }
+      }
+    `,
+    variables: {},
+    cookie
+  })
+
+  expect(page).toMatchObject({
+    data: {
+      createPage: {
+        page: {
+          id: expect.anything()
+        }
+      }
+    }
+  })
+  const pageId = page.data.createPage.page.id
+
+  await sendPublic({
+    query: UPDATE_PAGE_ACCESS,
+    variables: {
+      pageId,
+      subjectType: 'external',
+      subjectId: '*',
+      role: 'editor'
+    },
+    cookie
+  })
+
+  const privateAccess = await sendPublic({
+    query: UPDATE_PAGE_ACCESS,
+    variables: {
+      pageId,
+      subjectType: 'external',
+      subjectId: '*',
+      role: null
+    },
+    cookie
+  })
+
+  expect(privateAccess).toMatchObject({
+    data: {
+      updatePageAccess: {
+        page: {
+          id: pageId,
+          access: {
+            public: null
+          }
+        }
+      }
+    }
+  })
+
+  const pageAccess = await sendPublic({
+    query: `
+      query Page($pageId: ID!) {
+        public {
+          page(pageId: $pageId) {
+            id
+          }
+        }
+      }
+    `,
+    variables: {
+      pageId
+    }
+  })
+
+  expect(pageAccess).toEqual({
+    data: {
+      public: {
+        page: null
+      }
+    },
+    errors: [
+      expect.objectContaining({
+        message: expect.stringMatching('Insufficient permission.')
+      })
+    ]
+  })
+})
+
+test('createPage blocks creating a team page for a team the viewer is not a member of', async () => {
+  const [attacker, victim] = await Promise.all([signUp(), signUp()])
+  const pg = getKysely()
+
+  const before = await pg
+    .selectFrom('Page')
+    .select('id')
+    .where('teamId', '=', victim.teamId)
+    .where('userId', '=', attacker.userId)
+    .execute()
+
+  const createPageRes = await sendPublic({
+    query: `
+      mutation CreatePage($teamId: ID!) {
+        createPage(teamId: $teamId) {
+          ... on CreatePagePayload {
+            page {
+              id
+            }
+          }
+        }
+      }
+    `,
+    variables: {
+      teamId: victim.teamId
+    },
+    cookie: attacker.cookie
+  })
+
+  const after = await pg
+    .selectFrom('Page')
+    .select('id')
+    .where('teamId', '=', victim.teamId)
+    .where('userId', '=', attacker.userId)
+    .execute()
+
+  expect(after.length).toBe(before.length)
+
+  expect(createPageRes).toEqual({
+    data: null,
+    errors: [
+      expect.objectContaining({
+        message: expect.stringMatching('Viewer is not on team')
+      })
+    ]
+  })
+})

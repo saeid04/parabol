@@ -1,16 +1,37 @@
 import styled from '@emotion/styled'
+import AccountBoxIcon from '@mui/icons-material/AccountBox'
+import AddIcon from '@mui/icons-material/Add'
+import AppRegistrationIcon from '@mui/icons-material/AppRegistration'
+import ArrowBackIcon from '@mui/icons-material/ArrowBack'
+import CreditScoreIcon from '@mui/icons-material/CreditScore'
+import ExitToAppIcon from '@mui/icons-material/ExitToApp'
+import ForumIcon from '@mui/icons-material/Forum'
+import GroupIcon from '@mui/icons-material/Group'
+import GroupsIcon from '@mui/icons-material/Groups'
+import KeyIcon from '@mui/icons-material/Key'
+import PlaylistAddCheckIcon from '@mui/icons-material/PlaylistAddCheck'
+import TimelineIcon from '@mui/icons-material/Timeline'
+import WorkIcon from '@mui/icons-material/Work'
 import graphql from 'babel-plugin-relay/macro'
-import React from 'react'
 import {useFragment} from 'react-relay'
-import {useRouteMatch} from 'react-router'
+import {useMatch} from 'react-router'
+import type {DashSidebar_viewer$key} from '../../__generated__/DashSidebar_viewer.graphql'
 import {PALETTE} from '../../styles/paletteV3'
-import {NavSidebar} from '../../types/constEnums'
-import {BILLING_PAGE, MEMBERS_PAGE} from '../../utils/constants'
-import {DashSidebar_viewer$key} from '../../__generated__/DashSidebar_viewer.graphql'
+import {GlobalBanner, NavSidebar} from '../../types/constEnums'
+import {
+  AUTHENTICATION_PAGE,
+  BILLING_PAGE,
+  MEMBERS_PAGE,
+  ORG_INTEGRATIONS_PAGE,
+  ORG_SETTINGS_PAGE,
+  TEAMS_PAGE
+} from '../../utils/constants'
 import DashNavList from '../DashNavList/DashNavList'
 import StandardHub from '../StandardHub/StandardHub'
 import LeftDashNavItem from './LeftDashNavItem'
 import LeftDashParabol from './LeftDashNavParabol'
+
+const isGlobalBannerEnabled = window.__ACTION__.GLOBAL_BANNER_ENABLED
 
 interface Props {
   handleMenuClick: () => void
@@ -26,13 +47,15 @@ const DashSidebarStyles = styled('div')({
   maxWidth: NavSidebar.WIDTH,
   minWidth: NavSidebar.WIDTH,
   overflow: 'hidden',
+  paddingTop: isGlobalBannerEnabled ? GlobalBanner.HEIGHT : 0,
   userSelect: 'none'
 })
 
 const NavBlock = styled('div')({
   flex: 1,
   position: 'relative',
-  padding: 8
+  padding: 8,
+  overflowY: 'auto'
 })
 
 const Nav = styled('nav')({
@@ -41,31 +64,22 @@ const Nav = styled('nav')({
   left: 0,
   height: '100%',
   maxHeight: '100%',
-  padding: '0 0 8px 8px',
+  padding: 0,
   position: 'absolute',
   top: 0,
   width: '100%'
 })
 
-const OrgName = styled('div')({
-  paddingTop: 8,
-  paddingLeft: 8,
-  fontWeight: 600,
-  fontSize: 12,
-  lineHeight: '24px',
-  color: PALETTE.SLATE_500
-})
-
-const NavMain = styled('div')({
-  overflowY: 'auto'
+const TopNavItemsWrap = styled('div')({
+  padding: '10px 12px'
 })
 
 const NavItemsWrap = styled('div')({
-  paddingRight: 8
+  padding: '10px 12px 0'
 })
 
 const DashHR = styled('div')({
-  borderBottom: `solid ${PALETTE.SLATE_300} 1px`,
+  borderBottom: `solid ${PALETTE.SLATE_400} 1px`,
   marginLeft: -8,
   width: 'calc(100% + 8px)'
 })
@@ -73,25 +87,23 @@ const DashHR = styled('div')({
 const Footer = styled('div')({
   display: 'flex',
   // safari flexbox bug: https://stackoverflow.com/a/58720054/3155110
-  flex: '1 0 auto',
   flexDirection: 'column',
-  justifyContent: 'space-between'
+  justifyContent: 'flex-end',
+  marginTop: 'auto',
+  padding: 8
 })
 
 const FooterBottom = styled('div')({})
 
 const MobileDashSidebar = (props: Props) => {
   const {handleMenuClick, viewerRef} = props
-  const match = useRouteMatch<{orgId: string}>('/me/organizations/:orgId')
+  const match = useMatch('/me/organizations/:orgId/*')
 
   const viewer = useFragment(
     graphql`
       fragment MobileDashSidebar_viewer on User {
         ...StandardHub_viewer
         ...DashNavList_viewer
-        featureFlags {
-          checkoutFlow
-        }
         organizations {
           id
           name
@@ -101,11 +113,10 @@ const MobileDashSidebar = (props: Props) => {
     viewerRef
   )
   if (!viewer) return null
-  const {featureFlags, organizations} = viewer
-  const showOrgSidebar = featureFlags.checkoutFlow && match
+  const {organizations} = viewer
 
-  if (showOrgSidebar) {
-    const {orgId: orgIdFromParams} = match.params
+  if (match) {
+    const orgIdFromParams = match.params.orgId!
     const currentOrg = organizations.find((org) => org.id === orgIdFromParams)
     const {id: orgId, name} = currentOrg ?? {}
     return (
@@ -113,29 +124,80 @@ const MobileDashSidebar = (props: Props) => {
         <StandardHub handleMenuClick={handleMenuClick} viewer={viewer} />
         <NavBlock>
           <Nav>
+            <TopNavItemsWrap>
+              <LeftDashNavItem
+                onClick={handleMenuClick}
+                Icon={AccountBoxIcon}
+                href={'/me/profile'}
+                label={'My Settings'}
+              />
+              <LeftDashNavItem
+                onClick={handleMenuClick}
+                Icon={ExitToAppIcon}
+                href={'/signout'}
+                label={'Sign Out'}
+                exact
+              />
+            </TopNavItemsWrap>
+            <DashHR />
             <NavItemsWrap>
               <LeftDashNavItem
                 onClick={handleMenuClick}
-                icon={'arrowBack'}
+                Icon={ArrowBackIcon}
                 href={'/me/organizations'}
                 label={'Organizations'}
+                exact
               />
-              <OrgName>{name}</OrgName>
+              <div className='mt-4 mb-1 flex min-h-[32px] items-center'>
+                <span className='flex-1 pl-3 font-semibold text-base text-slate-700 leading-6'>
+                  {name}
+                </span>
+              </div>
               <LeftDashNavItem
                 onClick={handleMenuClick}
-                icon={'creditScore'}
+                Icon={CreditScoreIcon}
                 href={`/me/organizations/${orgId}/${BILLING_PAGE}`}
                 label={'Plans & Billing'}
               />
               <LeftDashNavItem
                 onClick={handleMenuClick}
-                icon={'group'}
+                Icon={GroupsIcon}
+                href={`/me/organizations/${orgId}/${TEAMS_PAGE}`}
+                label={'Teams'}
+              />
+              <LeftDashNavItem
+                onClick={handleMenuClick}
+                Icon={GroupIcon}
                 href={`/me/organizations/${orgId}/${MEMBERS_PAGE}`}
                 label={'Members'}
+              />
+              <LeftDashNavItem
+                onClick={handleMenuClick}
+                Icon={WorkIcon}
+                href={`/me/organizations/${orgId}/${ORG_SETTINGS_PAGE}`}
+                label={'Organization Settings'}
+              />
+              <LeftDashNavItem
+                onClick={handleMenuClick}
+                Icon={AppRegistrationIcon}
+                href={`/me/organizations/${orgId}/${ORG_INTEGRATIONS_PAGE}`}
+                label={'Integration Settings'}
+              />
+              <LeftDashNavItem
+                onClick={handleMenuClick}
+                Icon={KeyIcon}
+                href={`/me/organizations/${orgId}/${AUTHENTICATION_PAGE}`}
+                label={'Authentication'}
               />
             </NavItemsWrap>
           </Nav>
         </NavBlock>
+        <DashHR />
+        <Footer>
+          <FooterBottom>
+            <LeftDashParabol />
+          </FooterBottom>
+        </Footer>
       </DashSidebarStyles>
     )
   }
@@ -145,54 +207,58 @@ const MobileDashSidebar = (props: Props) => {
       <StandardHub handleMenuClick={handleMenuClick} viewer={viewer} />
       <NavBlock>
         <Nav>
+          <TopNavItemsWrap>
+            <LeftDashNavItem
+              onClick={handleMenuClick}
+              Icon={AccountBoxIcon}
+              href={'/me/profile'}
+              label={'My Settings'}
+            />
+            <LeftDashNavItem
+              onClick={handleMenuClick}
+              Icon={ExitToAppIcon}
+              href={'/signout'}
+              label={'Sign Out'}
+              exact
+            />
+          </TopNavItemsWrap>
+          <DashHR />
           <NavItemsWrap>
             <LeftDashNavItem
               onClick={handleMenuClick}
-              icon={'forum'}
+              Icon={ForumIcon}
               href={'/meetings'}
               label={'Meetings'}
             />
             <LeftDashNavItem
               onClick={handleMenuClick}
-              icon={'history'}
+              Icon={TimelineIcon}
               href={'/me'}
               label={'History'}
+              exact
             />
             <LeftDashNavItem
               onClick={handleMenuClick}
-              icon={'playlist_add_check'}
+              Icon={PlaylistAddCheckIcon}
               href={'/me/tasks'}
               label={'Tasks'}
             />
+            <LeftDashNavItem
+              onClick={handleMenuClick}
+              Icon={AddIcon}
+              href={'/newteam/1'}
+              label={'Add a Team'}
+            />
           </NavItemsWrap>
-          <DashHR />
-          <NavMain>
-            <DashNavList onClick={handleMenuClick} viewer={viewer} />
-          </NavMain>
-          <DashHR />
-          <Footer>
-            <NavItemsWrap>
-              <LeftDashNavItem
-                onClick={handleMenuClick}
-                icon={'add'}
-                href={'/newteam/1'}
-                label={'Add a Team'}
-              />
-            </NavItemsWrap>
-            <FooterBottom>
-              <NavItemsWrap>
-                <LeftDashNavItem
-                  onClick={handleMenuClick}
-                  icon={'exit_to_app'}
-                  href={'/signout'}
-                  label={'Sign out'}
-                />
-              </NavItemsWrap>
-              <LeftDashParabol />
-            </FooterBottom>
-          </Footer>
+          <DashNavList closeMobileSidebar={handleMenuClick} viewerRef={viewer} />
         </Nav>
       </NavBlock>
+      <DashHR />
+      <Footer>
+        <FooterBottom>
+          <LeftDashParabol />
+        </FooterBottom>
+      </Footer>
     </DashSidebarStyles>
   )
 }

@@ -1,24 +1,12 @@
-import styled from '@emotion/styled'
 import graphql from 'babel-plugin-relay/macro'
-import {Editor} from 'draft-js'
-import React from 'react'
 import {useFragment} from 'react-relay'
+import {useNavigate} from 'react-router'
 import NotificationAction from '~/components/NotificationAction'
-import useEditorState from '../hooks/useEditorState'
-import useRouter from '../hooks/useRouter'
-import {cardShadow} from '../styles/elevation'
-import {ResponseReplied_notification$key} from '../__generated__/ResponseReplied_notification.graphql'
+import type {ResponseReplied_notification$key} from '../__generated__/ResponseReplied_notification.graphql'
+import {useTipTapCommentEditor} from '../hooks/useTipTapCommentEditor'
+import anonymousAvatar from '../styles/theme/images/anonymous-avatar.svg'
 import NotificationTemplate from './NotificationTemplate'
-
-const EditorWrapper = styled('div')({
-  backgroundColor: '#fff',
-  borderRadius: 4,
-  boxShadow: cardShadow,
-  fontSize: 14,
-  lineHeight: '20px',
-  margin: '4px 0 0',
-  padding: 8
-})
+import {TipTapEditor} from './TipTapEditor/TipTapEditor'
 
 interface Props {
   notification: ResponseReplied_notification$key
@@ -48,16 +36,20 @@ const ResponseReplied = (props: Props) => {
     `,
     notificationRef
   )
-  const {history} = useRouter()
+  const navigate = useNavigate()
   const {meeting, author, comment, response} = notification
-  const {picture: authorPicture, preferredName: authorName} = author
+  const authorPicture = author ? author.picture : anonymousAvatar
+  const authorName = author ? author.preferredName : 'Anonymous'
 
   const {id: meetingId, name: meetingName} = meeting
   const goThere = () => {
-    history.push(`/meet/${meetingId}/responses?responseId=${encodeURIComponent(response.id)}`)
+    navigate(`/meet/${meetingId}/responses?responseId=${encodeURIComponent(response.id)}`)
   }
 
-  const [editorState] = useEditorState(comment.content)
+  const {editor} = useTipTapCommentEditor(comment.content, {
+    readOnly: true
+  })
+  if (!editor) return null
 
   return (
     <NotificationTemplate
@@ -66,15 +58,9 @@ const ResponseReplied = (props: Props) => {
       notification={notification}
       action={<NotificationAction label={'See the discussion'} onClick={goThere} />}
     >
-      <EditorWrapper>
-        <Editor
-          readOnly
-          editorState={editorState}
-          onChange={() => {
-            /*noop*/
-          }}
-        />
-      </EditorWrapper>
+      <div className='my-1 rounded-sm bg-white p-2 text-sm leading-5 shadow-card'>
+        <TipTapEditor editor={editor} />
+      </div>
     </NotificationTemplate>
   )
 }

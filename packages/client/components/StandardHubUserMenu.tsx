@@ -1,13 +1,12 @@
 import styled from '@emotion/styled'
-import {AccountBalance, AccountBox, BarChart, ExitToApp, Star} from '@mui/icons-material'
+import {AccountBalance, AccountBox, ExitToApp, Star} from '@mui/icons-material'
 import graphql from 'babel-plugin-relay/macro'
-import React from 'react'
 import {useFragment} from 'react-relay'
-import {Link} from 'react-router-dom'
-import {MenuProps} from '../hooks/useMenu'
+import {Link} from 'react-router'
+import type {StandardHubUserMenu_viewer$key} from '../__generated__/StandardHubUserMenu_viewer.graphql'
+import type {MenuProps} from '../hooks/useMenu'
 import {PALETTE} from '../styles/paletteV3'
 import {SIGNOUT_LABEL, SIGNOUT_SLUG} from '../utils/constants'
-import {StandardHubUserMenu_viewer$key} from '../__generated__/StandardHubUserMenu_viewer.graphql'
 import DropdownMenuLabel from './DropdownMenuLabel'
 import Menu from './Menu'
 import MenuItem from './MenuItem'
@@ -43,20 +42,16 @@ const StandardHubUserMenu = (props: Props) => {
     graphql`
       fragment StandardHubUserMenu_viewer on User {
         email
-        featureFlags {
-          insights
-        }
         organizations {
           id
-          tier
+          billingTier
         }
       }
     `,
     viewerRef
   )
-  const {email, featureFlags, organizations} = viewer
-  const {insights} = featureFlags
-  const ownedFreeOrgs = organizations.filter((org) => org.tier === 'starter')
+  const {email, organizations} = viewer
+  const ownedFreeOrgs = organizations.filter((org) => org.billingTier === 'starter')
   const showUpgradeCTA = ownedFreeOrgs.length > 0
   const routeSuffix = ownedFreeOrgs.length === 1 ? `/${ownedFreeOrgs[0]!.id}` : ''
 
@@ -83,18 +78,6 @@ const StandardHubUserMenu = (props: Props) => {
           </MenuItemLink>
         }
       />
-      {insights && (
-        <MenuItem
-          label={
-            <MenuItemLink to={'/usage'}>
-              <MenuItemIcon>
-                <BarChart />
-              </MenuItemIcon>
-              {'Usage'}
-            </MenuItemLink>
-          }
-        />
-      )}
       {showUpgradeCTA && <MenuItemHR key='HR0' />}
       {showUpgradeCTA && (
         <MenuItem

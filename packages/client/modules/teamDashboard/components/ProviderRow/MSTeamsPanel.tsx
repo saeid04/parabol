@@ -1,12 +1,13 @@
 import styled from '@emotion/styled'
 import graphql from 'babel-plugin-relay/macro'
-import React, {FormEvent} from 'react'
+import {type FormEvent, useEffect} from 'react'
 import {useFragment} from 'react-relay'
+import type {MSTeamsPanel_viewer$key} from '~/__generated__/MSTeamsPanel_viewer.graphql'
 import {MenuPosition} from '~/hooks/useCoords'
 import useForm from '~/hooks/useForm'
 import useTooltip from '~/hooks/useTooltip'
 import linkify from '~/utils/linkify'
-import {MSTeamsPanel_viewer$key} from '~/__generated__/MSTeamsPanel_viewer.graphql'
+import type {AddIntegrationProviderMutation as TAddIntegrationProviderMutation} from '../../../../__generated__/AddIntegrationProviderMutation.graphql'
 import FlatButton from '../../../../components/FlatButton'
 import BasicInput from '../../../../components/InputField/BasicInput'
 import LabelHeading from '../../../../components/LabelHeading/LabelHeading'
@@ -19,7 +20,7 @@ import UpdateIntegrationProviderMutation from '../../../../mutations/UpdateInteg
 import {PALETTE} from '../../../../styles/paletteV3'
 import {Layout} from '../../../../types/constEnums'
 import Legitity from '../../../../validation/Legitity'
-import {AddIntegrationProviderMutationResponse} from '../../../../__generated__/AddIntegrationProviderMutation.graphql'
+import NotificationSettings from './NotificationSettings'
 
 interface Props {
   viewerRef: MSTeamsPanel_viewer$key
@@ -77,6 +78,9 @@ const MSTeamsPanel = (props: Props) => {
                   webhookUrl
                 }
               }
+              teamNotificationSettings {
+                ...NotificationSettings_settings
+              }
             }
           }
         }
@@ -87,7 +91,7 @@ const MSTeamsPanel = (props: Props) => {
   const {teamMember} = viewer
   const {integrations} = teamMember!
   const {msTeams} = integrations
-  const {auth} = msTeams
+  const {teamNotificationSettings, auth} = msTeams
   const activeProvider = auth?.provider
   const atmosphere = useAtmosphere()
 
@@ -105,6 +109,12 @@ const MSTeamsPanel = (props: Props) => {
       }
     }
   })
+  // because we render this panel also when isConnectClicked, we cannot guarantee the serverWebhookUrl is correct on first render
+  useEffect(() => {
+    if (serverWebhookUrl && !fields.webhookUrl.value) {
+      fields.webhookUrl.resetValue(serverWebhookUrl)
+    }
+  }, [serverWebhookUrl])
 
   const {
     submitting,
@@ -130,6 +140,7 @@ const MSTeamsPanel = (props: Props) => {
         {
           provider: {
             id: activeProvider.id,
+            teamId,
             scope: 'team',
             webhookProviderMetadataInput: {
               webhookUrl
@@ -139,7 +150,7 @@ const MSTeamsPanel = (props: Props) => {
         {onError, onCompleted}
       )
     } else {
-      const handleCompleted = (res: AddIntegrationProviderMutationResponse) => {
+      const handleCompleted = (res: TAddIntegrationProviderMutation['response']) => {
         const {addIntegrationProvider} = res
         const {provider} = addIntegrationProvider
         if (!provider) return
@@ -200,6 +211,7 @@ const MSTeamsPanel = (props: Props) => {
         {fieldError && <StyledError>{fieldError}</StyledError>}
         {!fieldError && mutationError && <StyledError>{mutationError.message}</StyledError>}
       </form>
+      {teamNotificationSettings && <NotificationSettings settings={teamNotificationSettings} />}
     </MSTeamsPanelStyles>
   )
 }

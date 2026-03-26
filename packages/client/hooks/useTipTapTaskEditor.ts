@@ -1,0 +1,69 @@
+import Mention from '@tiptap/extension-mention'
+import {Placeholder} from '@tiptap/extensions'
+import {Extension, generateText, useEditor} from '@tiptap/react'
+import StarterKit from '@tiptap/starter-kit'
+import type Atmosphere from '../Atmosphere'
+import {LoomExtension} from '../components/TipTapEditor/LoomExtension'
+import {TiptapLinkExtension} from '../components/TipTapEditor/TiptapLinkExtension'
+import {mentionConfig, serverTipTapExtensions} from '../shared/tiptap/serverTipTapExtensions'
+import {MentionTaskTag} from '../utils/MentionTaskTag'
+import {tiptapEmojiConfig} from '../utils/tiptapEmojiConfig'
+import {tiptapMentionConfig} from '../utils/tiptapMentionConfig'
+import {tiptapTagConfig} from '../utils/tiptapTagConfig'
+import {useTipTapEditorContent} from './useTipTapEditorContent'
+
+export const useTipTapTaskEditor = (
+  content: string,
+  options: {
+    atmosphere?: Atmosphere
+    teamId?: string
+    readOnly?: boolean
+    // onBlur here vs. on the component means when the component mounts with new editor content
+    // (e.g. HeaderCard changes taskId) the onBlur won't fire, which is probably desireable
+    onBlur?: () => void
+    onModEnter?: () => void
+  }
+) => {
+  const {atmosphere, teamId, readOnly, onBlur, onModEnter} = options
+  const [contentJSON, editorRef] = useTipTapEditorContent(content)
+  editorRef.current = useEditor(
+    {
+      content: contentJSON,
+      extensions: [
+        StarterKit.configure({link: false}),
+        LoomExtension,
+        Placeholder.configure({
+          showOnlyWhenEditable: false,
+          placeholder: 'Describe what “Done” looks like'
+        }),
+        MentionTaskTag.configure(tiptapTagConfig),
+        Mention.configure(
+          atmosphere && teamId ? tiptapMentionConfig(atmosphere, teamId) : mentionConfig
+        ),
+        Mention.extend({name: 'emojiMention'}).configure(tiptapEmojiConfig),
+        TiptapLinkExtension.configure({
+          openOnClick: false
+        }),
+        Extension.create({
+          name: 'taskEditorKeyboardShortcuts',
+          addKeyboardShortcuts(this) {
+            return {
+              'Mod-Enter': () => {
+                if (onModEnter) {
+                  onModEnter()
+                  return true
+                }
+                return false
+              }
+            }
+          }
+        })
+      ],
+      editable: !readOnly,
+      onBlur,
+      autofocus: generateText(contentJSON, serverTipTapExtensions).length === 0
+    },
+    [contentJSON, readOnly, onBlur]
+  )
+  return {editor: editorRef.current}
+}

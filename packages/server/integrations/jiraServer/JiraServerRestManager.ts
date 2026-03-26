@@ -1,13 +1,16 @@
+import {generateText, type JSONContent} from '@tiptap/core'
+import {fetch} from '@whatwg-node/fetch'
 import crypto from 'crypto'
 import OAuth from 'oauth-1.0a'
-import IntegrationRepoId from '~/shared/gqlIds/IntegrationRepoId'
-import JiraServerIssueId from '~/shared/gqlIds/JiraServerIssueId'
-import {ExternalLinks} from '~/types/constEnums'
-import composeJQL from '~/utils/composeJQL'
-import splitDraftContent from '~/utils/draftjs/splitDraftContent'
-import {IGetTeamMemberIntegrationAuthQueryResult} from '../../postgres/queries/generated/getTeamMemberIntegrationAuthQuery'
-import {IntegrationProviderJiraServer} from '../../postgres/queries/getIntegrationProvidersByIds'
-import {CreateTaskResponse, TaskIntegrationManager} from '../TaskIntegrationManagerFactory'
+import IntegrationRepoId from 'parabol-client/shared/gqlIds/IntegrationRepoId'
+import JiraServerIssueId from 'parabol-client/shared/gqlIds/JiraServerIssueId'
+import {serverTipTapExtensions} from 'parabol-client/shared/tiptap/serverTipTapExtensions'
+import {splitTipTapContent} from 'parabol-client/shared/tiptap/splitTipTapContent'
+import {ExternalLinks} from 'parabol-client/types/constEnums'
+import composeJQL from 'parabol-client/utils/composeJQL'
+import type {TeamMemberIntegrationAuth} from '../../postgres/types'
+import type {IntegrationProviderJiraServer} from '../../postgres/types/IntegrationProvider'
+import type {CreateTaskResponse, TaskIntegrationManager} from '../TaskIntegrationManagerFactory'
 
 const MAX_PAGINATION_RESULTS = 5000
 const MAX_RESULTS_PER_PAGE = 50
@@ -57,7 +60,9 @@ export interface JiraServerIssue {
       id: string
       key: string
       name: string
+      self: string
     }
+    updated: string
   }
   renderedFields: {
     description: string
@@ -94,17 +99,14 @@ interface JiraServerIssuesResponse {
 }
 
 export default class JiraServerRestManager implements TaskIntegrationManager {
-  public title = 'Jira Server'
-  private readonly auth: IGetTeamMemberIntegrationAuthQueryResult
+  public title = 'Jira Data Center'
+  private readonly auth: TeamMemberIntegrationAuth
   private readonly provider: IntegrationProviderJiraServer
   private readonly serverBaseUrl: string
   private readonly oauth: OAuth
   private readonly token: OAuth.Token
 
-  constructor(
-    auth: IGetTeamMemberIntegrationAuthQueryResult,
-    provider: IntegrationProviderJiraServer
-  ) {
+  constructor(auth: TeamMemberIntegrationAuth, provider: IntegrationProviderJiraServer) {
     this.auth = auth
     this.provider = provider
 
@@ -137,7 +139,7 @@ export default class JiraServerRestManager implements TaskIntegrationManager {
   async parseJsonResponse<T>(response: Response): Promise<T | Error> {
     const contentType = response.headers.get('content-type') || ''
     if (!contentType.includes('application/json')) {
-      return new Error('Received non-JSON Jira Server Response')
+      return new Error('Received non-JSON Jira Data Center Response')
     }
     const json = await response.json()
 
@@ -162,6 +164,7 @@ export default class JiraServerRestManager implements TaskIntegrationManager {
       body: body ? JSON.stringify(body) : undefined,
       headers: {
         'Content-Type': 'application/json',
+        'User-Agent': 'parabol',
         ...headers
       }
     })
@@ -286,15 +289,16 @@ export default class JiraServerRestManager implements TaskIntegrationManager {
   }
 
   async createTask({
-    rawContentStr,
+    rawContentJSON,
     integrationRepoId
   }: {
-    rawContentStr: string
+    rawContentJSON: JSONContent
     integrationRepoId: string
   }): Promise<CreateTaskResponse> {
-    const {title: summary, contentState} = splitDraftContent(rawContentStr)
+    const {title: summary, bodyContent} = splitTipTapContent(rawContentJSON)
+
     // TODO: implement stateToJiraServerFormat
-    const description = contentState.getPlainText()
+    const description = generateText(bodyContent, serverTipTapExtensions)
 
     const {repositoryId} = IntegrationRepoId.split(integrationRepoId)
 

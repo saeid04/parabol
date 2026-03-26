@@ -2,8 +2,9 @@ import fs from 'fs'
 import mime from 'mime-types'
 import path from 'path'
 import {brotliCompressSync} from 'zlib'
-import PROD from '../PROD'
 import isCompressible from './isCompressible'
+import {Logger} from './Logger'
+
 class StaticFileMeta {
   mtime: string
   size: number
@@ -20,7 +21,7 @@ class StaticFileMeta {
     this.type = mime.types[ext] ?? 'application/octet-stream'
     if (cacheFile) {
       this.file = fs.readFileSync(pathname)
-      if (PROD && isCompressible(pathname)) {
+      if (__PRODUCTION__ && isCompressible(pathname)) {
         this.brotliFile = brotliCompressSync(this.file)
       }
     }
@@ -32,7 +33,6 @@ interface MetaDict {
 }
 
 interface Options {
-  filesToCache: string[]
   staticPaths: {
     [pathname: string]: boolean
   }
@@ -54,11 +54,9 @@ const makePathnames = (dirname: string, pathnames: PathNames, prefix: string) =>
 }
 export default class StaticServer {
   pathnames: PathNames = {}
-  cachedFileSet: Set<string>
   meta: MetaDict = {}
   constructor(options: Options) {
-    const {filesToCache, staticPaths} = options
-    this.cachedFileSet = new Set(filesToCache)
+    const {staticPaths} = options
     Object.keys(staticPaths).forEach((dirname) => {
       if (!staticPaths[dirname]) return
       try {
@@ -67,7 +65,7 @@ export default class StaticServer {
         }
         makePathnames(dirname, this.pathnames, '')
       } catch (e) {
-        console.log(e)
+        Logger.log(e)
       }
     })
   }
@@ -76,7 +74,8 @@ export default class StaticServer {
     if (existingMeta) return existingMeta
     const pathname = this.pathnames[filename]
     if (!pathname) return false
-    const cacheFile = !PROD || this.cachedFileSet.has(filename)
+    // Caching everything, build files included. ~25MB total, not bad vs. repeated fs reads for PPMIs
+    const cacheFile = true
     return (this.meta[filename] = new StaticFileMeta(pathname, cacheFile))
   }
 }

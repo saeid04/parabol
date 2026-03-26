@@ -1,20 +1,30 @@
-FROM node:18.14.0 as prod
+# Ubuntu Noble (24.04) provides GLIBC 2.39 required by uWebSockets.js
+FROM ubuntu:noble
 
 WORKDIR /parabol
 
-COPY package.json yarn.lock ./
-COPY packages/client/package.json ./packages/client/package.json
-COPY packages/gql-executor/package.json packages/gql-executor/package.json
-COPY packages/integration-tests/package.json packages/integration-tests/package.json
-COPY packages/server/package.json packages/server/package.json
+# Install Node.js 24 via NodeSource and system deps
+RUN apt-get update && apt-get install -y curl ca-certificates build-essential python3 postgresql-client && \
+    curl -fsSL https://deb.nodesource.com/setup_24.x | bash - && \
+    apt-get install -y nodejs && \
+    apt-get clean && rm -rf /var/lib/apt/lists/*
 
-RUN yarn install --frozen-lockfile && \
-      yarn cache clean
+# Enable corepack for pnpm
+RUN corepack enable
+
+COPY package.json pnpm-lock.yaml pnpm-workspace.yaml ./
+COPY packages/client/package.json ./packages/client/package.json
+COPY packages/embedder/package.json ./packages/embedder/package.json
+COPY packages/integration-tests/package.json ./packages/integration-tests/package.json
+COPY packages/mattermost-plugin/package.json ./packages/mattermost-plugin/package.json
+COPY packages/server/package.json ./packages/server/package.json
+
+RUN pnpm install --frozen-lockfile
 
 COPY . .
 
 RUN cp docker/entrypoint.prod.sh /bin/entrypoint && \
       chmod +x /bin/entrypoint
 EXPOSE 80
-ENTRYPOINT [ "entrypoint" ]
-CMD ["yarn", "start"]
+ENTRYPOINT ["entrypoint"]
+CMD ["pnpm", "start"]

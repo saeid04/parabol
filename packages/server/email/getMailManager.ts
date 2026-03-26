@@ -1,4 +1,5 @@
-import MailManager from './MailManager'
+import typedLookup from '../../client/types/typedLookup'
+import type MailManager from './MailManager'
 import MailManagerDebug from './MailManagerDebug'
 import MailManagerGoogle from './MailManagerGoogle'
 import MailManagerMailgun from './MailManagerMailgun'
@@ -16,7 +17,7 @@ const managers = {
 const getMailManager = () => {
   if (!mailManager) {
     const mailProvider = process.env.MAIL_PROVIDER!
-    const Manager = managers[mailProvider as keyof typeof managers] ?? MailManagerDebug
+    const Manager = typedLookup(managers, mailProvider) ?? MailManagerDebug
     mailManager = new Manager()
   }
   return mailManager

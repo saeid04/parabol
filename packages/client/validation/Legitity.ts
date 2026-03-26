@@ -1,3 +1,4 @@
+const segmenter = new Intl.Segmenter('en', {granularity: 'grapheme'})
 class Legitity {
   value: any
   error: undefined | string
@@ -37,10 +38,8 @@ class Legitity {
 
   max(len: number, msg?: string) {
     if (this.value !== undefined) {
-      // this.value.length gives us the count of UTF-16 units, so 🔥 has a length of 2
-      // Spreading the string into an array gives us the desired length in codepoints (characters): https://stackoverflow.com/a/54369605
-      const value = [...this.value]
-      if (!this.error && value.length > len) {
+      const valueLength = [...segmenter.segment(this.value)].length
+      if (!this.error && valueLength > len) {
         this.error = msg || 'max'
       }
     }
@@ -49,10 +48,8 @@ class Legitity {
 
   min(len: number, msg?: string) {
     if (this.value !== undefined) {
-      // this.value.length gives us the count of UTF-16 units, so 🔥 has a length of 2
-      // Spreading the string into an array gives us the desired length in codepoints (characters): https://stackoverflow.com/a/54369605
-      const value = [...this.value]
-      if (!this.error && value.length < len) {
+      const valueLength = [...segmenter.segment(this.value)].length
+      if (!this.error && valueLength < len) {
         this.error = msg || 'min'
       }
     }

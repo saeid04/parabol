@@ -1,7 +1,7 @@
 import styled from '@emotion/styled'
-import React, {forwardRef} from 'react'
+import {forwardRef} from 'react'
 import useAtmosphere from '../hooks/useAtmosphere'
-import {MenuMutationProps} from '../hooks/useMutationProps'
+import type {MenuMutationProps} from '../hooks/useMutationProps'
 import {ICON_SIZE} from '../styles/typographyV2'
 import GitHubClientManager from '../utils/GitHubClientManager'
 import GitHubSVG from './GitHubSVG'
@@ -28,6 +28,7 @@ const AddToGitHubMenuItem = forwardRef((props: Props, ref) => {
   const openOAuth = () => {
     GitHubClientManager.openOAuth(atmosphere, teamId, mutationProps)
   }
+  if (!GitHubClientManager.isAvailable) return null
   return (
     <MenuItem
       ref={ref}

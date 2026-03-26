@@ -1,5 +1,5 @@
 import styled from '@emotion/styled'
-import React, {ReactNode} from 'react'
+import type {ReactNode} from 'react'
 import useBreakpoint from '../hooks/useBreakpoint'
 import {DECELERATE} from '../styles/animation'
 import {desktopSidebarShadow, Elevation} from '../styles/elevation'
@@ -13,6 +13,7 @@ interface Props {
   onToggle: () => void
   isRightDrawer?: boolean
   sidebarWidth?: number
+  isDesktop?: boolean
 }
 
 const Sidebar = styled('div')<{isOpen: boolean}>(({isOpen}) => ({
@@ -21,9 +22,10 @@ const Sidebar = styled('div')<{isOpen: boolean}>(({isOpen}) => ({
 }))
 
 const ResponsiveDashSidebar = (props: Props) => {
-  const {children, isOpen, onToggle, isRightDrawer = false, sidebarWidth} = props
-  const isDesktop = useBreakpoint(Breakpoint.SIDEBAR_LEFT)
-  if (isDesktop) {
+  const {children, isOpen, onToggle, isRightDrawer = false, sidebarWidth, isDesktop} = props
+  const isDesktopDefault = useBreakpoint(Breakpoint.SIDEBAR_LEFT)
+  const showDesktopView = isDesktop ?? isDesktopDefault
+  if (showDesktopView) {
     return (
       <StaticSidebar isOpen={isOpen} isRightDrawer={isRightDrawer}>
         <Sidebar isOpen={isOpen}>{children}</Sidebar>

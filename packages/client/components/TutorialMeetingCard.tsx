@@ -1,7 +1,9 @@
 import styled from '@emotion/styled'
-import React, {useCallback} from 'react'
-import SendClientSegmentEventMutation from '~/mutations/SendClientSegmentEventMutation'
-import tutorialThumb from '../../../static/images/illustrations/tutorialThumb.jpg'
+import {useCallback} from 'react'
+import SendClientSideEvent from '~/utils/SendClientSideEvent'
+import pokerTutorialThumb from '../../../static/images/illustrations/pokerTutorialThumb.jpg'
+import retroTutorialThumb from '../../../static/images/illustrations/retroTutorialThumb.png'
+import standupTutorialThumb from '../../../static/images/illustrations/standupTutorialThumb.jpg'
 import useAtmosphere from '../hooks/useAtmosphere'
 import useBreakpoint from '../hooks/useBreakpoint'
 import useModal from '../hooks/useModal'
@@ -21,7 +23,7 @@ const CardWrapper = styled('div')<{
   transition: `box-shadow 100ms ${BezierCurve.DECELERATE}, opacity 300ms ${BezierCurve.DECELERATE}`,
   marginBottom: maybeTabletPlus ? 0 : 16,
   margin: 8,
-  width: maybeTabletPlus ? ElementWidth.MEETING_CARD : '100%',
+  width: maybeTabletPlus ? ElementWidth.MEETING_CARD : 'calc(100% - 16px)',
   userSelect: 'none',
   cursor: 'pointer',
   ':hover': {
@@ -98,18 +100,44 @@ const TopLine = styled('div')({
   display: 'flex'
 })
 
-const TutorialMeetingCard = () => {
+interface Props {
+  type: 'retro' | 'poker' | 'standup'
+}
+
+const TUTORIAL_MAP = {
+  retro: {
+    label: 'Starting a Retrospective Meeting',
+    thumbnail: retroTutorialThumb,
+    url: 'https://www.youtube.com/embed/C96fNtypaww?modestbranding=1&rel=0'
+  },
+  poker: {
+    label: 'Starting a Sprint Poker Meeting',
+    thumbnail: pokerTutorialThumb,
+    url: 'https://www.youtube.com/embed/RJGnNXvvShY?modestbranding=1&rel=0'
+  },
+  standup: {
+    label: 'Starting a Standup Meeting',
+    thumbnail: standupTutorialThumb,
+    url: 'https://www.youtube.com/embed/cN9fN1WGmXI?modestbranding=1&rel=0'
+  }
+}
+
+const TutorialMeetingCard = (props: Props) => {
   const maybeTabletPlus = useBreakpoint(Breakpoint.FUZZY_TABLET)
   const atmospehere = useAtmosphere()
+  const config = TUTORIAL_MAP[props.type]
 
   const onOpen = useCallback(() => {
-    SendClientSegmentEventMutation(atmospehere, 'Tutorial Meeting Card Opened')
+    SendClientSideEvent(atmospehere, 'Tutorial Meeting Card Opened')
   }, [])
   const onClose = useCallback(() => {
-    SendClientSegmentEventMutation(atmospehere, 'Tutorial Meeting Card Closed')
+    SendClientSideEvent(atmospehere, 'Tutorial Meeting Card Closed')
   }, [])
 
-  const {togglePortal: toggleModal, modalPortal} = useModal({onOpen, onClose})
+  const {togglePortal: toggleModal, modalPortal} = useModal({
+    onOpen,
+    onClose
+  })
 
   return (
     <>
@@ -117,16 +145,16 @@ const TutorialMeetingCard = () => {
         <MeetingImgWrapper>
           <MeetingImgBackground />
           <MeetingTypeLabel>Tutorial</MeetingTypeLabel>
-          <MeetingImg src={tutorialThumb} alt='' />
+          <MeetingImg src={config.thumbnail} alt='' />
         </MeetingImgWrapper>
         <MeetingInfo>
           <TopLine>
-            <Name>Starting a Sprint Poker Meeting</Name>
+            <Name>{config.label}</Name>
           </TopLine>
           <Meta>Video tutorial</Meta>
         </MeetingInfo>
       </CardWrapper>
-      {modalPortal(<MeetingsDashTutorialModal />)}
+      {modalPortal(<MeetingsDashTutorialModal label={config.label} src={config.url} />)}
     </>
   )
 }

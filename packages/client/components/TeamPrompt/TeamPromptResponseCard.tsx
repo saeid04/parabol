@@ -1,34 +1,34 @@
 import styled from '@emotion/styled'
-import {Editor as EditorState} from '@tiptap/core'
-import {JSONContent} from '@tiptap/react'
+import {Link} from '@mui/icons-material'
+import type {Editor} from '@tiptap/core'
+import type {JSONContent} from '@tiptap/react'
 import graphql from 'babel-plugin-relay/macro'
-import React, {useMemo} from 'react'
+import {useMemo} from 'react'
+import CopyToClipboard from 'react-copy-to-clipboard'
 import {commitLocalUpdate, useFragment} from 'react-relay'
+import type {TeamPromptResponseCard_stage$key} from '~/__generated__/TeamPromptResponseCard_stage.graphql'
 import useAnimatedCard from '~/hooks/useAnimatedCard'
 import useAtmosphere from '~/hooks/useAtmosphere'
 import useEventCallback from '~/hooks/useEventCallback'
 import {TransitionStatus} from '~/hooks/useTransition'
-import AddReactjiToReactableMutation from '~/mutations/AddReactjiToReactableMutation'
-import ReactjiId from '~/shared/gqlIds/ReactjiId'
 import {Elevation} from '~/styles/elevation'
 import {PALETTE} from '~/styles/paletteV3'
 import {BezierCurve, Card} from '~/types/constEnums'
 import plural from '~/utils/plural'
-import {TeamPromptResponseCard_stage$key} from '~/__generated__/TeamPromptResponseCard_stage.graphql'
+import {MenuPosition} from '../../hooks/useCoords'
 import useMutationProps from '../../hooks/useMutationProps'
+import useTooltip from '../../hooks/useTooltip'
 import UpsertTeamPromptResponseMutation from '../../mutations/UpsertTeamPromptResponseMutation'
+import makeAppURL from '../../utils/makeAppURL'
+import {mergeRefs} from '../../utils/react/mergeRefs'
+import SendClientSideEvent from '../../utils/SendClientSideEvent'
 import Avatar from '../Avatar/Avatar'
 import PlainButton from '../PlainButton/PlainButton'
-import PromptResponseEditor from '../promptResponse/PromptResponseEditor'
-import ReactjiSection from '../ReflectionCard/ReactjiSection'
-import {ResponseCardDimensions, ResponsesGridBreakpoints} from './TeamPromptGridDimensions'
+import PromptResponseEditor from './PromptResponseEditor'
+import {ResponseCardDimensions} from './TeamPromptGridDimensions'
 import TeamPromptLastUpdatedTime from './TeamPromptLastUpdatedTime'
 import TeamPromptRepliesAvatarList from './TeamPromptRepliesAvatarList'
-
-const twoColumnResponseMediaQuery = `@media screen and (min-width: ${ResponsesGridBreakpoints.TWO_RESPONSE_COLUMN}px)`
-const threeColumnResponseMediaQuery = `@media screen and (min-width: ${ResponsesGridBreakpoints.THREE_RESPONSE_COLUMNS}px)`
-const fourColumnResponseMediaQuery = `@media screen and (min-width: ${ResponsesGridBreakpoints.FOUR_RESPONSE_COLUMNS}px)`
-const fiveColumnResponseMediaQuery = `@media screen and (min-width: ${ResponsesGridBreakpoints.FIVE_RESPONSE_COLUMNS}px)`
+import {TeamPromptResponseEmojis} from './TeamPromptResponseEmojis'
 
 const ResponseWrapper = styled('div')<{
   status: TransitionStatus
@@ -38,18 +38,8 @@ const ResponseWrapper = styled('div')<{
   display: 'flex',
   flexDirection: 'column',
   width: '100%',
-  [twoColumnResponseMediaQuery]: {
-    width: `calc(100% / 2 - ${ResponseCardDimensions.GAP}px)`
-  },
-  [threeColumnResponseMediaQuery]: {
-    width: `calc(100% / 3 - ${ResponseCardDimensions.GAP}px)`
-  },
-  [fourColumnResponseMediaQuery]: {
-    width: `calc(100% / 4 - ${ResponseCardDimensions.GAP}px)`
-  },
-  [fiveColumnResponseMediaQuery]: {
-    width: `calc(100% / 5 - ${ResponseCardDimensions.GAP}px)`
-  }
+  maxWidth: '600px',
+  margin: '0 auto'
 }))
 
 const ResponseHeader = styled('div')({
@@ -60,21 +50,22 @@ const ResponseHeader = styled('div')({
   marginBottom: 12
 })
 
-const ResponseCard = styled('div')<{isEmpty: boolean; isHighlighted?: boolean}>(
-  ({isEmpty = false, isHighlighted = false}) => ({
-    background: isEmpty ? PALETTE.SLATE_300 : Card.BACKGROUND_COLOR,
-    borderRadius: Card.BORDER_RADIUS,
-    boxShadow: isEmpty ? undefined : Elevation.CARD_SHADOW,
-    flex: 1,
-    display: 'flex',
-    flexDirection: 'column',
-    justifyContent: 'space-between',
-    color: isEmpty ? PALETTE.SLATE_600 : undefined,
-    padding: Card.PADDING,
-    minHeight: ResponseCardDimensions.MIN_CARD_HEIGHT,
-    outline: isHighlighted ? `2px solid ${PALETTE.SKY_300}` : 'none'
-  })
-)
+const ResponseCard = styled('div')<{
+  isEmpty: boolean
+  isHighlighted?: boolean
+}>(({isEmpty = false, isHighlighted = false}) => ({
+  background: isEmpty ? PALETTE.SLATE_300 : Card.BACKGROUND_COLOR,
+  borderRadius: Card.BORDER_RADIUS,
+  boxShadow: isEmpty ? undefined : Elevation.CARD_SHADOW,
+  flex: 1,
+  display: 'flex',
+  flexDirection: 'column',
+  justifyContent: 'space-between',
+  color: isEmpty ? PALETTE.SLATE_600 : undefined,
+  padding: Card.PADDING,
+  minHeight: ResponseCardDimensions.MIN_CARD_HEIGHT,
+  outline: isHighlighted ? `2px solid ${PALETTE.SKY_300}` : 'none'
+}))
 
 const ResponseCardFooter = styled('div')({
   display: 'flex',
@@ -89,11 +80,6 @@ export const TeamMemberName = styled('h3')({
   margin: 0,
   overflow: 'hidden',
   textOverflow: 'ellipsis'
-})
-
-const StyledReactjis = styled(ReactjiSection)({
-  paddingRight: '8px',
-  paddingTop: '8px'
 })
 
 const ReplyButton = styled(PlainButton)({
@@ -115,6 +101,18 @@ interface Props {
   onTransitionEnd: () => void
 }
 
+graphql`
+  fragment TeamPromptResponseCard_response on TeamPromptResponse {
+    id
+    userId
+    content
+    plaintextContent
+    updatedAt
+    createdAt
+    ...TeamPromptResponseEmojis_response
+  }
+`
+
 const TeamPromptResponseCard = (props: Props) => {
   const {stageRef, status, onTransitionEnd, displayIdx} = props
   const responseStage = useFragment(
@@ -131,9 +129,11 @@ const TeamPromptResponseCard = (props: Props) => {
           }
         }
         teamMember {
-          userId
-          picture
-          preferredName
+          user {
+            id
+            picture
+            preferredName
+          }
         }
         discussion {
           thread(first: 1000) @connection(key: "DiscussionThread_thread") {
@@ -143,17 +143,7 @@ const TeamPromptResponseCard = (props: Props) => {
           }
         }
         response {
-          id
-          userId
-          content
-          plaintextContent
-          updatedAt
-          createdAt
-          reactjis {
-            ...ReactjiSection_reactjis
-            id
-            isViewerReactji
-          }
+          ...TeamPromptResponseCard_response @relay(mask: false)
         }
       }
     `,
@@ -173,6 +163,7 @@ const TeamPromptResponseCard = (props: Props) => {
         const meetingProxy = store.get(responseStage.meetingId)
         if (!meetingProxy) return
         meetingProxy.setValue(responseStage.id, 'localStageId')
+        meetingProxy.setValue(false, 'showWorkSidebar')
         meetingProxy.setValue(true, 'isRightDrawerOpen')
       })
     }
@@ -181,15 +172,15 @@ const TeamPromptResponseCard = (props: Props) => {
   const atmosphere = useAtmosphere()
   const {viewerId} = atmosphere
 
-  const {teamMember, meetingId, meeting, discussion, response, teamId} = responseStage
-  const {picture, preferredName, userId} = teamMember
+  const {id: stageId, teamMember, meetingId, meeting, discussion, response, teamId} = responseStage
+  const {user} = teamMember
+  const {id: userId, picture, preferredName} = user
 
   const contentJSON: JSONContent | null = useMemo(
     () => (response ? JSON.parse(response.content) : null),
     [response]
   )
   const plaintextContent = response?.plaintextContent ?? ''
-  const reactjis = response?.reactjis ?? []
 
   const discussionEdges = discussion.thread.edges
   const replyCount = discussionEdges.length
@@ -201,12 +192,12 @@ const TeamPromptResponseCard = (props: Props) => {
   const nonViewerEmptyResponsePlaceholder = isMeetingEnded ? 'No response' : 'No response yet...'
 
   const {onError, onCompleted, submitMutation, submitting} = useMutationProps()
-  const handleSubmit = useEventCallback((editorState: EditorState) => {
+  const handleSubmit = useEventCallback((editor: Editor) => {
     if (submitting) return
     submitMutation()
 
-    const content = JSON.stringify(editorState.getJSON())
-    const plaintextContent = editorState.getText()
+    const content = JSON.stringify(editor.getJSON())
+    const plaintextContent = editor.getText()
 
     UpsertTeamPromptResponseMutation(
       atmosphere,
@@ -215,31 +206,41 @@ const TeamPromptResponseCard = (props: Props) => {
     )
   })
 
-  const onToggleReactji = (emojiId: string) => {
-    if (submitting || !response) return
-    const isRemove = !!reactjis.find((reactji) => {
-      return reactji.isViewerReactji && ReactjiId.split(reactji.id).name === emojiId
-    })
-    submitMutation()
-    AddReactjiToReactableMutation(
-      atmosphere,
-      {
-        reactableId: response?.id,
-        reactableType: 'RESPONSE',
-        isRemove,
-        reactji: emojiId,
-        meetingId
-      },
-      {onCompleted, onError}
-    )
-  }
-
   const ref = useAnimatedCard(displayIdx, status)
+
+  const responsePermalink = makeAppURL(window.location.origin, `/meet/${meetingId}/responses`, {
+    searchParams: {
+      utm_source: 'sharing',
+      responseId: response?.id
+    }
+  })
+
+  const {tooltipPortal, openTooltip, closeTooltip, originRef} = useTooltip<HTMLDivElement>(
+    MenuPosition.UPPER_CENTER
+  )
+
+  const {
+    tooltipPortal: copiedTooltipPortal,
+    openTooltip: openCopiedTooltip,
+    closeTooltip: closeCopiedTooltip,
+    originRef: copiedTooltipRef
+  } = useTooltip<HTMLDivElement>(MenuPosition.LOWER_CENTER)
+
+  const handleCopy = () => {
+    openCopiedTooltip()
+    SendClientSideEvent(atmosphere, 'Copied Standup Response Link', {
+      teamId: teamId,
+      meetingId: meetingId
+    })
+    setTimeout(() => {
+      closeCopiedTooltip()
+    }, 2000)
+  }
 
   return (
     <ResponseWrapper ref={ref} status={status} onTransitionEnd={onTransitionEnd}>
       <ResponseHeader>
-        <Avatar picture={picture} size={48} />
+        <Avatar picture={picture} className='h-12 w-12' />
         <TeamMemberName>
           {preferredName}
           {response && (
@@ -249,6 +250,18 @@ const TeamPromptResponseCard = (props: Props) => {
             />
           )}
         </TeamMemberName>
+        {response && (
+          <CopyToClipboard text={responsePermalink} onCopy={handleCopy}>
+            <div
+              className='ml-auto h-7 rounded-full bg-transparent p-0 text-slate-500 hover:bg-slate-300 hover:text-slate-600'
+              onMouseEnter={openTooltip}
+              onMouseLeave={closeTooltip}
+              ref={mergeRefs(originRef, copiedTooltipRef)}
+            >
+              <Link className='h-7 w-7 cursor-pointer p-0.5' />
+            </div>
+          </CopyToClipboard>
+        )}
       </ResponseHeader>
       <ResponseCard
         isEmpty={isEmptyResponse}
@@ -265,10 +278,11 @@ const TeamPromptResponseCard = (props: Props) => {
               content={contentJSON}
               readOnly={!isViewerResponse || isMeetingEnded}
               placeholder={viewerEmptyResponsePlaceholder}
+              draftStorageKey={`draftResponse:${stageId}`}
             />
-            {!!plaintextContent && (
+            {!!response && (
               <ResponseCardFooter>
-                <StyledReactjis reactjis={reactjis} onToggle={onToggleReactji} />
+                <TeamPromptResponseEmojis responseRef={response} meetingId={meetingId} />
                 <ReplyButton onClick={() => onSelectDiscussion()}>
                   {replyCount > 0 ? (
                     <>
@@ -284,6 +298,8 @@ const TeamPromptResponseCard = (props: Props) => {
           </>
         )}
       </ResponseCard>
+      {tooltipPortal('Copy permalink')}
+      {copiedTooltipPortal('Copied!')}
     </ResponseWrapper>
   )
 }

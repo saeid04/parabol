@@ -1,31 +1,32 @@
 import styled from '@emotion/styled'
-import {Close as CloseIcon, Link, PersonAdd as PersonAddIcon} from '@mui/icons-material'
+import {
+  Close as CloseIcon,
+  Link,
+  PersonAdd as PersonAddIcon,
+  Replay as ReplayIcon
+} from '@mui/icons-material'
 import graphql from 'babel-plugin-relay/macro'
-import React from 'react'
-import {PreloadedQuery, usePreloadedQuery} from 'react-relay'
+import {type PreloadedQuery, usePreloadedQuery} from 'react-relay'
+import {useNavigate} from 'react-router'
 import useAtmosphere from '~/hooks/useAtmosphere'
 import useMutationProps from '~/hooks/useMutationProps'
-import useRouter from '~/hooks/useRouter'
-import EndTeamPromptMutation from '~/mutations/EndTeamPromptMutation'
-import {MenuProps} from '../hooks/useMenu'
-import EndCheckInMutation from '../mutations/EndCheckInMutation'
-import EndRetrospectiveMutation from '../mutations/EndRetrospectiveMutation'
-import EndSprintPokerMutation from '../mutations/EndSprintPokerMutation'
-import SendClientSegmentEventMutation from '../mutations/SendClientSegmentEventMutation'
+import type {MeetingCardOptionsMenuQuery} from '../__generated__/MeetingCardOptionsMenuQuery.graphql'
+import type {MenuProps} from '../hooks/useMenu'
 import {PALETTE} from '../styles/paletteV3'
-import {HistoryMaybeLocalHandler, StandardMutation} from '../types/relayMutations'
 import getMassInvitationUrl from '../utils/getMassInvitationUrl'
 import makeAppURL from '../utils/makeAppURL'
-import {MeetingCardOptionsMenuQuery} from '../__generated__/MeetingCardOptionsMenuQuery.graphql'
-import {MeetingTypeEnum} from '../__generated__/SendClientSegmentEventMutation.graphql'
+import SendClientSideEvent from '../utils/SendClientSideEvent'
 import Menu from './Menu'
 import MenuItem from './MenuItem'
 import {MenuItemLabelStyle} from './MenuItemLabel'
+import {EndMeetingMutationLookup} from './Recurrence/EndRecurringMeetingModal'
 
 interface Props {
   menuProps: MenuProps
   popTooltip: () => void
   queryRef: PreloadedQuery<MeetingCardOptionsMenuQuery>
+  openRecurrenceSettingsModal: () => void
+  openEndRecurringMeetingModal: () => void
 }
 
 const StyledIcon = styled('div')({
@@ -48,16 +49,6 @@ const OptionMenuItem = styled('div')({
   minWidth: '200px'
 })
 
-const EndMeetingMutationLookup: Record<
-  MeetingTypeEnum,
-  StandardMutation<any, HistoryMaybeLocalHandler>
-> = {
-  teamPrompt: EndTeamPromptMutation,
-  action: EndCheckInMutation,
-  retrospective: EndRetrospectiveMutation,
-  poker: EndSprintPokerMutation
-}
-
 const query = graphql`
   query MeetingCardOptionsMenuQuery($teamId: ID!, $meetingId: ID!) {
     viewer {
@@ -72,10 +63,8 @@ const query = graphql`
         id
         meetingType
         facilitatorUserId
-        ... on TeamPromptMeeting {
-          meetingSeries {
-            cancelledAt
-          }
+        meetingSeries {
+          cancelledAt
         }
       }
     }
@@ -83,10 +72,14 @@ const query = graphql`
 `
 
 const MeetingCardOptionsMenu = (props: Props) => {
-  const {menuProps, popTooltip, queryRef} = props
-  const data = usePreloadedQuery<MeetingCardOptionsMenuQuery>(query, queryRef, {
-    UNSTABLE_renderPolicy: 'full'
-  })
+  const {
+    menuProps,
+    popTooltip,
+    queryRef,
+    openRecurrenceSettingsModal,
+    openEndRecurringMeetingModal
+  } = props
+  const data = usePreloadedQuery<MeetingCardOptionsMenuQuery>(query, queryRef)
   const {viewer} = data
   const {id: viewerId, team, meeting} = viewer
   const {massInvitation} = team!
@@ -96,7 +89,7 @@ const MeetingCardOptionsMenu = (props: Props) => {
   const canEndMeeting = meetingType === 'teamPrompt' || isViewerFacilitator
   const atmosphere = useAtmosphere()
   const {onCompleted, onError} = useMutationProps()
-  const {history} = useRouter()
+  const navigate = useNavigate()
 
   const hasRecurrenceEnabled = meetingSeries && !meetingSeries.cancelledAt
 
@@ -118,7 +111,7 @@ const MeetingCardOptionsMenu = (props: Props) => {
             const copyUrl = makeAppURL(window.location.origin, `meeting-series/${meetingId}`)
             await navigator.clipboard.writeText(copyUrl)
 
-            SendClientSegmentEventMutation(atmosphere, 'Copied Meeting Series Link', {
+            SendClientSideEvent(atmosphere, 'Copied Meeting Series Link', {
               teamId: team?.id,
               meetingId: meetingId
             })
@@ -141,12 +134,29 @@ const MeetingCardOptionsMenu = (props: Props) => {
           const copyUrl = getMassInvitationUrl(token)
           await navigator.clipboard.writeText(copyUrl)
 
-          SendClientSegmentEventMutation(atmosphere, 'Copied Invite Link', {
+          SendClientSideEvent(atmosphere, 'Copied Invite Link', {
             teamId: team?.id,
             meetingId: meetingId
           })
         }}
       />
+      {canEndMeeting && hasRecurrenceEnabled && (
+        <MenuItem
+          key='edit-recurrence'
+          label={
+            <OptionMenuItem>
+              <StyledIcon>
+                <ReplayIcon />
+              </StyledIcon>
+              <span>{'Edit recurrence settings'}</span>
+            </OptionMenuItem>
+          }
+          onClick={() => {
+            closePortal()
+            openRecurrenceSettingsModal()
+          }}
+        />
+      )}
       {canEndMeeting && (
         <MenuItem
           key='close'
@@ -155,16 +165,20 @@ const MeetingCardOptionsMenu = (props: Props) => {
               <StyledIcon>
                 <CloseIcon />
               </StyledIcon>
-              <span>{'End the meeting'}</span>
+              <span>{'End this meeting'}</span>
             </OptionMenuItem>
           }
           onClick={() => {
             closePortal()
-            EndMeetingMutationLookup[meetingType]?.(
-              atmosphere,
-              {meetingId},
-              {onError, onCompleted, history}
-            )
+            if (!hasRecurrenceEnabled) {
+              EndMeetingMutationLookup[meetingType]?.(
+                atmosphere,
+                {meetingId},
+                {onError, onCompleted, navigate}
+              )
+            } else {
+              openEndRecurringMeetingModal()
+            }
           }}
         />
       )}

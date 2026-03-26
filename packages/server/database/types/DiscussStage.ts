@@ -1,5 +1,5 @@
 import generateUID from '../../generateUID'
-import GenericMeetingStage, {GenericMeetingStageInput} from './GenericMeetingStage'
+import GenericMeetingStage, {type GenericMeetingStageInput} from './GenericMeetingStage'
 
 interface Input extends Omit<GenericMeetingStageInput, 'phaseType'> {
   sortOrder: number
@@ -10,7 +10,7 @@ export default class DiscussStage extends GenericMeetingStage {
   reflectionGroupId: string
   discussionId: string
   sortOrder: number
-  phaseType!: 'discuss'
+  phaseType = 'discuss' as const
   constructor(input: Input) {
     const {sortOrder, discussionId, reflectionGroupId} = input
     super({...input, phaseType: 'discuss'})

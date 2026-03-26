@@ -1,7 +1,7 @@
 import styled from '@emotion/styled'
-import React, {forwardRef} from 'react'
+import {forwardRef} from 'react'
 import useAtmosphere from '../hooks/useAtmosphere'
-import {MenuMutationProps} from '../hooks/useMutationProps'
+import type {MenuMutationProps} from '../hooks/useMutationProps'
 import {ICON_SIZE} from '../styles/typographyV2'
 import AtlassianClientManager from '../utils/AtlassianClientManager'
 import JiraSVG from './JiraSVG'
@@ -28,6 +28,7 @@ const AddToJiraMenuItem = forwardRef((props: Props, ref) => {
   const onClick = () => {
     AtlassianClientManager.openOAuth(atmosphere, teamId, mutationProps)
   }
+  if (!AtlassianClientManager.isAvailable) return null
   return (
     <MenuItem
       ref={ref}

@@ -1,63 +1,33 @@
-import {SubscriptionChannel} from 'parabol-client/types/constEnums'
-import getRethink from '../../../database/rethinkDriver'
-import generateUID from '../../../generateUID'
-import getPg from '../../../postgres/getPg'
-import {addUserNewFeatureQuery} from '../../../postgres/queries/generated/addUserNewFeatureQuery'
-import getRedis from '../../../utils/getRedis'
-import publish from '../../../utils/publish'
-import sendToSentry from '../../../utils/sendToSentry'
-import {MutationResolvers} from '../resolverTypes'
+import getKysely from '../../../postgres/getKysely'
+import type {MutationResolvers} from '../resolverTypes'
 
 const addNewFeature: MutationResolvers['addNewFeature'] = async (
   _source,
-  {actionButtonCopy, snackbarMessage, url},
-  {dataLoader}
+  {actionButtonCopy, snackbarMessage, url}
 ) => {
-  const r = await getRethink()
-  const redis = getRedis()
+  const pg = getKysely()
 
   // AUTH
-  const operationId = dataLoader.share()
-  const subOptions = {operationId}
 
   // RESOLUTION
-  const newFeatureId = generateUID()
+  const newFeatureRes = await pg
+    .with('NewFeatureInsert', (qb) =>
+      qb.insertInto('NewFeature').values({actionButtonCopy, snackbarMessage, url}).returning('id')
+    )
+    .updateTable('User')
+    .set((eb) => ({
+      newFeatureId: eb.selectFrom('NewFeatureInsert').select('NewFeatureInsert.id')
+    }))
+    .returning((eb) => [eb.selectFrom('NewFeatureInsert').select('NewFeatureInsert.id').as('id')])
+    .executeTakeFirstOrThrow()
+
   const newFeature = {
-    id: newFeatureId,
     actionButtonCopy,
     snackbarMessage,
-    url
+    url,
+    id: newFeatureRes.id!
   }
-  await Promise.all([
-    r.table('NewFeature').insert(newFeature).run(),
-    addUserNewFeatureQuery.run({newFeatureId}, getPg())
-  ])
-
-  const onlineUserIds = new Set()
-  const stream = redis.scanStream({match: 'presence:*'})
-  stream.on('data', (keys) => {
-    if (!keys?.length) return
-    for (const key of keys) {
-      const userId = key.substring('presence:'.length)
-      if (!onlineUserIds.has(userId)) {
-        onlineUserIds.add(userId)
-        publish(
-          SubscriptionChannel.NOTIFICATION,
-          userId,
-          'AddNewFeaturePayload',
-          {newFeature},
-          subOptions
-        )
-      }
-    }
-  })
-  await new Promise((resolve, reject) => {
-    stream.on('end', resolve)
-    stream.on('error', (e) => {
-      sendToSentry(e)
-      reject(e)
-    })
-  })
+  // We could publish to all online users, if we start using this mutation again
   return {newFeature}
 }
 

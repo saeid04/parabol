@@ -1,7 +1,6 @@
 import graphql from 'babel-plugin-relay/macro'
-import {ValueOf} from 'parabol-client/types/generics'
-import {EmailNotificationPicker_notification$key} from 'parabol-client/__generated__/EmailNotificationPicker_notification.graphql'
-import React from 'react'
+import type {EmailNotificationPicker_notification$key} from 'parabol-client/__generated__/EmailNotificationPicker_notification.graphql'
+import typedLookup from 'parabol-client/types/typedLookup'
 import {useFragment} from 'react-relay'
 import EmailDiscussionMentioned from './EmailDiscussionMentioned'
 import EmailKickedOut from './EmailKickedOut'
@@ -54,9 +53,7 @@ const EmailNotificationPicker = (props: Props) => {
     notificationRef
   )
   const {type} = notification
-  const SpecificNotification = NOTIFICATION_TEMPLATE_TYPE[type] as ValueOf<
-    typeof NOTIFICATION_TEMPLATE_TYPE
-  > | null
+  const SpecificNotification = typedLookup(NOTIFICATION_TEMPLATE_TYPE, type)
   return SpecificNotification ? (
     <SpecificNotification appOrigin={appOrigin} notificationRef={notification} />
   ) : null

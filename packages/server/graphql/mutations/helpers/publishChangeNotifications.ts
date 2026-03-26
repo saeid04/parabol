@@ -1,24 +1,28 @@
-import {ASSIGNEE, MENTIONEE} from 'parabol-client/utils/constants'
-import getTypeFromEntityMap from 'parabol-client/utils/draftjs/getTypeFromEntityMap'
-import getRethink from '../../../database/rethinkDriver'
-import NotificationTaskInvolves from '../../../database/types/NotificationTaskInvolves'
-import Task from '../../../database/types/Task'
-import segmentIo from '../../../utils/segmentIo'
+import {getAllNodesAttributesByType} from '../../../../client/shared/tiptap/getAllNodesAttributesByType'
+import generateUID from '../../../generateUID'
+import getKysely from '../../../postgres/getKysely'
+import type {Task} from '../../../postgres/types'
+import type {TaskInvolvesNotification} from '../../../postgres/types/Notification'
+import {analytics} from '../../../utils/analytics/analytics'
 
 const publishChangeNotifications = async (
   task: Task,
   oldTask: Task,
-  changeUserId: string,
+  changeUser: {id: string; email: string},
   usersToIgnore: string[]
 ) => {
-  const r = await getRethink()
-  const changeAuthorId = `${changeUserId}::${task.teamId}`
-  const {entityMap: oldEntityMap, blocks: oldBlocks} = JSON.parse(oldTask.content)
-  const {entityMap, blocks} = JSON.parse(task.content)
+  const pg = getKysely()
+  const changeAuthorId = `${changeUser.id}::${task.teamId}`
+  const oldContentJSON = JSON.parse(oldTask.content)
+  const contentJSON = JSON.parse(task.content)
   const wasPrivate = oldTask.tags.includes('private')
   const isPrivate = task.tags.includes('private')
-  const oldMentions = wasPrivate ? [] : getTypeFromEntityMap('MENTION', oldEntityMap)
-  const mentions = isPrivate ? [] : getTypeFromEntityMap('MENTION', entityMap)
+  const oldMentions = wasPrivate
+    ? []
+    : getAllNodesAttributesByType<{id: string}>(oldContentJSON, 'mention').map(({id}) => id)
+  const mentions = isPrivate
+    ? []
+    : getAllNodesAttributesByType<{id: string}>(contentJSON, 'mention').map(({id}) => id)
   // intersect the mentions to get the ones to add and remove
   const userIdsToRemove = oldMentions.filter((userId) => !mentions.includes(userId))
   const notificationsToAdd = mentions
@@ -29,68 +33,42 @@ const publishChangeNotifications = async (
         // it isn't the owner (they get the assign notification)
         userId !== task.userId &&
         // it isn't the person changing it
-        changeUserId !== userId &&
+        changeUser.id !== userId &&
         // it isn't someone in a meeting
         !usersToIgnore.includes(userId)
     )
-    .map(
-      (userId) =>
-        new NotificationTaskInvolves({
-          userId,
-          involvement: MENTIONEE,
-          taskId: task.id,
-          changeAuthorId,
-          teamId: task.teamId
-        })
-    )
+    .map((userId) => ({
+      id: generateUID(),
+      type: 'TASK_INVOLVES' as const,
+      userId,
+      involvement: 'MENTIONEE' as TaskInvolvesNotification['involvement'],
+      taskId: task.id,
+      changeAuthorId,
+      teamId: task.teamId
+    }))
 
   mentions.forEach((mentionedUserId) => {
-    segmentIo.track({
-      userId: changeUserId,
-      event: 'Mentioned on Task',
-      properties: {
-        mentionedUserId,
-        teamId: task.teamId
-      }
-    })
+    analytics.mentionedOnTask(changeUser, mentionedUserId, task.teamId)
   })
   // add in the assignee changes
   if (oldTask.userId && oldTask.userId !== task.userId) {
-    if (task.userId && task.userId !== changeUserId && !usersToIgnore.includes(task.userId)) {
-      notificationsToAdd.push(
-        new NotificationTaskInvolves({
-          userId: task.userId,
-          involvement: ASSIGNEE,
-          taskId: task.id,
-          changeAuthorId,
-          teamId: task.teamId
-        })
-      )
+    if (task.userId && task.userId !== changeUser.id && !usersToIgnore.includes(task.userId)) {
+      notificationsToAdd.push({
+        id: generateUID(),
+        type: 'TASK_INVOLVES' as const,
+        userId: task.userId,
+        involvement: 'ASSIGNEE' as const,
+        taskId: task.id,
+        changeAuthorId,
+        teamId: task.teamId
+      })
     }
     userIdsToRemove.push(oldTask.userId)
   }
 
-  // if we updated the task content, push a new one with an updated task
-  const oldContentLen = oldBlocks[0] ? oldBlocks[0].text.length : 0
-  if (oldContentLen < 3) {
-    const contentLen = blocks[0] ? blocks[0].text.length : 0
-    if (contentLen > oldContentLen && task.userId) {
-      const maybeInvolvedUserIds = mentions.concat(task.userId)
-      const existingTaskNotifications = (await r
-        .table('Notification')
-        .getAll(r.args(maybeInvolvedUserIds), {index: 'userId'})
-        .filter({
-          taskId: task.id,
-          type: 'TASK_INVOLVES'
-        })
-        .run()) as NotificationTaskInvolves[]
-      notificationsToAdd.push(...existingTaskNotifications)
-    }
-  }
-
   // update changes in the db
   if (notificationsToAdd.length) {
-    await r.table('Notification').insert(notificationsToAdd).run()
+    await pg.insertInto('Notification').values(notificationsToAdd).execute()
   }
   return {notificationsToAdd}
 }

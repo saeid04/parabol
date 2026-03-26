@@ -1,9 +1,9 @@
 import styled from '@emotion/styled'
-import React, {useMemo} from 'react'
+import {useMemo} from 'react'
 import {commitLocalUpdate} from 'react-relay'
 import useSearchFilter from '~/hooks/useSearchFilter'
 import useAtmosphere from '../hooks/useAtmosphere'
-import {MenuProps} from '../hooks/useMenu'
+import type {MenuProps} from '../hooks/useMenu'
 import SearchQueryId from '../shared/gqlIds/SearchQueryId'
 import Checkbox from './Checkbox'
 import DropdownMenuLabel from './DropdownMenuLabel'
@@ -51,7 +51,7 @@ type JiraSearchQuery = {
 type Project = {
   id: string
   name: string
-  avatar: string
+  avatar: string | null | undefined
 }
 
 interface Props {
@@ -66,7 +66,7 @@ const getValue = (item: {name: string}) => item.name
 
 const MAX_PROJECTS = 10
 
-// Reusable for both Jira and Jira Server.
+// Reusable for both Jira and Jira Server/Data Center.
 const JiraScopingSearchFilterMenu = (props: Props) => {
   const {menuProps, projects, meetingId, jiraSearchQuery, service} = props
   const isLoading = meetingId === null
@@ -157,7 +157,7 @@ const JiraScopingSearchFilterMenu = (props: Props) => {
                   active={projectKeyFilters.includes(globalProjectKey)}
                   disabled={isJQL}
                 />
-                <ProjectAvatar src={avatar} />
+                <ProjectAvatar src={avatar || undefined} />
                 <TypeAheadLabel query={query} label={name} />
               </StyledMenuItemLabel>
             }

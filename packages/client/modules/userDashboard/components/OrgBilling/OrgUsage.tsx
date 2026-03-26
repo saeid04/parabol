@@ -1,0 +1,63 @@
+import graphql from 'babel-plugin-relay/macro'
+import {useFragment} from 'react-relay'
+import {useNavigate} from 'react-router'
+import type {OrgUsage_organization$key} from '../../../../__generated__/OrgUsage_organization.graphql'
+import Panel from '../../../../components/Panel/Panel'
+
+interface Props {
+  organizationRef: OrgUsage_organization$key
+}
+
+const OrgUsage = (props: Props) => {
+  const {organizationRef} = props
+  const organization = useFragment(
+    graphql`
+      fragment OrgUsage_organization on Organization {
+        id
+        allTeamsCount
+        orgUserCount {
+          activeUserCount
+          inactiveUserCount
+        }
+      }
+    `,
+    organizationRef
+  )
+
+  const {id: orgId, allTeamsCount, orgUserCount} = organization
+  const totalUserCount = orgUserCount.activeUserCount + orgUserCount.inactiveUserCount
+  const navigate = useNavigate()
+
+  return (
+    <Panel className='mb-4 max-w-[976px]' label='Usage'>
+      <div className='flex items-center justify-around border-slate-300 border-t border-solid p-4'>
+        <a
+          onClick={(e) => {
+            e.preventDefault()
+            navigate(`/me/organizations/${orgId}/teams`)
+          }}
+          className='cursor-pointer text-center text-sky-500 hover:text-sky-600'
+        >
+          <div className='mb-1 font-bold text-3xl'>{allTeamsCount}</div>
+          <div className='flex items-center justify-center text-base text-slate-600'>
+            Total teams
+          </div>
+        </a>
+        <a
+          onClick={(e) => {
+            e.preventDefault()
+            navigate(`/me/organizations/${orgId}/members`)
+          }}
+          className='cursor-pointer text-center text-sky-500 hover:text-sky-600'
+        >
+          <div className='mb-1 font-bold text-3xl'>{totalUserCount}</div>
+          <div className='flex items-center justify-center text-base text-slate-600'>
+            Total members
+          </div>
+        </a>
+      </div>
+    </Panel>
+  )
+}
+
+export default OrgUsage

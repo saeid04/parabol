@@ -1,16 +1,23 @@
 import styled from '@emotion/styled'
 import {Lock} from '@mui/icons-material'
 import graphql from 'babel-plugin-relay/macro'
-import React, {useEffect} from 'react'
+import {lazy, Suspense, useEffect} from 'react'
 import {useFragment} from 'react-relay'
-import {MeetingLockedOverlay_meeting$key} from '~/__generated__/MeetingLockedOverlay_meeting.graphql'
+import {useNavigate} from 'react-router'
+import type {MeetingLockedOverlay_meeting$key} from '~/__generated__/MeetingLockedOverlay_meeting.graphql'
 import useAtmosphere from '../hooks/useAtmosphere'
-import useRouter from '../hooks/useRouter'
-import SendClientSegmentEventMutation from '../mutations/SendClientSegmentEventMutation'
 import {modalShadow} from '../styles/elevation'
 import {PALETTE} from '../styles/paletteV3'
 import {Radius} from '../types/constEnums'
+import SendClientSideEvent from '../utils/SendClientSideEvent'
 import PrimaryButton from './PrimaryButton'
+
+const UnpaidTeamModalRoot = lazy(
+  () =>
+    import(
+      /* webpackChunkName: 'UnpaidTeamModalRoot' */ '../modules/teamDashboard/containers/UnpaidTeamModal/UnpaidTeamModalRoot'
+    )
+)
 
 interface Props {
   meetingRef: MeetingLockedOverlay_meeting$key
@@ -84,9 +91,11 @@ const MeetingLockedOverlay = (props: Props) => {
       fragment MeetingLockedOverlay_meeting on NewMeeting {
         id
         locked
+        teamId
         organization {
           id
           name
+          isPaid
           viewerOrganizationUser {
             id
           }
@@ -95,15 +104,15 @@ const MeetingLockedOverlay = (props: Props) => {
     `,
     meetingRef
   )
-  const {id: meetingId, locked, organization} = meeting
-  const {id: orgId, name: orgName, viewerOrganizationUser} = organization
+  const {id: meetingId, teamId, locked, organization} = meeting
+  const {id: orgId, name: orgName, viewerOrganizationUser, isPaid} = organization
   const canUpgrade = !!viewerOrganizationUser
 
   const atmosphere = useAtmosphere()
-  const {history} = useRouter()
+  const navigate = useNavigate()
   useEffect(() => {
     if (locked) {
-      SendClientSegmentEventMutation(atmosphere, 'Upgrade CTA Viewed', {
+      SendClientSideEvent(atmosphere, 'Upgrade CTA Viewed', {
         upgradeCTALocation: 'directMeetingLinkLock',
         upgradeTier: 'team',
         meetingId
@@ -124,15 +133,23 @@ const MeetingLockedOverlay = (props: Props) => {
   }, [locked])
 
   const onClick = () => {
-    SendClientSegmentEventMutation(atmosphere, 'Upgrade CTA Clicked', {
+    SendClientSideEvent(atmosphere, 'Upgrade CTA Clicked', {
       upgradeCTALocation: 'directMeetingLinkLock',
       upgradeTier: 'team',
       meetingId
     })
-    history.push(`/me/organizations/${orgId}`)
+    navigate(`/me/organizations/${orgId}`)
   }
 
   if (!locked) return null
+
+  if (!isPaid) {
+    return (
+      <Suspense fallback={''}>
+        <UnpaidTeamModalRoot teamId={teamId} />
+      </Suspense>
+    )
+  }
 
   return (
     <DialogOverlay>

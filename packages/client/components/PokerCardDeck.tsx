@@ -1,10 +1,11 @@
 import styled from '@emotion/styled'
 import graphql from 'babel-plugin-relay/macro'
-import React, {KeyboardEvent, RefObject, useEffect, useMemo, useRef, useState} from 'react'
-import {createFragmentContainer} from 'react-relay'
-import {FragmentRefs} from 'relay-runtime'
+import type * as React from 'react'
+import {type KeyboardEvent, type RefObject, useEffect, useMemo, useRef, useState} from 'react'
+import {useFragment} from 'react-relay'
 import useMutationProps from '~/hooks/useMutationProps'
 import usePokerDeckLeftEdge from '~/hooks/usePokerDeckLeftEdge'
+import type {PokerCardDeck_meeting$key} from '../__generated__/PokerCardDeck_meeting.graphql'
 import useAtmosphere from '../hooks/useAtmosphere'
 import useEventCallback from '../hooks/useEventCallback'
 import useHotkey from '../hooks/useHotkey'
@@ -14,7 +15,6 @@ import usePokerCardLocation from '../hooks/usePokerCardLocation'
 import PokerAnnounceDeckHoverMutation from '../mutations/PokerAnnounceDeckHoverMutation'
 import VoteForPokerStoryMutation from '../mutations/VoteForPokerStoryMutation'
 import {BezierCurve, PokerCards} from '../types/constEnums'
-import {PokerCardDeck_meeting} from '../__generated__/PokerCardDeck_meeting.graphql'
 import PokerCard from './PokerCard'
 
 const Deck = styled('div')<{left: number; isSpectating: boolean}>(({left, isSpectating}) => ({
@@ -29,13 +29,8 @@ const Deck = styled('div')<{left: number; isSpectating: boolean}>(({left, isSpec
 }))
 
 interface Props {
-  meeting: PokerCardDeck_meeting
+  meeting: PokerCardDeck_meeting$key
   estimateAreaRef: RefObject<HTMLDivElement>
-}
-
-interface Card {
-  readonly label: string
-  readonly ' $fragmentRefs': FragmentRefs<'PokerCard_scaleValue'>
 }
 
 const swipe = {
@@ -54,7 +49,30 @@ const RADIUS_B = 435 // y-intercept of radius
 const PokerCardDeck = (props: Props) => {
   const atmosphere = useAtmosphere()
   const {viewerId} = atmosphere
-  const {meeting, estimateAreaRef} = props
+  const {meeting: meetingRef, estimateAreaRef} = props
+  const meeting = useFragment(
+    graphql`
+      fragment PokerCardDeck_meeting on PokerMeeting {
+        id
+        isRightDrawerOpen
+        showSidebar
+        phases {
+          ... on EstimatePhase {
+            stages {
+              ...PokerCardDeckStage @relay(mask: false)
+            }
+          }
+        }
+        localStage {
+          ...PokerCardDeckStage @relay(mask: false)
+        }
+        viewerMeetingMember {
+          isSpectating
+        }
+      }
+    `,
+    meetingRef
+  )
   const {id: meetingId, isRightDrawerOpen, localStage, showSidebar, viewerMeetingMember} = meeting
   const isSpectating = !!viewerMeetingMember?.isSpectating
   // fallbacks used here to test https://github.com/ParabolInc/parabol/issues/6247
@@ -91,7 +109,11 @@ const PokerCardDeck = (props: Props) => {
   const onMouseEnter = (cardId: string) => () => {
     if (isCollapsed) return
     if (!hoveringCardIdRef.current) {
-      PokerAnnounceDeckHoverMutation(atmosphere, {isHover: true, meetingId, stageId})
+      PokerAnnounceDeckHoverMutation(atmosphere, {
+        isHover: true,
+        meetingId,
+        stageId
+      })
     }
     hoveringCardIdRef.current = cardId
   }
@@ -102,7 +124,11 @@ const PokerCardDeck = (props: Props) => {
     setTimeout(() => {
       if (hoveringCardIdRef.current === cardId) {
         hoveringCardIdRef.current = ''
-        PokerAnnounceDeckHoverMutation(atmosphere, {isHover: false, meetingId, stageId})
+        PokerAnnounceDeckHoverMutation(atmosphere, {
+          isHover: false,
+          meetingId,
+          stageId
+        })
       }
     })
   }
@@ -116,6 +142,10 @@ const PokerCardDeck = (props: Props) => {
   useEffect(() => {
     document.addEventListener('touchstart', handleDocumentClick as any)
     document.addEventListener('click', handleDocumentClick)
+    return () => {
+      document.removeEventListener('touchstart', handleDocumentClick as any)
+      document.removeEventListener('click', handleDocumentClick)
+    }
   }, [])
 
   useEffect(() => {
@@ -198,17 +228,17 @@ const PokerCardDeck = (props: Props) => {
 
     if ((event as KeyboardEvent).key === 'ArrowUp') {
       if (typeof selectedIdx === 'undefined' || selectedIdx === cards.length - 1) {
-        vote((cards[0] as Card).label)
+        vote(cards[0]!.label)
       } else {
-        vote((cards[selectedIdx + 1] as Card).label)
+        vote(cards[selectedIdx + 1]!.label)
       }
     }
 
     if ((event as KeyboardEvent).key === 'ArrowDown') {
       if (typeof selectedIdx === 'undefined' || selectedIdx === 0) {
-        vote((cards[cards.length - 1] as Card).label)
+        vote(cards[cards.length - 1]!.label)
       } else {
-        vote((cards[selectedIdx - 1] as Card).label)
+        vote(cards[selectedIdx - 1]!.label)
       }
     }
   }
@@ -286,25 +316,4 @@ graphql`
     }
   }
 `
-export default createFragmentContainer(PokerCardDeck, {
-  meeting: graphql`
-    fragment PokerCardDeck_meeting on PokerMeeting {
-      id
-      isRightDrawerOpen
-      showSidebar
-      phases {
-        ... on EstimatePhase {
-          stages {
-            ...PokerCardDeckStage @relay(mask: false)
-          }
-        }
-      }
-      localStage {
-        ...PokerCardDeckStage @relay(mask: false)
-      }
-      viewerMeetingMember {
-        isSpectating
-      }
-    }
-  `
-})
+export default PokerCardDeck

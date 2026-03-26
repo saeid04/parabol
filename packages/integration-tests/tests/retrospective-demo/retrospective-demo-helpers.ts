@@ -1,4 +1,4 @@
-import {Page, expect, Locator} from '@playwright/test'
+import {expect, type Locator, type Page} from '@playwright/test'
 import config from '../config'
 
 export async function startDemo(page: Page) {
@@ -7,11 +7,20 @@ export async function startDemo(page: Page) {
 }
 
 export async function goToNextPhase(page: Page) {
-  const nextButton = page.locator('button :text("Next")')
+  const nextButton = page.locator('button', {
+    hasText: new RegExp(/\d+ \/ \d+ Ready/)
+  })
   await expect(nextButton).toBeVisible()
 
   // You "confirm" going to the next phase by clicking the next button twice
   await nextButton.click()
+  await nextButton.click()
+}
+
+export async function goToNextPhaseWhenReady(page: Page) {
+  const nextButton = page.locator('button :text("Next")')
+  await expect(nextButton).toBeVisible()
+
   await nextButton.click()
 }
 

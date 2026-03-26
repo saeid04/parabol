@@ -1,73 +1,99 @@
-import GQLTrebuchetClient, {
-  GQLHTTPClient,
-  OperationPayload
-} from '@mattkrick/graphql-trebuchet-client'
-import getTrebuchet, {SocketTrebuchet, SSETrebuchet} from '@mattkrick/trebuchet-client'
+import graphql from 'babel-plugin-relay/macro'
 import EventEmitter from 'eventemitter3'
+import type {Client} from 'graphql-ws'
 import jwtDecode from 'jwt-decode'
-import {Disposable} from 'react-relay'
-import {RouterProps} from 'react-router'
+import {commitMutation, type Disposable} from 'react-relay'
 import {
-  CacheConfig,
+  type CacheConfig,
+  type ConcreteRequest,
   Environment,
-  FetchFunction,
+  type FetchFunction,
+  type FetchQueryFetchPolicy,
   fetchQuery,
-  GraphQLResponse,
-  GraphQLTaggedNode,
+  type GraphQLResponse,
+  type GraphQLTaggedNode,
   Network,
+  type NormalizationLinkedField,
   Observable,
-  OperationType,
+  type OperationType,
+  type PayloadError,
   RecordSource,
   RelayFeatureFlags,
-  RequestParameters,
+  type RequestParameters,
   Store,
-  SubscribeFunction,
-  UploadableMap,
-  Variables
+  type UploadableMap,
+  type Variables
 } from 'relay-runtime'
-import {Sink} from 'relay-runtime/lib/network/RelayObservable'
-import StrictEventEmitter from 'strict-event-emitter-types'
-import {Snack, SnackbarRemoveFn} from './components/Snackbar'
-import handleInvalidatedSession from './hooks/handleInvalidatedSession'
+import type StrictEventEmitter from 'strict-event-emitter-types'
+import type {AtmosphereSignOutMutation} from './__generated__/AtmosphereSignOutMutation.graphql'
+import type {InviteToTeamMutation_notification$data} from './__generated__/InviteToTeamMutation_notification.graphql'
+import type {Snack, SnackbarRemoveFn} from './components/Snackbar'
+import {providerManager} from './tiptap/providerManager'
 import {AuthToken} from './types/AuthToken'
-import {LocalStorageKey, TrebuchetCloseReason} from './types/constEnums'
+import type {NavigateFn} from './types/relayMutations'
+import {getAuthCookie, onAuthCookieChange} from './utils/authCookie'
+import {createWSClient} from './utils/createWSClient'
 import handlerProvider from './utils/relay/handlerProvider'
 import sleep from './utils/sleep'
-import {InviteToTeamMutation_notification} from './__generated__/InviteToTeamMutation_notification.graphql'
+
 ;(RelayFeatureFlags as any).ENABLE_RELAY_CONTAINERS_SUSPENSE = false
 ;(RelayFeatureFlags as any).ENABLE_PRECISE_TYPE_REFINEMENT = true
+
+const signOutMutation = graphql`
+  mutation AtmosphereSignOutMutation {
+    signOut
+  }
+`
+
+const refreshSessionMutation = graphql`
+  mutation AtmosphereRefreshSessionMutation {
+    refreshSession
+  }
+`
 
 interface QuerySubscription {
   subKey: string
   queryKey: string
-  disposable?: ReturnType<GQLTrebuchetClient['subscribe']>
+  disposable?: {unsubscribe: () => void}
 }
 
 interface Subscriptions {
-  [subKey: string]: ReturnType<GQLTrebuchetClient['subscribe']>
+  [subKey: string]: {unsubscribe: () => void}
 }
 
 export type SubscriptionRequestor = {
-  (atmosphere: Atmosphere, variables: any, router: {history: RouterProps['history']}): Disposable
+  (atmosphere: Atmosphere, variables: any, router: {navigate: NavigateFn}): Disposable
   key: string
-}
-
-export interface FetchHTTPData {
-  type: 'start' | 'stop'
-  payload: OperationPayload
 }
 
 const noop = (): any => {
   /* noop */
 }
 
-const toFormData = (body: FetchHTTPData, formData = new FormData()) => {
-  const uploadables = (body.payload.uploadables || []) as any[]
-  delete body.payload.uploadables
-  formData.append('body', JSON.stringify(body))
+export const noopSink = {
+  next: noop,
+  error: noop,
+  complete: noop
+}
+
+const toFormData = (
+  request: RequestParameters,
+  variables: Variables,
+  uploadables: UploadableMap
+) => {
+  const formData = new FormData()
+  formData.append('operations', JSON.stringify({docId: request.id, variables}))
+
+  // Map the uploadable files
+  const map: Record<string, string[]> = {}
+  let i = 0
   Object.keys(uploadables).forEach((key) => {
-    formData.append(`uploadables.${key}`, uploadables[key as keyof typeof uploadables] as any)
+    map[i] = [`variables.${key}`]
+    formData.append(i.toString(), uploadables[key]!)
+    i++
   })
+
+  formData.append('map', JSON.stringify(map))
   return formData
 }
 
@@ -76,10 +102,11 @@ export interface AtmosphereEvents {
   removeSnackbar: (filterFn: SnackbarRemoveFn) => void
   focusAgendaInput: () => void
   inviteToTeam: (
-    notification: NonNullable<InviteToTeamMutation_notification['teamInvitationNotification']>
+    notification: NonNullable<InviteToTeamMutation_notification$data['teamInvitationNotification']>
   ) => void
   newSubscriptionClient: () => void
   removeGitHubRepo: () => void
+  authChanged: () => void
 }
 
 const store = new Store(new RecordSource(), {gcReleaseBufferSize: 10000})
@@ -89,231 +116,260 @@ export default class Atmosphere extends Environment {
     return JSON.stringify({name, variables})
   }
   _network: typeof Network
+  _authObj: AuthToken | null = null
+  get authObj() {
+    return this._authObj
+  }
+  set authObj(value: AuthToken | null) {
+    this._authObj = value
+    this.eventEmitter.emit('authChanged')
+  }
 
-  baseHTTPTransport: GQLHTTPClient
-  transport!: GQLHTTPClient | GQLTrebuchetClient
-  authToken: string | null = null
-  authObj: AuthToken | null = null
   querySubscriptions: QuerySubscription[] = []
   queryTimeouts: {
     [queryKey: string]: number
   } = {}
   retries = new Set<() => void>()
   subscriptions: Subscriptions = {}
+  // Our server only sends a single field per subscription, but relay requires every requested field
+  // This object makes the server response whole without increasing the payload size
+  subscriptionInterfaces = {} as Record<string, Record<string, null>>
   eventEmitter: StrictEventEmitter<EventEmitter, AtmosphereEvents> = new EventEmitter()
   queryCache = {} as {[key: string]: GraphQLResponse}
-  upgradeTransportPromise: Promise<void> | null = null
   // it's only null before login, so it's just a little white lie
   viewerId: string = null!
-  /** @deprecated */
-  userId: string | null = null
   tabCheckChannel?: BroadcastChannel
+  subscriptionClient!: Awaited<ReturnType<typeof createWSClient>>
+  connectWebsocketPromise: Promise<Client> | null = null
   constructor() {
     super({
       store,
       handlerProvider,
       network: Network.create(noop)
     })
-    this._network = Network.create(this.handleFetch, this.handleSubscribe) as any
-    this.baseHTTPTransport = this.transport = new GQLHTTPClient(this.fetchHTTP)
+    this._network = Network.create(this.fetchFunction, this.fetchOrSubscribe) as any
+    providerManager.setAtmosphere(this)
+    this.initAuthFromCookie()
   }
 
-  fetchPing = async (connectionId?: string) => {
-    return fetch('/sse-ping', {
-      headers: {
-        'x-application-authorization': `Bearer ${this.authToken}`,
-        'x-correlation-id': connectionId || ''
+  private initAuthFromCookie() {
+    if (typeof window === 'undefined') return
+    const authToken = getAuthCookie(window)
+    if (!authToken) return
+    try {
+      const authObj = jwtDecode<AuthToken>(authToken)
+      if (!authObj) return
+      const {exp, sub: viewerId, rol} = authObj
+      if (exp < Date.now() / 1000) return
+      this._authObj = authObj
+      if (rol !== 'impersonate') {
+        this.viewerId = viewerId!
       }
-    })
-  }
-
-  fetchReliable = async (connectionId: string, data: ArrayBuffer) => {
-    return fetch('/sse-ping', {
-      method: 'POST',
-      headers: {
-        'x-application-authorization': `Bearer ${this.authToken}`,
-        'x-correlation-id': connectionId || ''
-      },
-      body: data
-    })
-  }
-
-  fetchHTTP = async (body: FetchHTTPData, connectionId?: string) => {
-    const uploadables = body.payload.uploadables
-    const headers: Record<string, string> = {
-      accept: 'application/json',
-      'x-application-authorization': this.authToken ? `Bearer ${this.authToken}` : '',
-      'x-correlation-id': connectionId || ''
-    } as const
-
-    /* if uploadables, don't set content type bc we want the browser to set it o*/
-    if (!uploadables) headers['content-type'] = 'application/json'
-    const res = await fetch('/graphql', {
-      method: 'POST',
-      headers,
-      body: uploadables ? toFormData(body) : JSON.stringify(body)
-    })
-    const contentTypeHeader = res.headers.get('content-type') || ''
-    if (contentTypeHeader.toLowerCase().startsWith('application/json')) {
-      const resJson = await res.json()
-      return resJson
-    }
-    if (res.status === 401) {
-      const text = await res.text()
-      if (text === TrebuchetCloseReason.EXPIRED_SESSION) {
-        handleInvalidatedSession(TrebuchetCloseReason.EXPIRED_SESSION, {atmosphere: this})
-      }
-    }
-    return null
-  }
-
-  handleSubscribePromise = async (
-    operation: RequestParameters,
-    variables: OperationPayload['variables'] | undefined,
-    _cacheConfig: CacheConfig,
-    sink: Sink<any>
-  ) => {
-    const {name} = operation
-    const documentId = operation.id || ''
-    const subKey = Atmosphere.getKey(name, variables)
-    await this.upgradeTransport()
-    const transport = this.transport as GQLTrebuchetClient
-    if (!transport.subscribe) return
-    if (!__PRODUCTION__) {
-      try {
-        const queryMap = await import('../../queryMap.json')
-        const query = queryMap[documentId as keyof typeof queryMap] as string
-        this.subscriptions[subKey] = transport.subscribe({query, variables}, sink)
-      } catch (e) {
-        return
-      }
-    } else {
-      this.subscriptions[subKey] = transport.subscribe({documentId, variables}, sink)
+    } catch {
+      // invalid cookie, leave authObj null
     }
   }
 
-  handleSubscribe: SubscribeFunction = (operation, variables, _cacheConfig) => {
-    return Observable.create((sink) => {
-      this.handleSubscribePromise(operation, variables, _cacheConfig, sink).catch()
-    })
-  }
-
-  trySockets = () => {
-    const wsProtocol = window.location.protocol.replace('http', 'ws')
-    const getUrl = () => {
-      this.setAuthToken(this.authToken)
-      if (!this.authToken) {
-        this.eventEmitter.emit('addSnackbar', {
-          autoDismiss: 0,
-          key: 'cannotConnectJWT',
-          message: 'Session expired. Please refresh to continue',
-          action: {
-            label: 'Refresh',
-            callback: () => {
-              window.location.reload()
-            }
-          }
-        })
-        return ''
-      }
-      const host = __PRODUCTION__
-        ? window.location.host
-        : `${window.location.hostname}:${__SOCKET_PORT__}`
-      return `${wsProtocol}//${host}/?token=${this.authToken}`
-    }
-    return new SocketTrebuchet({getUrl})
-  }
-
-  trySSE = () => {
-    const getUrl = () => `/sse/?token=${this.authToken}`
-    return new SSETrebuchet({
-      getUrl,
-      fetchData: this.fetchHTTP,
-      fetchPing: this.fetchPing,
-      fetchReliable: this.fetchReliable
-    })
-  }
-
-  async promiseToUpgrade() {
-    const trebuchets = [this.trySockets, this.trySSE]
-    const trebuchet = await getTrebuchet(trebuchets)
-    if (!trebuchet) {
-      this.eventEmitter.emit('addSnackbar', {
-        autoDismiss: 0,
-        key: 'cannotConnect',
-        message:
-          'Cannot establish connection. Behind a firewall? Reach out for support: love@parabol.co'
-      })
-      console.error('Cannot connect!')
-      return
-    }
-    this.transport = new GQLTrebuchetClient(trebuchet)
-    this.eventEmitter.emit('newSubscriptionClient')
-  }
-
-  async upgradeTransport() {
+  private async connectWebsocket() {
     // wait until the first and only upgrade has completed
-    if (!this.upgradeTransportPromise) {
-      this.upgradeTransportPromise = this.promiseToUpgrade()
+    if (!this.connectWebsocketPromise) {
+      this.connectWebsocketPromise = createWSClient(this)
     }
-    return this.upgradeTransportPromise
+    return this.connectWebsocketPromise
   }
 
-  handleFetchPromise = async (
-    request: RequestParameters,
+  fetchFunction: FetchFunction = (request, variables, cacheConfig, uploadables) => {
+    // DeleteUserMutation is required to unset the cookie
+    // ReAuth mutations are required to set a new auth cookie
+    const isAuth =
+      request.name.startsWith('Atmosphere') ||
+      request.name === 'DeleteUserMutation' ||
+      request.name === 'ReAuthWithGoogleMutation' ||
+      request.name === 'ReAuthWithMicrosoftMutation' ||
+      request.name === 'ReAuthWithPasswordMutation'
+    const useHTTP = !!uploadables || !this.authObj || !this.subscriptionClient || isAuth
+    if (useHTTP) {
+      const response = fetch('/graphql', {
+        method: 'POST',
+        headers: {
+          accept: 'application/json;text/event-stream; charset=utf-8, multipart/mixed',
+          ...(!uploadables && {['content-type']: 'application/json'})
+        },
+        body: uploadables
+          ? toFormData(request, variables, uploadables)
+          : JSON.stringify({
+              docId: request.id,
+              variables
+            })
+      })
+      return Observable.create<GraphQLResponse>((sink) => {
+        response
+          .then(async (res) => {
+            if (!res.ok) {
+              sink.error(new Error(`HTTP ${res.status}: ${res.statusText}`))
+              return
+            }
+            const contentType = res.headers.get('content-type') ?? ''
+            if (contentType.includes('multipart/mixed')) {
+              const boundary = contentType.match(/boundary="?([^";]+)"?/)?.[1] ?? '-'
+              const delimiter = `--${boundary}`
+              const reader = res.body!.getReader()
+              const decoder = new TextDecoder()
+              let buffer = ''
+              try {
+                while (true) {
+                  const {done, value} = await reader.read()
+                  if (done) break
+                  buffer += decoder.decode(value, {stream: true})
+                  const parts = buffer.split(delimiter)
+                  buffer = parts.pop() ?? ''
+                  for (const part of parts) {
+                    if (!part.trim() || part.trim() === '--') continue
+                    const sepIdx = part.indexOf('\r\n\r\n')
+                    if (sepIdx === -1) continue
+                    const body = part.slice(sepIdx + 4).trim()
+                    if (!body) continue
+                    try {
+                      const parsed = JSON.parse(body)
+                      if (Array.isArray(parsed.incremental)) {
+                        for (const item of parsed.incremental) {
+                          sink.next({...item, hasNext: parsed.hasNext})
+                        }
+                      } else {
+                        sink.next(parsed)
+                      }
+                      if (!parsed.hasNext) {
+                        sink.complete()
+                        return
+                      }
+                    } catch {
+                      // skip malformed parts
+                    }
+                  }
+                }
+              } finally {
+                reader.releaseLock()
+              }
+              sink.complete()
+            } else {
+              try {
+                sink.next(await res.json())
+                sink.complete()
+              } catch (e) {
+                sink.error(e instanceof Error ? e : new Error('Invalid JSON response'))
+              }
+            }
+          })
+          .catch((e: unknown) => {
+            sink.error(e instanceof Error ? e : new Error(String(e)))
+          })
+      })
+    }
+    return this.fetchOrSubscribe(request, variables, cacheConfig)
+  }
+  fetchOrSubscribe = (
+    operation: RequestParameters,
     variables: Variables,
-    cacheConfig?: CacheConfig,
-    uploadables?: UploadableMap | null,
-    sink?: Sink<any> | undefined | null
+    _cacheConfig: CacheConfig
   ) => {
-    // await sleep(1000)
-    const field = __PRODUCTION__ ? 'documentId' : 'query'
-    let data = request.id
-    if (!__PRODUCTION__) {
-      try {
-        const queryMap = await import('../../queryMap.json').catch()
-        data = queryMap[request.id as keyof typeof queryMap] as string
-      } catch (e) {
-        return
+    return Observable.create<GraphQLResponse>((sink) => {
+      const _next = sink.next
+      const _error = sink.error
+      sink.error = (error: Error | Error[] | CloseEvent | PayloadError) => {
+        if (Array.isArray(error)) {
+          const invalidSessionError = error.find(
+            (e) => (e as PayloadError).extensions?.code === 'SESSION_INVALIDATED'
+          )
+          if (invalidSessionError) {
+            this.invalidateSession(invalidSessionError.message)
+          } else {
+            _error(new Error(error[0]?.message ?? 'Unknown Error'))
+          }
+        } else if (error instanceof CloseEvent) {
+          // convert to an error so subscribers only have to worry about handling Error types
+          _error(new Error(error.reason))
+        } else {
+          _error(error)
+        }
       }
-    }
-    const transport = uploadables ? this.baseHTTPTransport : this.transport
-    return transport.fetch(
-      {
-        [field]: data,
-        variables,
-        cacheConfig,
-        uploadables: uploadables || undefined
-      },
-      // if sink is nully, then the server doesn't send a response
-      sink
-    )
-  }
+      sink.next = (value: any) => {
+        const {data} = value
+        if (!data) {
+          _next({...value, data: {}})
+          return
+        }
+        const subscriptionName = data ? Object.keys(data)[0] : undefined
+        const nullObj = this.subscriptionInterfaces[subscriptionName!]
+        const nextObj =
+          nullObj && subscriptionName
+            ? {
+                ...value,
+                data: {
+                  ...data,
+                  [subscriptionName]: {
+                    ...nullObj,
+                    ...data[subscriptionName]
+                  }
+                }
+              }
+            : value
+        _next(nextObj)
+      }
+      ;(async () => {
+        // waiting a tick prevents `client.subscribe` from creating 2 websocket instances
+        try {
+          await this.connectWebsocket()
+        } catch {
+          // errors are handled in the closed handler
+          return
+        }
 
-  handleFetch: FetchFunction = (request, variables, cacheConfig, uploadables) => {
-    return Observable.create((sink) => {
-      this.handleFetchPromise(request, variables, cacheConfig, uploadables, sink)
+        const unsubscribe = this.subscriptionClient.subscribe(
+          {
+            operationName: operation.name,
+            query: '',
+            docId: operation.id,
+            variables
+          } as any,
+          sink as any
+        )
+        if (operation.operationKind === 'subscription') {
+          const subKey = Atmosphere.getKey(operation.name, variables)
+          this.subscriptions[subKey] = {unsubscribe}
+        }
+      })()
     })
   }
 
   fetchQuery = async <T extends OperationType>(
     taggedNode: GraphQLTaggedNode,
-    variables: Variables = {}
-  ) => {
-    let res: T['response']
-    try {
-      res = await fetchQuery<T>(this, taggedNode, variables, {
-        fetchPolicy: 'store-or-network'
-      }).toPromise()
-    } catch (e) {
-      return null
+    variables: Variables = {},
+    cacheConfig?: {
+      networkCacheConfig?: CacheConfig
+      fetchPolicy?: FetchQueryFetchPolicy
     }
-    return res
+  ) => {
+    try {
+      const res = await fetchQuery<T>(
+        this,
+        taggedNode,
+        variables,
+        cacheConfig ?? {
+          fetchPolicy: 'store-or-network'
+        }
+      ).toPromise()
+      return res!
+    } catch (e) {
+      return e as Error
+    }
   }
-  getAuthToken = (global: Window) => {
-    if (!global) return
-    const authToken = global.localStorage.getItem(LocalStorageKey.APP_TOKEN_KEY)
+  registerCookieListener = (global: Window) => {
+    const authToken = getAuthCookie(global)
     this.setAuthToken(authToken)
+
+    return onAuthCookieChange(global, (newToken) => {
+      this.setAuthToken(newToken)
+    })
   }
 
   private validateImpersonation = async (iat: number) => {
@@ -335,29 +391,23 @@ export default class Atmosphere extends Environment {
       })
       return Promise.race([sleep(300), askOtherTabs])
     }
+    // impersonation token must be < 10 seconds old (ie log them out automatically)
     const justOpened = iat > Date.now() / 1000 - 10
 
     const anotherTabIsOpen = await isAnotherParabolTabOpen()
     if (anotherTabIsOpen || justOpened) return
-    this.authToken = null
-    this.authObj = null
-    window.localStorage.removeItem(LocalStorageKey.APP_TOKEN_KEY)
-    // since this is async, useAuthRoute will have already run
-    window.location.href = '/'
+    this.invalidateSession('Removing impersonate token')
   }
 
-  setAuthToken = async (authToken: string | null) => {
-    this.authToken = authToken
+  private setAuthToken = async (authToken: string | null | undefined) => {
     if (!authToken) {
       this.authObj = null
-      window.localStorage.removeItem(LocalStorageKey.APP_TOKEN_KEY)
       return
     }
     try {
       this.authObj = jwtDecode(authToken)
-    } catch (e) {
+    } catch {
       this.authObj = null
-      this.authToken = null
     }
 
     if (!this.authObj) return
@@ -366,16 +416,10 @@ export default class Atmosphere extends Environment {
       this.viewerId = viewerId
       return this.validateImpersonation(iat)
     }
-    // impersonation token must be < 10 seconds old (ie log them out automatically)
     if (exp < Date.now() / 1000) {
-      this.authToken = null
-      this.authObj = null
-      window.localStorage.removeItem(LocalStorageKey.APP_TOKEN_KEY)
+      this.invalidateSession('Your session has expired. Please log in again.')
     } else {
       this.viewerId = viewerId!
-      window.localStorage.setItem(LocalStorageKey.APP_TOKEN_KEY, authToken)
-      // deprecated! will be removed soon
-      this.userId = viewerId
     }
   }
 
@@ -383,11 +427,10 @@ export default class Atmosphere extends Environment {
     queryKey: string,
     subscription: SubscriptionRequestor,
     variables: Variables,
-    router: {history: RouterProps['history']}
+    router: {navigate: NavigateFn}
   ) => {
     window.clearTimeout(this.queryTimeouts[queryKey])
     delete this.queryTimeouts[queryKey]
-    await this.upgradeTransport()
     const {key} = subscription
     // runtime error in case relay changes
     if (!key) throw new Error(`Missing name for sub`)
@@ -399,6 +442,19 @@ export default class Atmosphere extends Environment {
     this.querySubscriptions.push({queryKey, subKey})
   }
 
+  /*
+   * register the field name for this subscription so we know who handles it
+   *
+   * @returns the subscriptions field name, used for defining onNext and update handlers
+   */
+  registerSubscription(subscriptionRequest: GraphQLTaggedNode) {
+    const request: ConcreteRequest = (subscriptionRequest as any).default ?? subscriptionRequest
+    const payload = request.operation.selections[0] as NormalizationLinkedField
+    const {selections, name} = payload
+    const nullObj = Object.fromEntries(selections.map(({name}: any) => [name, null]))
+    this.subscriptionInterfaces[name] = nullObj
+    return name
+  }
   /*
    * When a subscription encounters an error, it affects the subscription itself,
    * the queries that depend on that subscription to stay valid,
@@ -455,23 +511,41 @@ export default class Atmosphere extends Environment {
     this.querySubscriptions = this.querySubscriptions.filter((qs) => qs.subKey !== subKey)
     // does not remove other subs because they may still do interesting things like pop toasts
   }
-
+  invalidateSession(reason: string) {
+    commitMutation<AtmosphereSignOutMutation>(this, {
+      mutation: signOutMutation,
+      variables: {},
+      onCompleted: (_res, _err) => {
+        this.setAuthToken(null)
+        this.eventEmitter.emit('addSnackbar', {
+          key: 'logOutJWT',
+          message: reason,
+          autoDismiss: 5
+        })
+        this.close()
+        setTimeout(() => {
+          window.location.href = '/'
+        }, 1000)
+      }
+    })
+  }
+  refreshSession() {
+    commitMutation<AtmosphereSignOutMutation>(this, {
+      mutation: refreshSessionMutation,
+      variables: {}
+    })
+  }
   close() {
     this.querySubscriptions.forEach((querySub) => {
       this.unregisterQuery(querySub.queryKey)
     })
     // remove all records
     ;(this.getStore().getSource() as any).clear()
-    this.upgradeTransportPromise = null
     this.authObj = null
-    this.authToken = null
-    if (this.transport instanceof GQLTrebuchetClient) {
-      this.transport.close()
-    }
-    this.transport = new GQLHTTPClient(this.fetchHTTP)
     this.querySubscriptions = []
     this.subscriptions = {}
     this.viewerId = null!
-    this.userId = null // DEPRECATED
+    this.connectWebsocketPromise = null
+    providerManager.close()
   }
 }

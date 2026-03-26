@@ -1,9 +1,8 @@
 import styled from '@emotion/styled'
 import {MoreVert} from '@mui/icons-material'
 import graphql from 'babel-plugin-relay/macro'
-import React from 'react'
 import {useFragment} from 'react-relay'
-import {Facilitator_meeting$key} from '~/__generated__/Facilitator_meeting.graphql'
+import type {Facilitator_meeting$key} from '~/__generated__/Facilitator_meeting.graphql'
 import useAtmosphere from '../hooks/useAtmosphere'
 import {MenuPosition} from '../hooks/useCoords'
 import useMenu from '../hooks/useMenu'
@@ -19,27 +18,28 @@ const FacilitatorBlock = styled('div')({
   padding: '0 8px 8px'
 })
 
-const FacilitatorToggle = styled('div')<{isActive: boolean; isReadOnly: boolean}>(
-  ({isActive, isReadOnly}) => ({
-    alignItems: 'center',
-    cursor: isReadOnly ? undefined : 'pointer',
-    display: 'flex',
-    // padding compensates for 8px grid, hanging elements
-    // icons and other decorators can be on a 4px grid, anyway, per MD spec
-    // total height = 40px like nav elements, and FacilitatorBlock and SidebarHeader (NewMeetingSidebar.tsx) add 8px gutter
-    padding: '2px 4px',
-    // StyledIcon when toggle isActive or not
-    span: {
-      backgroundColor: isActive ? PALETTE.SLATE_200 : undefined,
-      color: isActive ? PALETTE.SLATE_700 : PALETTE.SLATE_600
-    },
-    // StyledIcon when toggle hovered
-    '&:hover > span': {
-      backgroundColor: PALETTE.SLATE_200,
-      color: PALETTE.SLATE_700
-    }
-  })
-)
+const FacilitatorToggle = styled('div')<{
+  isActive: boolean
+  isReadOnly: boolean
+}>(({isActive, isReadOnly}) => ({
+  alignItems: 'center',
+  cursor: isReadOnly ? undefined : 'pointer',
+  display: 'flex',
+  // padding compensates for 8px grid, hanging elements
+  // icons and other decorators can be on a 4px grid, anyway, per MD spec
+  // total height = 40px like nav elements, and FacilitatorBlock and SidebarHeader (NewMeetingSidebar.tsx) add 8px gutter
+  padding: '2px 4px',
+  // StyledIcon when toggle isActive or not
+  span: {
+    backgroundColor: isActive ? PALETTE.SLATE_200 : undefined,
+    color: isActive ? PALETTE.SLATE_700 : PALETTE.SLATE_600
+  },
+  // StyledIcon when toggle hovered
+  '&:hover > span': {
+    backgroundColor: PALETTE.SLATE_200,
+    color: PALETTE.SLATE_700
+  }
+}))
 
 const Label = styled('div')({
   color: PALETTE.SLATE_700,
@@ -107,16 +107,13 @@ const Facilitator = (props: Props) => {
         endedAt
         facilitatorUserId
         meetingMembers {
-          user {
-            id
-            isConnected
-          }
+          isConnectedAt
+          userId
         }
         facilitator {
-          picture
-          preferredName
           user {
-            isConnected
+            picture
+            preferredName
           }
         }
       }
@@ -124,12 +121,10 @@ const Facilitator = (props: Props) => {
     meetingRef
   )
   const {endedAt, facilitatorUserId, meetingMembers, facilitator} = meeting
-  const connectedMemberIds = meetingMembers
-    .filter(({user}) => user.isConnected)
-    .map(({user}) => user.id)
-  const {user, picture, preferredName} = facilitator
-  // https://sentry.io/share/issue/efef01c3e7934ab981ed5c80ef2d64c8/
-  const isConnected = user?.isConnected ?? false
+  const connectedMemberIds = meetingMembers.filter((mm) => mm.isConnectedAt).map((mm) => mm.userId)
+  const facilitatingMeetingMember = meetingMembers.find((mm) => mm.userId === facilitatorUserId)
+  const {user} = facilitator
+  const {picture = '', preferredName = ''} = user ?? {}
   const {togglePortal, menuProps, menuPortal, originRef, portalStatus} = useMenu<HTMLDivElement>(
     MenuPosition.UPPER_RIGHT,
     {
@@ -155,12 +150,12 @@ const Facilitator = (props: Props) => {
         onMouseEnter={handleOnMouseEnter}
         ref={originRef}
       >
-        <AvatarBlock isConnected={isConnected}>
+        <AvatarBlock isConnected={!!facilitatingMeetingMember?.isConnectedAt}>
           <Avatar alt='' src={picture} />
         </AvatarBlock>
         <div>
           <Label>Facilitator</Label>
-          <Subtext>{preferredName}</Subtext>
+          <Subtext>{viewerId === facilitatorUserId ? 'You' : preferredName}</Subtext>
         </div>
         {!isReadOnly && (
           <StyledIcon>

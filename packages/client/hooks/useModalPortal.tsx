@@ -1,13 +1,21 @@
 import styled from '@emotion/styled'
-import React, {ReactElement, ReactNode, ReactPortal, Ref, Suspense, useEffect} from 'react'
+import {
+  type ReactElement,
+  type ReactNode,
+  type ReactPortal,
+  type Ref,
+  Suspense,
+  useEffect
+} from 'react'
 import ErrorBoundary from '../components/ErrorBoundary'
 import LoadingComponent from '../components/LoadingComponent/LoadingComponent'
 import ModalError from '../components/ModalError'
 import {DECELERATE} from '../styles/animation'
 import {PALETTE} from '../styles/paletteV3'
 import {Duration, ZIndex} from '../types/constEnums'
-import {LoadingDelayRef} from './useLoadingDelay'
-import usePortal, {PortalStatus} from './usePortal'
+import type {LoadingDelayRef} from './useLoadingDelay'
+import type usePortal from './usePortal'
+import {PortalStatus} from './usePortal'
 
 const ModalBlock = styled('div')({
   alignItems: 'center',
@@ -16,7 +24,7 @@ const ModalBlock = styled('div')({
   justifyContent: 'center',
   left: 0,
   // no margins or paddings since they could force it too low & cause a scrollbar to appear
-  position: 'absolute',
+  position: 'fixed',
   top: 0,
   width: '100%',
   zIndex: ZIndex.DIALOG,
@@ -48,7 +56,7 @@ const modalStyles = {
     transition: `transform ${Duration.MODAL_OPEN}ms ${DECELERATE}, opacity ${Duration.MODAL_OPEN}ms ${DECELERATE}`
   },
   [PortalStatus.Entered]: {
-    // wipe transform so it plays nicely with react-beautiful-dnd
+    // wipe transform so it plays nicely with @hello-pangea/dnd
   },
   [PortalStatus.Exiting]: {
     opacity: 0,

@@ -1,10 +1,10 @@
 import graphql from 'babel-plugin-relay/macro'
 import {commitMutation} from 'react-relay'
-import {StandardMutation} from '../types/relayMutations'
+import type {AddPokerTemplateScaleValueMutation as TAddPokerTemplateScaleValueMutation} from '../__generated__/AddPokerTemplateScaleValueMutation.graphql'
+import type {StandardMutation} from '../types/relayMutations'
 import dndNoise from '../utils/dndNoise'
 import addNodeToArray from '../utils/relay/addNodeToArray'
 import createProxyRecord from '../utils/relay/createProxyRecord'
-import {AddPokerTemplateScaleValueMutation as TAddPokerTemplateScaleValueMutation} from '../__generated__/AddPokerTemplateScaleValueMutation.graphql'
 
 graphql`
   fragment AddPokerTemplateScaleValueMutation_scale on AddPokerTemplateScaleValuePayload {

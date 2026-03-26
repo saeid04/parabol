@@ -1,12 +1,12 @@
 import graphql from 'babel-plugin-relay/macro'
 import {commitMutation} from 'react-relay'
-import {RecordProxy, RecordSourceSelectorProxy} from 'relay-runtime'
-import {ActionMeeting_meeting} from '~/__generated__/ActionMeeting_meeting.graphql'
-import {AgendaItem_agendaItem} from '~/__generated__/AgendaItem_agendaItem.graphql'
-import {UpdateAgendaItemMutation_team} from '~/__generated__/UpdateAgendaItemMutation_team.graphql'
-import {SharedUpdater, StandardMutation} from '../types/relayMutations'
+import type {RecordProxy, RecordSourceSelectorProxy} from 'relay-runtime'
+import type {ActionMeeting_meeting$data} from '~/__generated__/ActionMeeting_meeting.graphql'
+import type {AgendaItem_agendaItem$data} from '~/__generated__/AgendaItem_agendaItem.graphql'
+import type {UpdateAgendaItemMutation_team$data} from '~/__generated__/UpdateAgendaItemMutation_team.graphql'
+import type {UpdateAgendaItemMutation as TUpdateAgendaItemMutation} from '../__generated__/UpdateAgendaItemMutation.graphql'
+import type {SharedUpdater, StandardMutation} from '../types/relayMutations'
 import updateProxyRecord from '../utils/relay/updateProxyRecord'
-import {UpdateAgendaItemMutation as TUpdateAgendaItemMutation} from '../__generated__/UpdateAgendaItemMutation.graphql'
 import handleUpdateAgendaItems from './handlers/handleUpdateAgendaItems'
 
 graphql`
@@ -37,7 +37,7 @@ const handleUpdateAgendaPhase = (
   meetingId: string | undefined | null
 ) => {
   if (meetingId) {
-    const meeting = store.get(meetingId) as RecordProxy<ActionMeeting_meeting>
+    const meeting = store.get(meetingId) as RecordProxy<ActionMeeting_meeting$data>
     if (!meeting) return
     const phases = meeting.getLinkedRecords('phases')
     const agendaPhase = phases.find((phase) =>
@@ -45,7 +45,7 @@ const handleUpdateAgendaPhase = (
     )
     if (!agendaPhase) return
     const getSortOrder = (stage: RecordProxy) => {
-      const agendaItem = stage.getLinkedRecord<AgendaItem_agendaItem>('agendaItem')
+      const agendaItem = stage.getLinkedRecord<AgendaItem_agendaItem$data>('agendaItem')
       if (!agendaItem) return 0
       return agendaItem.getValue('sortOrder')
     }
@@ -58,7 +58,7 @@ const handleUpdateAgendaPhase = (
   }
 }
 
-export const updateAgendaItemUpdater: SharedUpdater<UpdateAgendaItemMutation_team> = (
+export const updateAgendaItemUpdater: SharedUpdater<UpdateAgendaItemMutation_team$data> = (
   payload,
   {store}
 ) => {

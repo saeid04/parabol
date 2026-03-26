@@ -1,13 +1,12 @@
-import {GraphQLResolveInfo} from 'graphql'
+import type {GraphQLResolveInfo} from 'graphql'
 import GitHubRepoId from 'parabol-client/shared/gqlIds/GitHubRepoId'
-import interpolateGitHubLabelTemplate from 'parabol-client/shared/interpolateGitHubLabelTemplate'
+import interpolateVotingLabelTemplate from 'parabol-client/shared/interpolateVotingLabelTemplate'
 import {PALETTE} from 'parabol-client/styles/paletteV3'
 import {SprintPokerDefaults} from 'parabol-client/types/constEnums'
 import makeAppURL from 'parabol-client/utils/makeAppURL'
 import {isNotNull} from 'parabol-client/utils/predicates'
 import appOrigin from '../../../appOrigin'
-import MeetingPoker from '../../../database/types/MeetingPoker'
-import {
+import type {
   AddCommentMutation,
   AddCommentMutationVariables,
   AddLabelMutation,
@@ -30,11 +29,11 @@ import getIssueId from '../../../utils/githubQueries/getIssueId.graphql'
 import getRepoLabels from '../../../utils/githubQueries/getRepoLabels.graphql'
 import removeLabels from '../../../utils/githubQueries/removeLabels.graphql'
 import makeScoreGitHubComment from '../../../utils/makeScoreGitHubComment'
-import {GQLContext} from '../../graphql'
-import {ITaskEstimateInput} from '../../types/TaskEstimateInput'
+import type {GQLContext} from '../../graphql'
+import type {TaskEstimateInput} from '../../public/resolverTypes'
 
 const pushEstimateToGitHub = async (
-  taskEstimate: ITaskEstimateInput,
+  taskEstimate: TaskEstimateInput,
   context: GQLContext,
   info: GraphQLResolveInfo,
   stageId: string
@@ -42,7 +41,7 @@ const pushEstimateToGitHub = async (
   const {dimensionName, taskId, value, meetingId} = taskEstimate
   const {dataLoader} = context
   const [task, meeting] = await Promise.all([
-    dataLoader.get('tasks').load(taskId),
+    dataLoader.get('tasks').loadNonNull(taskId),
     dataLoader.get('newMeetings').load(meetingId)
   ])
 
@@ -50,6 +49,9 @@ const pushEstimateToGitHub = async (
     return new Error('Meeting does not exist')
   }
 
+  if (meeting.meetingType !== 'poker') {
+    return new Error('Not a poker meeting')
+  }
   const githubIntegration = task.integration as Extract<
     typeof task.integration,
     {service: 'github'}
@@ -66,7 +68,7 @@ const pushEstimateToGitHub = async (
   const {repoName, repoOwner} = GitHubRepoId.split(nameWithOwner)
 
   // Set up githubRequest
-  const githubLabelName = interpolateGitHubLabelTemplate(labelTemplate, value)
+  const githubLabelName = interpolateVotingLabelTemplate(labelTemplate, value)
   const {accessToken} = auth
   const githubRequest = getGitHubRequest(info, context, {
     accessToken,
@@ -150,7 +152,7 @@ const pushEstimateToGitHub = async (
   if (!matchingLabel) {
     let color = PALETTE.GRAPE_500.slice(1)
     if (meeting) {
-      const {templateRefId} = meeting as MeetingPoker
+      const {templateRefId} = meeting
       const templateRef = await dataLoader.get('templateRefs').loadNonNull(templateRefId)
       const {dimensions} = templateRef
       const dimensionRef = dimensions.find((dimension) => dimension.name === dimensionName)

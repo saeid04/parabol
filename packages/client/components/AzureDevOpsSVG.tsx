@@ -1,10 +1,10 @@
-import React from 'react'
+import {memo} from 'react'
 
 // Can multiply 24(n) for standard MD sizes eg. 24(2) = 48
 
-const AzureDevOpsSVG = React.memo(() => {
+const AzureDevOpsSVG = memo(() => {
   return (
-    <svg width='24' height='24' viewBox='0 0 24 24' fill='none' xmlns='http://www.w3.org/2000/svg'>
+    <svg width='24' height='24' viewBox='0 0 16 16' fill='none' xmlns='http://www.w3.org/2000/svg'>
       <defs>
         <linearGradient id='a' x1='9' y1='16.97' x2='9' y2='1.03' gradientUnits='userSpaceOnUse'>
           <stop offset='0' stopColor='#0078d4' />

@@ -1,17 +1,18 @@
 import graphql from 'babel-plugin-relay/macro'
 import {commitMutation} from 'react-relay'
-import {RecordProxy} from 'relay-runtime'
+import type {RecordProxy} from 'relay-runtime'
+import type {EndCheckInMutation_notification$data} from '~/__generated__/EndCheckInMutation_notification.graphql'
+import type {EndCheckInMutation_team$data} from '~/__generated__/EndCheckInMutation_team.graphql'
 import onMeetingRoute from '~/utils/onMeetingRoute'
-import {EndCheckInMutation_notification} from '~/__generated__/EndCheckInMutation_notification.graphql'
-import {EndCheckInMutation_team} from '~/__generated__/EndCheckInMutation_team.graphql'
-import {
-  HistoryMaybeLocalHandler,
+import type {EndCheckInMutation as TEndCheckInMutation} from '../__generated__/EndCheckInMutation.graphql'
+import type {
+  NavigateMaybeLocalHandler,
   OnNextHandler,
-  OnNextHistoryContext,
+  OnNextNavigateContext,
   SharedUpdater,
   StandardMutation
 } from '../types/relayMutations'
-import {EndCheckInMutation as TEndCheckInMutation} from '../__generated__/EndCheckInMutation.graphql'
+import {GQLID} from '../utils/GQLID'
 import handleAddTimelineEvent from './handlers/handleAddTimelineEvent'
 import handleRemoveSuggestedActions from './handlers/handleRemoveSuggestedActions'
 import handleRemoveTasks from './handlers/handleRemoveTasks'
@@ -28,6 +29,7 @@ graphql`
       agendaItemCount
       commentCount
       taskCount
+      summaryPageId
     }
     removedTaskIds
     team {
@@ -40,12 +42,7 @@ graphql`
       }
     }
     timelineEvent {
-      id
-      team {
-        id
-        name
-      }
-      type
+      ...TimelineEventCompletedActionMeeting_timelineEvent @relay(mask: false)
     }
     updatedTasks {
       id
@@ -79,25 +76,26 @@ const mutation = graphql`
     }
   }
 `
-export const endCheckInTeamOnNext: OnNextHandler<EndCheckInMutation_team, OnNextHistoryContext> = (
-  payload,
-  context
-) => {
+export const endCheckInTeamOnNext: OnNextHandler<
+  EndCheckInMutation_team$data,
+  OnNextNavigateContext
+> = (payload, context) => {
   const {isKill, meeting} = payload
-  const {atmosphere, history} = context
+  const {atmosphere, navigate} = context
   if (!meeting) return
-  const {id: meetingId, teamId} = meeting
+  const {id: meetingId, teamId, summaryPageId} = meeting
   if (onMeetingRoute(window.location.pathname, [meetingId])) {
     if (isKill) {
-      history.push(`/team/${teamId}`)
+      navigate(`/team/${teamId}`)
       popEndMeetingToast(atmosphere, meetingId)
-    } else {
-      history.push(`/new-summary/${meetingId}`)
+    } else if (summaryPageId) {
+      const pageCode = GQLID.fromKey(summaryPageId)[0]
+      navigate(`/pages/${pageCode}`)
     }
   }
 }
 
-export const endCheckInNotificationUpdater: SharedUpdater<EndCheckInMutation_notification> = (
+export const endCheckInNotificationUpdater: SharedUpdater<EndCheckInMutation_notification$data> = (
   payload,
   {store}
 ) => {
@@ -105,7 +103,10 @@ export const endCheckInNotificationUpdater: SharedUpdater<EndCheckInMutation_not
   handleRemoveSuggestedActions(removedSuggestedActionId, store)
 }
 
-export const endCheckInTeamUpdater: SharedUpdater<EndCheckInMutation_team> = (payload, {store}) => {
+export const endCheckInTeamUpdater: SharedUpdater<EndCheckInMutation_team$data> = (
+  payload,
+  {store}
+) => {
   const updatedTasks = payload.getLinkedRecords('updatedTasks')
   const removedTaskIds = payload.getValue('removedTaskIds')
   const meeting = payload.getLinkedRecord('meeting') as RecordProxy
@@ -115,10 +116,10 @@ export const endCheckInTeamUpdater: SharedUpdater<EndCheckInMutation_team> = (pa
   handleUpsertTasks(updatedTasks as any, store)
 }
 
-const EndCheckInMutation: StandardMutation<TEndCheckInMutation, HistoryMaybeLocalHandler> = (
+const EndCheckInMutation: StandardMutation<TEndCheckInMutation, NavigateMaybeLocalHandler> = (
   atmosphere,
   variables,
-  {onError, onCompleted, history}
+  {onError, onCompleted, navigate}
 ) => {
   return commitMutation<TEndCheckInMutation>(atmosphere, {
     mutation,
@@ -134,7 +135,7 @@ const EndCheckInMutation: StandardMutation<TEndCheckInMutation, HistoryMaybeLoca
       if (onCompleted) {
         onCompleted(res, errors)
       }
-      endCheckInTeamOnNext(res.endCheckIn as any, {atmosphere, history})
+      endCheckInTeamOnNext(res.endCheckIn as any, {atmosphere, navigate})
     },
     onError
   })

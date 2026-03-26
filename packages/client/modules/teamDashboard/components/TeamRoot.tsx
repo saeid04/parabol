@@ -1,21 +1,19 @@
-import React, {Suspense} from 'react'
-import useQueryLoaderNow from '../../../hooks/useQueryLoaderNow'
-import useRouter from '../../../hooks/useRouter'
+import {Suspense} from 'react'
+import {useParams} from 'react-router'
 import teamContainerQuery, {
-  TeamContainerQuery
+  type TeamContainerQuery
 } from '../../../__generated__/TeamContainerQuery.graphql'
+import useQueryLoaderNow from '../../../hooks/useQueryLoaderNow'
 import TeamContainer from '../containers/Team/TeamContainer'
 
 const TeamRoot = () => {
-  const {location, match} = useRouter<{teamId: string}>()
-  const {params} = match
-  const {teamId} = params
-  const queryRef = useQueryLoaderNow<TeamContainerQuery>(teamContainerQuery, {teamId})
+  const {teamId} = useParams()
+  const queryRef = useQueryLoaderNow<TeamContainerQuery>(teamContainerQuery, {
+    teamId: teamId!
+  })
   return (
     <Suspense fallback={''}>
-      {queryRef && (
-        <TeamContainer location={location} match={match} queryRef={queryRef} teamId={teamId} />
-      )}
+      {queryRef && <TeamContainer queryRef={queryRef} teamId={teamId!} />}
     </Suspense>
   )
 }

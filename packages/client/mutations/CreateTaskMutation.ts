@@ -1,30 +1,31 @@
+import {generateJSON, generateText, type JSONContent} from '@tiptap/core'
 import graphql from 'babel-plugin-relay/macro'
 import {commitMutation} from 'react-relay'
 import AzureDevOpsProjectId from '~/shared/gqlIds/AzureDevOpsProjectId'
-import extractTextFromDraftString from '~/utils/draftjs/extractTextFromDraftString'
-import Atmosphere from '../Atmosphere'
+import type {CreateTaskMutation as TCreateTaskMutation} from '../__generated__/CreateTaskMutation.graphql'
+import type {CreateTaskMutation_notification$data} from '../__generated__/CreateTaskMutation_notification.graphql'
+import type {CreateTaskMutation_task$data} from '../__generated__/CreateTaskMutation_task.graphql'
+import type Atmosphere from '../Atmosphere'
 import GitHubIssueId from '../shared/gqlIds/GitHubIssueId'
 import JiraProjectId from '../shared/gqlIds/JiraProjectId'
-import {
+import {serverTipTapExtensions} from '../shared/tiptap/serverTipTapExtensions'
+import type {
   OnNextHandler,
-  OnNextHistoryContext,
+  OnNextNavigateContext,
   OptionalHandlers,
   SharedUpdater,
   StandardMutation
 } from '../types/relayMutations'
-import makeEmptyStr from '../utils/draftjs/makeEmptyStr'
 import clientTempId from '../utils/relay/clientTempId'
 import createProxyRecord from '../utils/relay/createProxyRecord'
 import getOptimisticTaskEditor from '../utils/relay/getOptimisticTaskEditor'
-import {CreateTaskMutation as TCreateTaskMutation} from '../__generated__/CreateTaskMutation.graphql'
-import {CreateTaskMutation_notification} from '../__generated__/CreateTaskMutation_notification.graphql'
-import {CreateTaskMutation_task} from '../__generated__/CreateTaskMutation_task.graphql'
 import handleAddNotifications from './handlers/handleAddNotifications'
 import handleAzureCreateIssue from './handlers/handleAzureCreateIssue'
 import handleEditTask from './handlers/handleEditTask'
 import handleGitHubCreateIssue from './handlers/handleGitHubCreateIssue'
 import handleGitLabCreateIssue from './handlers/handleGitLabCreateIssue'
 import handleJiraCreateIssue from './handlers/handleJiraCreateIssue'
+import handleLinearCreateIssue from './handlers/handleLinearCreateIssue'
 import handleUpsertTasks from './handlers/handleUpsertTasks'
 import popInvolvementToast from './toasts/popInvolvementToast'
 
@@ -32,7 +33,6 @@ graphql`
   fragment CreateTaskMutation_task on CreateTaskPayload {
     task {
       ...CompleteTaskFrag @relay(mask: false)
-      ...ThreadedItemReply_threadable
       ...ThreadedItem_threadable
       discussionId
       threadSortOrder
@@ -73,6 +73,20 @@ graphql`
             name
           }
         }
+        ... on _xLinearIssue {
+          __typename
+          id
+          description
+          identifier
+          title
+          linearProject: project {
+            name
+          }
+          team {
+            name
+          }
+          url
+        }
       }
     }
   }
@@ -100,14 +114,19 @@ const mutation = graphql`
   }
 `
 
-export const createTaskTaskUpdater: SharedUpdater<CreateTaskMutation_task> = (payload, {store}) => {
+export const createTaskTaskUpdater: SharedUpdater<CreateTaskMutation_task$data> = (
+  payload,
+  {store}
+) => {
   const task = payload.getLinkedRecord('task')
   if (!task) return
   const taskId = task.getValue('id')
   const content = task.getValue('content')
-  const rawContent = JSON.parse(content)
-  const {blocks} = rawContent
-  const isEditing = blocks.length === 0 || (blocks.length === 1 && blocks[0].text === '')
+  const rawContent = JSON.parse(content) as JSONContent
+  const isEditing =
+    !rawContent.content ||
+    rawContent.content.length === 0 ||
+    (rawContent.content.length === 1 && rawContent.content[0]?.text === '')
   const editorPayload = getOptimisticTaskEditor(store, taskId, isEditing)
   handleEditTask(editorPayload, store)
   handleUpsertTasks(task, store)
@@ -115,17 +134,18 @@ export const createTaskTaskUpdater: SharedUpdater<CreateTaskMutation_task> = (pa
   handleGitHubCreateIssue(task, store)
   handleGitLabCreateIssue(task, store)
   handleAzureCreateIssue(task, store)
+  handleLinearCreateIssue(task, store)
 }
 
 export const createTaskNotificationOnNext: OnNextHandler<
-  CreateTaskMutation_notification,
-  OnNextHistoryContext
-> = (payload, {atmosphere, history}) => {
+  CreateTaskMutation_notification$data,
+  OnNextNavigateContext
+> = (payload, {atmosphere, navigate}) => {
   if (!payload || !payload.involvementNotification) return
-  popInvolvementToast(payload.involvementNotification, {atmosphere, history})
+  popInvolvementToast(payload.involvementNotification, {atmosphere, navigate})
 }
 
-export const createTaskNotificationUpdater: SharedUpdater<CreateTaskMutation_notification> = (
+export const createTaskNotificationUpdater: SharedUpdater<CreateTaskMutation_notification$data> = (
   payload,
   {store}
 ) => {
@@ -158,7 +178,7 @@ const CreateTaskMutation: StandardMutation<TCreateTaskMutation, OptionalHandlers
       const viewer = store.getRoot().getLinkedRecord('viewer')
       const plaintextContent =
         newTask.plaintextContent ||
-        (newTask.content ? extractTextFromDraftString(newTask.content) : '')
+        (newTask.content ? generateText(JSON.parse(newTask.content), serverTipTapExtensions) : '')
       const optimisticTask = {
         ...rest,
         id: taskId,
@@ -168,7 +188,7 @@ const CreateTaskMutation: StandardMutation<TCreateTaskMutation, OptionalHandlers
         createdBy: viewerId,
         updatedAt: now,
         tags: [],
-        content: newTask.content || makeEmptyStr(),
+        content: newTask.content || JSON.stringify(generateJSON('<p></p>', serverTipTapExtensions)),
         title: plaintextContent,
         plaintextContent
       }
@@ -230,17 +250,33 @@ const CreateTaskMutation: StandardMutation<TCreateTaskMutation, OptionalHandlers
           })
           optimisticTaskIntegration.setLinkedRecord(project, 'project')
           task.setLinkedRecord(optimisticTaskIntegration, 'integration')
+        } else if (service === 'linear') {
+          const optimisticTaskIntegration = createProxyRecord(store, '_xLinearIssue', {
+            state: 'opened',
+            identifier: '?',
+            title: plaintextContent,
+            description: '',
+            url: '?'
+          })
+          const optimisticTeam = createProxyRecord(store, '_xLinearTeam', {
+            id: 'temp-linear-team-id:' + (integration.serviceProjectHash || 'unknown'),
+            name: '?'
+          })
+          optimisticTaskIntegration.setLinkedRecord(optimisticTeam, 'team')
+          task.setLinkedRecord(optimisticTaskIntegration, 'integration')
         } else {
           console.log('FIXME: implement createTask')
         }
       }
       const editorPayload = getOptimisticTaskEditor(store, taskId, isEditing)
       handleEditTask(editorPayload, store)
-      handleUpsertTasks(task as any, store)
+      //TODO #7943 Optimistic updates on arrays has a bug in Relay. As a workaround until it's fixed properly, let's just not do optimistic updates
+      //handleUpsertTasks(task as any, store)
       handleJiraCreateIssue(task, store)
       handleGitHubCreateIssue(task as any, store)
       handleGitLabCreateIssue(task as any, store)
       handleAzureCreateIssue(task as any, store)
+      handleLinearCreateIssue(task as any, store)
     },
     onError,
     onCompleted

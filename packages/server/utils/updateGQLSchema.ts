@@ -4,31 +4,43 @@
   To reduce watched file callback, we only want to write the file if there's a change
 */
 
-import fs from 'fs'
+import {readFile, writeFile} from 'node:fs/promises'
+import {mergeSchemas} from '@graphql-tools/schema'
 import {printSchema} from 'graphql'
 import path from 'path'
-import {promisify} from 'util'
-import privateSchema from '../graphql/private/rootSchema'
-import publicSchema from '../graphql/public/rootSchema'
-
-declare const __PROJECT_ROOT__: string
+import getProjectRoot from '../../../scripts/webpack/utils/getProjectRoot'
+import {typeDefs as privateTypeDefs} from '../graphql/private/importedTypeDefs'
+import {typeDefs} from '../graphql/public/importedTypeDefs'
+import {nestGitLab} from '../graphql/public/nestGitLab'
+import {nestLinear} from '../graphql/public/nestLinear'
+import {nestGitHub} from './nestGitHub'
 
 const writeIfChanged = async (dataPath: string, data: string) => {
-  const write = promisify(fs.writeFile)
-  const read = promisify(fs.readFile)
   try {
-    const existingFile = await read(dataPath, {encoding: 'utf-8'})
+    const existingFile = await readFile(dataPath, {encoding: 'utf-8'})
     if (data === existingFile) return
   } catch {
     // file does not exist
   }
-  return write(dataPath, data)
+  return writeFile(dataPath, data)
 }
 
 const updateGQLSchema = async () => {
-  const GQL_ROOT = path.join(__PROJECT_ROOT__, 'packages/server/graphql')
+  const projectRoot = getProjectRoot()!
+  const GQL_ROOT = path.join(projectRoot, 'packages/server/graphql')
   const publicSchemaPath = path.join(GQL_ROOT, 'public/schema.graphql')
   const privateSchemaPath = path.join(GQL_ROOT, 'private/schema.graphql')
+  const publicTypeDefs = mergeSchemas({
+    schemas: [],
+    typeDefs
+  })
+
+  const publicSchema = nestLinear(nestGitLab(nestGitHub(publicTypeDefs).schema).schema).schema
+  const privateSchema = mergeSchemas({
+    schemas: [publicSchema],
+    typeDefs: [privateTypeDefs]
+  })
+
   await Promise.all([
     writeIfChanged(publicSchemaPath, printSchema(publicSchema)),
     writeIfChanged(privateSchemaPath, printSchema(privateSchema))

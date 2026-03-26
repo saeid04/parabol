@@ -1,14 +1,14 @@
 import styled from '@emotion/styled'
 import graphql from 'babel-plugin-relay/macro'
-import React from 'react'
-import {commitLocalUpdate, createFragmentContainer} from 'react-relay'
+import type * as React from 'react'
+import {commitLocalUpdate, useFragment} from 'react-relay'
+import type {ScaleActions_scale$key} from '../../../__generated__/ScaleActions_scale.graphql'
 import DetailAction from '../../../components/DetailAction'
 import useAtmosphere from '../../../hooks/useAtmosphere'
 import useMutationProps from '../../../hooks/useMutationProps'
 import AddPokerTemplateScaleMutation from '../../../mutations/AddPokerTemplateScaleMutation'
 import RemovePokerTemplateScaleMutation from '../../../mutations/RemovePokerTemplateScaleMutation'
 import {Threshold} from '../../../types/constEnums'
-import {ScaleActions_scale} from '../../../__generated__/ScaleActions_scale.graphql'
 
 const CloneAndDelete = styled('div')({
   display: 'flex',
@@ -16,13 +16,24 @@ const CloneAndDelete = styled('div')({
 })
 
 interface Props {
-  scale: ScaleActions_scale
+  scale: ScaleActions_scale$key
   scaleCount: number
   teamId: string
+  closeMenu: () => void
 }
 
 const ScaleActions = (props: Props) => {
-  const {scale, scaleCount, teamId} = props
+  const {scale: scaleRef, scaleCount, teamId, closeMenu} = props
+  const scale = useFragment(
+    graphql`
+      fragment ScaleActions_scale on TemplateScale {
+        id
+        isStarter
+        teamId
+      }
+    `,
+    scaleRef
+  )
   const {id: scaleId, isStarter} = scale
   const atmosphere = useAtmosphere()
   const {onError, onCompleted, submitting, submitMutation} = useMutationProps()
@@ -41,6 +52,7 @@ const ScaleActions = (props: Props) => {
         {onError, onCompleted}
       )
     }
+    closeMenu()
   }
   const editScale = () => {
     commitLocalUpdate(atmosphere, (store) => {
@@ -71,12 +83,4 @@ const ScaleActions = (props: Props) => {
     </CloneAndDelete>
   )
 }
-export default createFragmentContainer(ScaleActions, {
-  scale: graphql`
-    fragment ScaleActions_scale on TemplateScale {
-      id
-      isStarter
-      teamId
-    }
-  `
-})
+export default ScaleActions

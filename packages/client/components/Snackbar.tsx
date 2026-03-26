@@ -1,11 +1,11 @@
 import styled from '@emotion/styled'
-import React, {useEffect, useLayoutEffect, useRef} from 'react'
+import {memo, useEffect, useLayoutEffect, useRef} from 'react'
+import {useLocation} from 'react-router'
 import useForceUpdate from '~/hooks/useForceUpdate'
 import useAtmosphere from '../hooks/useAtmosphere'
 import useBreakpoint from '../hooks/useBreakpoint'
 import useEventCallback from '../hooks/useEventCallback'
 import usePortal from '../hooks/usePortal'
-import useRouter from '../hooks/useRouter'
 import useTransition from '../hooks/useTransition'
 import {Breakpoint, NavSidebar, ZIndex} from '../types/constEnums'
 import clientTempId from '../utils/relay/clientTempId'
@@ -51,13 +51,16 @@ export interface Snack {
   showDismissButton?: boolean
 }
 
-const Snackbar = React.memo(() => {
+const Snackbar = memo(() => {
   const snackQueueRef = useRef<Snack[]>([])
   const activeSnacksRef = useRef<Snack[]>([])
   const forceUpdate = useForceUpdate()
   const atmosphere = useAtmosphere()
-  const {openPortal, terminatePortal, portal} = usePortal({id: 'snackbar', noClose: true})
-  const {location} = useRouter()
+  const {openPortal, terminatePortal, portal} = usePortal({
+    id: 'snackbar',
+    noClose: true
+  })
+  const location = useLocation()
   const hasSidebar =
     location.pathname.startsWith('/meet/') || !!location.pathname.match(/\/meet\/.*\/responses/g)
   const isDesktop = useBreakpoint(Breakpoint.SIDEBAR_LEFT)
@@ -113,7 +116,6 @@ const Snackbar = React.memo(() => {
     const snackInQueue = snackQueueRef.current.find(dupeFilter)
     const snackIsActive = activeSnacksRef.current.find(dupeFilter)
     if (snackInQueue || snackIsActive) return
-    // This is temporary until these errors stop showing up in sentry
     if (typeof snack.message !== 'string') {
       console.error(`Bad snack message: ${snack.key}`)
       if (snack.message.message) {

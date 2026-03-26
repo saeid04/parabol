@@ -2,8 +2,9 @@ import styled from '@emotion/styled'
 import {Timer} from '@mui/icons-material'
 import graphql from 'babel-plugin-relay/macro'
 import ms from 'ms'
-import React, {useState} from 'react'
-import {createFragmentContainer} from 'react-relay'
+import {useState} from 'react'
+import {useFragment} from 'react-relay'
+import type {StageTimerModalTimeLimit_stage$key} from '../__generated__/StageTimerModalTimeLimit_stage.graphql'
 import useAtmosphere from '../hooks/useAtmosphere'
 import {MenuPosition} from '../hooks/useCoords'
 import useMenu from '../hooks/useMenu'
@@ -12,7 +13,6 @@ import SetStageTimerMutation from '../mutations/SetStageTimerMutation'
 import {PALETTE} from '../styles/paletteV3'
 import {MeetingLabels} from '../types/constEnums'
 import plural from '../utils/plural'
-import {StageTimerModalTimeLimit_stage} from '../__generated__/StageTimerModalTimeLimit_stage.graphql'
 import DropdownMenuToggle from './DropdownMenuToggle'
 import SecondaryButton from './SecondaryButton'
 import StageTimerMinutePicker from './StageTimerMinutePicker'
@@ -22,7 +22,7 @@ interface Props {
   closePortal: () => void
   defaultTimeLimit: number
   meetingId: string
-  stage: StageTimerModalTimeLimit_stage
+  stage: StageTimerModalTimeLimit_stage$key
 }
 
 const Toggle = styled(DropdownMenuToggle)({
@@ -53,7 +53,16 @@ const StyledButton = styled(SecondaryButton)({
 })
 
 const StageTimerModalTimeLimit = (props: Props) => {
-  const {closePortal, defaultTimeLimit, meetingId, stage} = props
+  const {closePortal, defaultTimeLimit, meetingId, stage: stageRef} = props
+  const stage = useFragment(
+    graphql`
+      fragment StageTimerModalTimeLimit_stage on NewMeetingStage {
+        suggestedTimeLimit
+        scheduledEndTime
+      }
+    `,
+    stageRef
+  )
   const {suggestedTimeLimit, scheduledEndTime} = stage
   const initialTimeLimit =
     scheduledEndTime || !suggestedTimeLimit
@@ -69,7 +78,6 @@ const StageTimerModalTimeLimit = (props: Props) => {
     originRef
   } = useMenu<HTMLDivElement>(MenuPosition.LOWER_LEFT, {
     id: 'StageTimerMinutePicker',
-    parentId: 'StageTimerModal',
     isDropdown: true
   })
   const {submitting, onError, onCompleted, submitMutation, error} = useMutationProps()
@@ -82,7 +90,11 @@ const StageTimerModalTimeLimit = (props: Props) => {
     submitMutation()
     SetStageTimerMutation(
       atmosphere,
-      {meetingId, timeRemaining, scheduledEndTime: new Date(Date.now() + timeRemaining)},
+      {
+        meetingId,
+        timeRemaining,
+        scheduledEndTime: new Date(Date.now() + timeRemaining)
+      },
       {onError, onCompleted}
     )
     closePortal()
@@ -115,11 +127,4 @@ const StageTimerModalTimeLimit = (props: Props) => {
   )
 }
 
-export default createFragmentContainer(StageTimerModalTimeLimit, {
-  stage: graphql`
-    fragment StageTimerModalTimeLimit_stage on NewMeetingStage {
-      suggestedTimeLimit
-      scheduledEndTime
-    }
-  `
-})
+export default StageTimerModalTimeLimit

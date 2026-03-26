@@ -1,29 +1,34 @@
 import styled from '@emotion/styled'
 import graphql from 'babel-plugin-relay/macro'
-import {Location} from 'history'
-import React, {lazy, useRef} from 'react'
-import {PreloadedQuery, usePreloadedQuery} from 'react-relay'
-import {Route, Switch, useLocation} from 'react-router'
+import {lazy, useRef} from 'react'
+import {type PreloadedQuery, usePreloadedQuery} from 'react-relay'
+import {Route, Routes, useParams} from 'react-router'
 import useBreakpoint from '~/hooks/useBreakpoint'
+import useNewFeatureSnackbar from '~/hooks/useNewFeatureSnackbar'
 import useSnackNag from '~/hooks/useSnackNag'
 import useSnacksForNewMeetings from '~/hooks/useSnacksForNewMeetings'
 import {PALETTE} from '~/styles/paletteV3'
 import {Breakpoint} from '~/types/constEnums'
+import type {DashboardQuery} from '../__generated__/DashboardQuery.graphql'
 import useSidebar from '../hooks/useSidebar'
-import useUsageSnackNag from '../hooks/useUsageSnackNag'
-import {DashboardQuery} from '../__generated__/DashboardQuery.graphql'
 import DashSidebar from './Dashboard/DashSidebar'
 import MobileDashSidebar from './Dashboard/MobileDashSidebar'
 import DashTopBar from './DashTopBar'
 import MobileDashTopBar from './MobileDashTopBar'
+import RequestToJoinComponent from './RequestToJoin'
 import SwipeableDashSidebar from './SwipeableDashSidebar'
 
-const InsightsRoot = lazy(
-  () => import(/* webpackChunkName: 'Insights' */ '../components/InsightsRoot')
-)
 const MeetingsDash = lazy(
   () => import(/* webpackChunkName: 'MeetingsDash' */ '../components/MeetingsDash')
 )
+
+const NewMeetingSummary = lazy(
+  () =>
+    import(
+      /* webpackChunkName: 'NewMeetingSummaryRoot' */ '../modules/summary/components/NewMeetingSummaryRoot'
+    )
+)
+
 const UserDashboard = lazy(
   () =>
     import(
@@ -39,9 +44,17 @@ const NewTeam = lazy(
       /* webpackChunkName: 'NewTeamRoot' */ '../modules/newTeam/containers/NewTeamForm/NewTeamRoot'
     )
 )
-const NewMeetingRoot = lazy(
-  () => import(/* webpackChunkName: 'NewMeetingRoot' */ './NewMeetingRoot')
+
+const PageRoot = lazy(() => import(/* webpackChunkName: 'PageRoot' */ '../modules/pages/PageRoot'))
+const MakePage = lazy(() => import(/* webpackChunkName: 'MakePage' */ '../modules/pages/MakePage'))
+
+const ShareTopicRouterRoot = lazy(
+  () => import(/* webpackChunkName: 'ShareTopicRouterRoot' */ './ShareTopicRouterRoot')
 )
+const NotFound = lazy(() => import(/* webpackChunkName: 'NotFound' */ './NotFound/NotFound'))
+
+import {SearchProvider} from '../modules/search/SearchContext'
+import {GlobalSearchDialog} from '../modules/search/SearchDialog'
 
 interface Props {
   queryRef: PreloadedQuery<DashboardQuery>
@@ -51,7 +64,7 @@ const DashLayout = styled('div')({
   display: 'flex',
   flexDirection: 'column',
   height: '100%'
-  // overflow: 'auto', removed because react-beautiful-dnd only supports 1 scrolling parent
+  // overflow: 'auto', removed because @hello-pangea/dnd only supports 1 scrolling parent
 })
 
 const DashPanel = styled('div')({
@@ -95,21 +108,25 @@ const SkipLink = styled('a')({
   }
 })
 
+const RequestToJoinRoute = () => {
+  const {teamId} = useParams()
+  return <RequestToJoinComponent key={teamId} />
+}
+
 const Dashboard = (props: Props) => {
   const {queryRef} = props
   const data = usePreloadedQuery<DashboardQuery>(
     graphql`
-      query DashboardQuery($first: Int!, $after: DateTime) {
+      query DashboardQuery($first: Int!, $after: DateTime, $nullId: ID) {
         ...DashTopBar_query
         ...MobileDashTopBar_query
         viewer {
           ...MeetingsDash_viewer
           ...MobileDashSidebar_viewer
           ...DashSidebar_viewer
+          ...useNewFeatureSnackbar_viewer
+          ...Page_viewer
           overLimitCopy
-          featureFlags {
-            insights
-          }
           teams {
             activeMeetings {
               ...useSnacksForNewMeetings_meetings
@@ -118,59 +135,62 @@ const Dashboard = (props: Props) => {
         }
       }
     `,
-    queryRef,
-    {UNSTABLE_renderPolicy: 'full'}
+    queryRef
   )
   const {viewer} = data
-  const {teams, featureFlags} = viewer
-  const {insights} = featureFlags
+  const {teams} = viewer
   const activeMeetings = teams.flatMap((team) => team.activeMeetings).filter(Boolean)
   const {isOpen, toggle, handleMenuClick} = useSidebar()
   const isDesktop = useBreakpoint(Breakpoint.SIDEBAR_LEFT)
   const overLimitCopy = viewer?.overLimitCopy
   const meetingsDashRef = useRef<HTMLDivElement>(null)
   useSnackNag(overLimitCopy)
-  useUsageSnackNag(insights)
   useSnacksForNewMeetings(activeMeetings)
-
-  const location = useLocation<{backgroundLocation?: Location}>()
-  const state = location.state
+  useNewFeatureSnackbar(viewer)
 
   return (
-    <DashLayout>
-      <SkipLink href='#main'>Skip to content</SkipLink>
-      {isDesktop ? (
-        <DashTopBar queryRef={data} toggle={toggle} />
-      ) : (
-        <MobileDashTopBar queryRef={data} toggle={toggle} />
-      )}
-      <DashPanel>
+    <SearchProvider>
+      <GlobalSearchDialog />
+      <DashLayout>
+        <SkipLink href='#main'>Skip to content</SkipLink>
         {isDesktop ? (
-          <DashSidebar viewerRef={viewer} isOpen={isOpen} />
+          <DashTopBar queryRef={data} toggle={toggle} />
         ) : (
-          <SwipeableDashSidebar isOpen={isOpen} onToggle={toggle}>
-            <MobileDashSidebar viewerRef={viewer} handleMenuClick={handleMenuClick} />
-          </SwipeableDashSidebar>
+          <MobileDashTopBar queryRef={data} toggle={toggle} />
         )}
-        <DashMain id='main' ref={meetingsDashRef}>
-          <Switch location={state?.backgroundLocation || location}>
-            <Route
-              path='(/meetings|/new-meeting)'
-              render={(routeProps) => (
-                <MeetingsDash {...routeProps} meetingsDashRef={meetingsDashRef} viewer={viewer} />
-              )}
-            />
-            <Route path='/me' component={UserDashboard} />
-            <Route path='/team/:teamId' component={TeamRoot} />
-            <Route path='/newteam/:defaultOrgId?' component={NewTeam} />
-            <Route path='/usage' component={InsightsRoot} />
-          </Switch>
-          <Switch>
-            <Route path='/new-meeting/:teamId?' component={NewMeetingRoot} />
-          </Switch>
-        </DashMain>
-      </DashPanel>
-    </DashLayout>
+        <DashPanel>
+          {isDesktop ? (
+            <DashSidebar viewerRef={viewer} isOpen={isOpen} />
+          ) : (
+            <SwipeableDashSidebar isOpen={isOpen} onToggle={toggle}>
+              <MobileDashSidebar viewerRef={viewer} handleMenuClick={handleMenuClick} />
+            </SwipeableDashSidebar>
+          )}
+          <DashMain id='main' ref={meetingsDashRef}>
+            <Routes>
+              <Route
+                path='/meetings'
+                element={<MeetingsDash meetingsDashRef={meetingsDashRef} viewer={viewer} />}
+              />
+              <Route path='/me/*' element={<UserDashboard />} />
+              <Route path='/team/:teamId/requestToJoin' element={<RequestToJoinRoute />} />
+              <Route path='/team/:teamId/*' element={<TeamRoot />} />
+              <Route path='/newteam/:defaultOrgId' element={<NewTeam />} />
+              <Route path='/newteam' element={<NewTeam />} />
+              <Route path='/pages/:pageSlug' element={<PageRoot viewerRef={viewer} />} />
+              <Route path='/pages' element={<MakePage />} />
+              <Route
+                path='/new-summary/:meetingId/share/:stageId'
+                element={<ShareTopicRouterRoot />}
+              />
+              <Route path='/new-summary/:meetingId/:urlAction' element={<NewMeetingSummary />} />
+              <Route path='/new-summary/:meetingId' element={<NewMeetingSummary />} />
+              <Route path='*' element={<NotFound />} />
+            </Routes>
+          </DashMain>
+        </DashPanel>
+      </DashLayout>
+    </SearchProvider>
   )
 }
 

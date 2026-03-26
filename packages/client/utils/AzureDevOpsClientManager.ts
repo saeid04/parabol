@@ -1,5 +1,5 @@
-import Atmosphere from '../Atmosphere'
-import {MenuMutationProps} from '../hooks/useMutationProps'
+import type Atmosphere from '../Atmosphere'
+import type {MenuMutationProps} from '../hooks/useMutationProps'
 import AddTeamMemberIntegrationAuthMutation from '../mutations/AddTeamMemberIntegrationAuthMutation'
 import getOAuthPopupFeatures from './getOAuthPopupFeatures'
 import makeHref from './makeHref'
@@ -32,7 +32,11 @@ class AzureDevOpsClientManager {
   static async openOAuth(
     atmosphere: Atmosphere,
     teamId: string,
-    provider: {id: string; tenantId: string | null; clientId: string},
+    provider: {
+      id: string
+      tenantId: string | null | undefined
+      clientId: string
+    },
     mutationProps: MenuMutationProps
   ) {
     const {id: providerId, tenantId, clientId} = provider
@@ -40,8 +44,9 @@ class AzureDevOpsClientManager {
     const providerState = Math.random().toString(36).substring(5)
     const verifier = AzureDevOpsClientManager.generateVerifier()
     const code = await AzureDevOpsClientManager.generateCodeChallenge(verifier)
-    const redirect = makeHref('/auth/ado')
-    const scope = '499b84ac-1321-427f-aa17-267ca6975798/.default'
+    const redirect = makeHref('/auth/ado2')
+    const scope =
+      '499b84ac-1321-427f-aa17-267ca6975798/vso.project 499b84ac-1321-427f-aa17-267ca6975798/vso.work_write offline_access'
     const url = `https://login.microsoftonline.com/${tenantId}/oauth2/v2.0/authorize?client_id=${clientId}&response_type=code&redirect_uri=${redirect}&response_mode=query&scope=${scope}&state=${providerState}&code_challenge=${code}&code_challenge_method=S256`
 
     // Open synchronously because of Safari

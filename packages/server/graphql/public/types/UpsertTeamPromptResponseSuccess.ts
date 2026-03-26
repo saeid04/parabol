@@ -1,7 +1,7 @@
-import {UpsertTeamPromptResponseSuccessResolvers} from '../resolverTypes'
+import type {UpsertTeamPromptResponseSuccessResolvers} from '../resolverTypes'
 
 export type UpsertTeamPromptResponseSuccessSource = {
-  teamPromptResponseId: string
+  teamPromptResponseId: number
   meetingId: string
 }
 
@@ -12,7 +12,7 @@ const UpsertTeamPromptResponseSuccess: UpsertTeamPromptResponseSuccessResolvers 
   },
   meeting: async (source, _args, {dataLoader}) => {
     const {meetingId} = source
-    return dataLoader.get('newMeetings').load(meetingId)
+    return dataLoader.get('newMeetings').loadNonNull(meetingId)
   }
 }
 

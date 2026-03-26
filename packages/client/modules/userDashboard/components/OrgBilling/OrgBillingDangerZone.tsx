@@ -1,13 +1,13 @@
 import styled from '@emotion/styled'
 import {Email as EmailIcon} from '@mui/icons-material'
 import graphql from 'babel-plugin-relay/macro'
-import React from 'react'
-import {createFragmentContainer} from 'react-relay'
+import {useFragment} from 'react-relay'
+import {useNavigate} from 'react-router'
+import type {OrgBillingDangerZone_organization$key} from '~/__generated__/OrgBillingDangerZone_organization.graphql'
 import ArchiveOrganization from '~/modules/teamDashboard/components/ArchiveTeam/ArchiveOrganization'
-import {OrgBillingDangerZone_organization} from '~/__generated__/OrgBillingDangerZone_organization.graphql'
 import Panel from '../../../../components/Panel/Panel'
 import {PALETTE} from '../../../../styles/paletteV3'
-import {Layout} from '../../../../types/constEnums'
+import {ElementWidth, Layout} from '../../../../types/constEnums'
 
 const EnvelopeIcon = styled('div')({
   height: 18,
@@ -24,63 +24,86 @@ const PanelRow = styled('div')({
   textAlign: 'center'
 })
 
-const Unsubscribe = styled('div')({
-  alignItems: 'center',
-  color: PALETTE.SLATE_700,
-  display: 'flex',
-  justifyContent: 'center',
-  '& a': {
-    alignItems: 'center',
-    color: PALETTE.SKY_500,
-    display: 'flex',
-    marginLeft: 8,
-    '& > u': {
-      textDecoration: 'none'
-    },
-    '&:hover > u, &:focus > u': {
-      textDecoration: 'underline'
-    }
-  }
-})
+const StyledPanel = styled(Panel)<{isWide: boolean}>(({isWide}) => ({
+  maxWidth: isWide ? ElementWidth.PANEL_WIDTH : 'inherit'
+}))
 
 interface Props {
-  organization: OrgBillingDangerZone_organization
+  organization: OrgBillingDangerZone_organization$key
+  isWide?: boolean
 }
+
 const OrgBillingDangerZone = (props: Props) => {
-  const {organization} = props
-  const {isBillingLeader, tier} = organization
-  if (!isBillingLeader) return null
-  const isStarter = tier === 'starter'
+  const {organization: organizationRef, isWide = false} = props
+  const organization = useFragment(
+    graphql`
+      fragment OrgBillingDangerZone_organization on Organization {
+        ...ArchiveOrganization_organization
+        id
+        isBillingLeader
+        billingTier
+      }
+    `,
+    organizationRef
+  )
+  const navigate = useNavigate()
+  const {id, isBillingLeader, billingTier} = organization
+  if (!isBillingLeader)
+    return (
+      <StyledPanel isWide={isWide} label='Danger Zone'>
+        <PanelRow>
+          <div className='text-slate-700'>
+            {'Only the billing leader can manage this organization'}
+          </div>
+        </PanelRow>
+      </StyledPanel>
+    )
+  const isStarter = billingTier === 'starter'
+  const isTeam = billingTier === 'team'
+
+  const handleDowngrade = () => {
+    navigate(`/me/organizations/${id}/billing`)
+  }
+
   return (
-    <Panel label='Danger Zone'>
+    <StyledPanel isWide={isWide} label='Danger Zone'>
       <PanelRow>
         {isStarter ? (
           <ArchiveOrganization organization={organization} />
+        ) : isTeam ? (
+          <div className='flex items-center justify-center text-slate-700'>
+            <span>{'Need to cancel? '}</span>
+            <a
+              onClick={handleDowngrade}
+              title='Downgrade'
+              className='mr-1 ml-1 flex items-center text-sky-500'
+            >
+              <u className='no-underline hover:cursor-pointer hover:underline focus:underline'>
+                {'Downgrade'}
+              </u>
+            </a>
+            <span>{' to the Starter tier'}</span>
+          </div>
         ) : (
-          <Unsubscribe>
+          <div className='flex items-center justify-center text-slate-700'>
             <span>{'Need to cancel? It’s painless. '}</span>
             <a
               href='mailto:love@parabol.co?subject=Instant Unsubscribe from Team Plan'
               title='Instant Unsubscribe from Team Plan'
+              className='mr-1 ml-1 flex items-center text-sky-500'
             >
-              <u>{'Contact us'}</u>
+              <u className='no-underline hover:cursor-pointer hover:underline focus:underline'>
+                {'Contact us'}
+              </u>
               <EnvelopeIcon>
                 <EmailIcon />
               </EnvelopeIcon>
             </a>
-          </Unsubscribe>
+          </div>
         )}
       </PanelRow>
-    </Panel>
+    </StyledPanel>
   )
 }
 
-export default createFragmentContainer(OrgBillingDangerZone, {
-  organization: graphql`
-    fragment OrgBillingDangerZone_organization on Organization {
-      ...ArchiveOrganization_organization
-      isBillingLeader
-      tier
-    }
-  `
-})
+export default OrgBillingDangerZone

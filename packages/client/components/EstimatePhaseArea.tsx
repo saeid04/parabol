@@ -1,49 +1,15 @@
-import styled from '@emotion/styled'
 import graphql from 'babel-plugin-relay/macro'
-import React, {useRef} from 'react'
-import {createFragmentContainer} from 'react-relay'
-import SwipeableViews from 'react-swipeable-views'
+import type * as React from 'react'
+import {useRef} from 'react'
+import {useFragment} from 'react-relay'
+import type {EstimatePhaseArea_meeting$key} from '~/__generated__/EstimatePhaseArea_meeting.graphql'
 import useBreakpoint from '~/hooks/useBreakpoint'
-import useGotoStageId from '~/hooks/useGotoStageId'
+import type useGotoStageId from '~/hooks/useGotoStageId'
 import {PALETTE} from '~/styles/paletteV3'
 import {Breakpoint} from '~/types/constEnums'
-import {EstimatePhaseArea_meeting} from '~/__generated__/EstimatePhaseArea_meeting.graphql'
 import EstimateDimensionColumn from './EstimateDimensionColumn'
 import PokerCardDeck from './PokerCardDeck'
-
-const EstimateArea = styled('div')({
-  overflow: 'hidden',
-  display: 'flex',
-  flexDirection: 'column',
-  flex: 1,
-  width: '100%'
-})
-
-const StepperDots = styled('div')({
-  display: 'flex',
-  justifyContent: 'center',
-  paddingTop: 4,
-  width: '100%'
-})
-
-const StepperDot = styled('div')<{isActive: boolean}>(({isActive}) => ({
-  backgroundColor: isActive ? PALETTE.GRAPE_700 : PALETTE.SLATE_600,
-  borderRadius: '50%',
-  height: 8,
-  margin: '0 2px',
-  opacity: isActive ? undefined : 0.35,
-  width: 8
-}))
-
-const SwipableEstimateItem = styled('div')<{isDesktop: boolean}>(({isDesktop}) => ({
-  background: PALETTE.SLATE_300,
-  borderRadius: '8px 8px 0 0',
-  flex: 1,
-  // padding-bottom allows the content to scroll out from under
-  // the hand of poker cards and the meeting bottom bar
-  // on mobile the cards and bottom bar have less height
-  paddingBottom: isDesktop ? 8 * 19 : 8 * 12
-}))
+import SwipeablePanel from './SwipeablePanel'
 
 const innerStyle = (isDesktop: boolean, hasSingleDimension: boolean): React.CSSProperties => {
   return {
@@ -55,24 +21,41 @@ const innerStyle = (isDesktop: boolean, hasSingleDimension: boolean): React.CSSP
         ? '12px 8px 0'
         : '4px 4px 0'
       : isDesktop
-      ? '8px 40px 0'
-      : '8px 16px 0',
+        ? '8px 40px 0'
+        : '8px 16px 0',
     width: '100%',
     overflow: 'visible'
   }
 }
 
-const containerStyle = {
-  height: '100%'
-}
-
 interface Props {
   gotoStageId: ReturnType<typeof useGotoStageId>
-  meeting: EstimatePhaseArea_meeting
+  meeting: EstimatePhaseArea_meeting$key
 }
 
 const EstimatePhaseArea = (props: Props) => {
-  const {gotoStageId, meeting} = props
+  const {gotoStageId, meeting: meetingRef} = props
+  const meeting = useFragment(
+    graphql`
+      fragment EstimatePhaseArea_meeting on PokerMeeting {
+        ...PokerCardDeck_meeting
+        ...EstimateDimensionColumn_meeting
+        localStage {
+          ...EstimatePhaseAreaStage @relay(mask: false)
+        }
+        phases {
+          ... on EstimatePhase {
+            phaseType
+            stages {
+              ...EstimateDimensionColumn_stage
+              ...EstimatePhaseAreaStage @relay(mask: false)
+            }
+          }
+        }
+      }
+    `,
+    meetingRef
+  )
   const {localStage, phases} = meeting
   const {id: localStageId, taskId} = localStage
   const {stages} = phases.find(({phaseType}) => phaseType === 'ESTIMATE')!
@@ -86,40 +69,49 @@ const EstimatePhaseArea = (props: Props) => {
     if (stageId) gotoStageId(stageId)
   }
 
-  const slideContainer = {
-    display: 'flex',
-    padding: isDesktop ? '0 8px' : '0 4px'
-  }
-
   const hasSingleDimension = dimensionStages.length === 1
 
   return (
-    <EstimateArea ref={estimateAreaRef}>
+    <div className='flex w-full flex-1 flex-col overflow-hidden' ref={estimateAreaRef}>
       {dimensionStages.length > 1 && (
-        <StepperDots>
+        <div className='flex w-full justify-center pt-1'>
           {dimensionStages.map((_, idx) => {
+            const isActive = idx === stageIdx
             return (
-              <StepperDot key={idx} isActive={idx === stageIdx} onClick={() => onChangeIdx(idx)} />
+              <div
+                key={idx}
+                className='mx-0.5 h-2 w-2 cursor-pointer rounded-full'
+                style={{
+                  backgroundColor: isActive ? PALETTE.GRAPE_700 : PALETTE.SLATE_600,
+                  opacity: isActive ? undefined : 0.35
+                }}
+                onClick={() => onChangeIdx(idx)}
+              />
             )
           })}
-        </StepperDots>
+        </div>
       )}
       <PokerCardDeck meeting={meeting} estimateAreaRef={estimateAreaRef} />
-      <SwipeableViews
-        containerStyle={containerStyle}
-        enableMouseEvents
+      <SwipeablePanel
         index={stageIdx}
         onChangeIndex={onChangeIdx}
-        slideStyle={slideContainer}
         style={innerStyle(isDesktop, hasSingleDimension)}
       >
         {dimensionStages.map((stage, idx) => (
-          <SwipableEstimateItem isDesktop={isDesktop} key={idx}>
+          <div
+            key={idx}
+            className='flex-1 rounded-t-lg'
+            style={{
+              background: PALETTE.SLATE_300,
+              paddingBottom: isDesktop ? 8 * 19 : 8 * 12,
+              padding: isDesktop ? '0 8px' : '0 4px'
+            }}
+          >
             <EstimateDimensionColumn meeting={meeting} stage={stage} />
-          </SwipableEstimateItem>
+          </div>
         ))}
-      </SwipeableViews>
-    </EstimateArea>
+      </SwipeablePanel>
+    </div>
   )
 }
 
@@ -130,23 +122,4 @@ graphql`
   }
 `
 
-export default createFragmentContainer(EstimatePhaseArea, {
-  meeting: graphql`
-    fragment EstimatePhaseArea_meeting on PokerMeeting {
-      ...PokerCardDeck_meeting
-      ...EstimateDimensionColumn_meeting
-      localStage {
-        ...EstimatePhaseAreaStage @relay(mask: false)
-      }
-      phases {
-        ... on EstimatePhase {
-          phaseType
-          stages {
-            ...EstimateDimensionColumn_stage
-            ...EstimatePhaseAreaStage @relay(mask: false)
-          }
-        }
-      }
-    }
-  `
-})
+export default EstimatePhaseArea

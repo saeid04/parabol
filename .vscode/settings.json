@@ -1,43 +1,22 @@
 {
   "git.ignoreLimitWarning": true,
-  "eslint.packageManager": "yarn",
   "typescript.tsdk": "node_modules/typescript/lib",
   "editor.tabSize": 2,
-  "eslint.workingDirectories": [
-    {
-      "directory": "./packages/server",
-      "changeProcessCWD": true
-    },
-    {
-      "directory": "./packages/client",
-      "changeProcessCWD": true
-    }
-  ],
-  "eslint.validate": [
-    "javascript",
-    "javascriptreact",
-    {
-      "language": "typescript",
-      "autoFix": true
-    },
-    {
-      "language": "typescriptreact",
-      "autoFix": true
-    }
-  ],
-  "npm.packageManager": "yarn",
+  "npm.packageManager": "pnpm",
   "editor.codeActionsOnSave": {
-    "source.fixAll": true
+    "source.fixAll.biome": "explicit",
+    "source.organizeImports.biome": "explicit"
   },
-  "editor.defaultFormatter": "esbenp.prettier-vscode",
-  "[javascript]": {
-    "editor.defaultFormatter": "esbenp.prettier-vscode"
-  },
+  "editor.defaultFormatter": "biomejs.biome",
   "javascript.format.semicolons": "remove",
   "javascript.preferences.quoteStyle": "single",
   "javascript.preferences.useAliasesForRenames": false,
   "typescript.format.semicolons": "remove",
   "typescript.preferences.importModuleSpecifier": "relative",
+  "typescript.preferences.autoImportFileExcludePatterns": [
+    "**/node_modules/@types/react-relay/**",
+    "**/node_modules/@types/relay-runtime/**"
+  ],
   "typescript.preferences.quoteStyle": "single",
   "typescript.preferences.useAliasesForRenames": false,
   "typescript.format.insertSpaceAfterOpeningAndBeforeClosingNonemptyBraces": false,
@@ -48,7 +27,21 @@
   "files.insertFinalNewline": true,
   "files.trimFinalNewlines": true,
   "files.trimTrailingWhitespace": true,
+  "files.associations": {
+    "*.mdx": "markdown",
+    "*.css": "tailwindcss"
+  },
   "search.exclude": {
-    "**/__generated__": true
-  }
+    "**/__generated__/**": true,
+    "**/graphql/private/schema.graphql": true,
+    "**/graphql/public/schema.graphql": true,
+    "**/resolverTypes.ts": true
+  },
+  "files.watcherExclude": {
+    "**/node_modules/**": true,
+    "**/build/**": true,
+    "**/dist/**": true,
+    "**/dev/**": true
+  },
+  "tailwindCSS.experimental.classRegex": [["clsx\\(([^)]*)\\)", "(?:'|\"|`)([^']*)(?:'|\"|`)"]]
 }

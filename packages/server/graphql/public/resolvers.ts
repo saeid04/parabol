@@ -2,7 +2,7 @@
  * You shouldn't need to edit this
  */
 import importAll from '../../utils/importAll'
-import {Resolvers} from './resolverTypes'
+import type {Resolvers} from './resolverTypes'
 
 const resolvers: Resolvers = {
   Mutation: {
@@ -11,10 +11,9 @@ const resolvers: Resolvers = {
   Query: {
     ...importAll(require.context('./queries', false, /.ts$/))
   },
-  // Subscription: {
-  // Adding subcsriptions is gonna require some extra effort...
-  // ...importAll(require.context('./subscriptions', false, /.ts$/))
-  // },
+  Subscription: {
+    ...importAll(require.context('./subscriptions', false, /.ts$/))
+  },
   ...importAll(require.context('./types', false, /.ts$/))
 }
 

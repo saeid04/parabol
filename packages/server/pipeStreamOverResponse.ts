@@ -1,5 +1,5 @@
-import fs from 'fs'
-import {HttpResponse} from 'uWebSockets.js'
+import type {HttpResponse} from 'uWebSockets.js'
+import type fs from 'fs'
 
 const pipeStreamOverResponse = (
   res: HttpResponse,
@@ -11,37 +11,44 @@ const pipeStreamOverResponse = (
     res.aborted = true
   })
   readStream
-    .on('data', (chunk: Buffer) => {
+    .on('data', (chunk: string | Buffer) => {
       if (res.aborted) {
         readStream.destroy()
         return
       }
-      const ab = chunk.buffer.slice(chunk.byteOffset, chunk.byteOffset + chunk.byteLength)
-      const lastOffset = res.getWriteOffset()
-      const [ok, done] = res.tryEnd(ab, totalSize)
-      if (done) readStream.destroy()
-      if (ok) return
-      // backpressure found!
-      readStream.pause()
-      // save the current chunk & its offset
-      res.ab = ab
-      res.abOffset = lastOffset
+      const ab =
+        typeof chunk === 'string'
+          ? chunk
+          : chunk.buffer.slice(chunk.byteOffset, chunk.byteOffset + chunk.byteLength)
+      res.cork(() => {
+        const lastOffset = res.getWriteOffset()
+        const [ok, done] = res.tryEnd(ab as ArrayBuffer, totalSize)
+        if (done) readStream.destroy()
+        if (ok) return
+        // backpressure found!
+        readStream.pause()
+        // save the current chunk & its offset
+        res.ab = ab
+        res.abOffset = lastOffset
 
-      // set up a drainage
-      res.onWritable((offset) => {
-        const [ok, done] = res.tryEnd(res.ab.slice(offset - res.abOffset), totalSize)
-        if (done) {
-          readStream.destroy()
-        } else if (ok) {
-          readStream.resume()
-        }
-        return ok
+        // set up a drainage
+        res.onWritable((offset) => {
+          const [ok, done] = res.tryEnd(res.ab.slice(offset - res.abOffset), totalSize)
+          if (done) {
+            readStream.destroy()
+          } else if (ok) {
+            readStream.resume()
+          }
+          return ok
+        })
       })
     })
 
     .on('error', () => {
       if (!res.aborted) {
-        res.writeStatus('500').end()
+        res.cork(() => {
+          res.writeStatus('500').end()
+        })
       }
       readStream.destroy()
     })

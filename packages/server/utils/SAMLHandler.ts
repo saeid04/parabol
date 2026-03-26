@@ -1,7 +1,9 @@
-import {HttpRequest, HttpResponse} from 'uWebSockets.js'
+import type {HttpRequest, HttpResponse} from 'uWebSockets.js'
 import uWSAsyncHandler from '../graphql/uWSAsyncHandler'
 import parseBody from '../parseBody'
-import publishWebhookGQL from './publishWebhookGQL'
+import {createCookieHeaders} from './authCookie'
+import {callGQL} from './callGQL'
+import getVerifiedAuthToken from './getVerifiedAuthToken'
 
 const query = `
 mutation LoginSAML($queryString: String!, $samlName: ID!) {
@@ -9,12 +11,29 @@ mutation LoginSAML($queryString: String!, $samlName: ID!) {
     error {
       message
     }
+    userId
     authToken
     isNewUser
+    user {
+      isPatient0
+    }
   }
 }
 `
 
+type TData = {
+  loginSAML: {
+    error?: {
+      message: string
+    }
+    userId: string
+    authToken: string
+    isNewUser: boolean
+    user: {
+      isPatient0: boolean
+    }
+  }
+}
 const redirectOnError = (res: HttpResponse, error: string) => {
   res.writeStatus('302').writeHeader('location', `/saml-redirect?error=${error}`).end()
 }
@@ -29,7 +48,7 @@ const SAMLHandler = uWSAsyncHandler(async (res: HttpResponse, req: HttpRequest) 
   }
   const parser = (buffer: Buffer) => buffer.toString()
   const queryString = await parseBody({res, parser})
-  const payload = await publishWebhookGQL(query, {samlName, queryString})
+  const payload = await callGQL<TData>(query, {queryString, samlName})
   if (!payload) return
   const {data, errors} = payload
   if (!data || errors) {
@@ -37,18 +56,25 @@ const SAMLHandler = uWSAsyncHandler(async (res: HttpResponse, req: HttpRequest) 
     return
   }
   const {loginSAML} = data
-  const {error, authToken, isNewUser} = loginSAML
-  if (!authToken) {
+  const {error, userId, authToken, isNewUser, user} = loginSAML
+  const authObj = getVerifiedAuthToken(authToken)
+  if (!authToken || !authObj) {
     const message = error?.message || GENERIC_ERROR
     redirectOnError(res, message)
     return
   }
-  res.cork(() => {
-    res
-      .writeStatus('302')
-      .writeHeader('location', `/saml-redirect?token=${authToken}&isNewUser=${isNewUser}`)
-      .end()
+
+  const cookieHeaders = createCookieHeaders(authObj)
+  res.writeStatus('302')
+  cookieHeaders.forEach((header) => {
+    res.writeHeader('set-cookie', header)
   })
+  res
+    .writeHeader(
+      'location',
+      `/saml-redirect?userId=${userId}&isNewUser=${isNewUser}&isPatient0=${user.isPatient0}`
+    )
+    .end()
 })
 
 export default SAMLHandler

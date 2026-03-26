@@ -1,23 +1,26 @@
-import {keyframes} from '@emotion/core'
+import {keyframes} from '@emotion/react'
 import styled from '@emotion/styled'
 import graphql from 'babel-plugin-relay/macro'
-import React, {RefObject, useEffect, useMemo, useRef} from 'react'
-import {commitLocalUpdate, createFragmentContainer} from 'react-relay'
+import {type RefObject, useEffect, useMemo, useRef, useState} from 'react'
+import {commitLocalUpdate, useFragment} from 'react-relay'
 import useSpotlightResults from '~/hooks/useSpotlightResults'
+import type {RemoteReflection_meeting$key} from '../../__generated__/RemoteReflection_meeting.graphql'
+import type {
+  RemoteReflection_reflection$data,
+  RemoteReflection_reflection$key
+} from '../../__generated__/RemoteReflection_reflection.graphql'
 import useAtmosphere from '../../hooks/useAtmosphere'
-import useEditorState from '../../hooks/useEditorState'
 import {Elevation} from '../../styles/elevation'
 import {BezierCurve, DragAttribute, ElementWidth, Times, ZIndex} from '../../types/constEnums'
-import {DeepNonNullable} from '../../types/generics'
+import type {DeepNonNullable} from '../../types/generics'
 import {VOTE} from '../../utils/constants'
 import {getMinTop} from '../../utils/retroGroup/updateClonePosition'
-import {RemoteReflection_meeting} from '../../__generated__/RemoteReflection_meeting.graphql'
-import {RemoteReflection_reflection} from '../../__generated__/RemoteReflection_reflection.graphql'
 import ReflectionCardAuthor from '../ReflectionCard/ReflectionCardAuthor'
 import ReflectionCardRoot from '../ReflectionCard/ReflectionCardRoot'
-import ReflectionEditorWrapper from '../ReflectionEditorWrapper'
 import getBBox from '../RetroReflectPhase/getBBox'
-import UserDraggingHeader, {RemoteReflectionArrow} from '../UserDraggingHeader'
+import HTMLReflection from '../RetroReflectPhase/HTMLReflection'
+import {useTipTapContext} from '../TipTapProvider'
+import UserDraggingHeader, {type RemoteReflectionArrow} from '../UserDraggingHeader'
 
 const circleAnimation = (transform?: string) => keyframes`
   0%{
@@ -55,8 +58,8 @@ const RemoteReflectionModal = styled('div')<{
   animation: animation
     ? animation
     : isSpotlight && !isDropping
-    ? `${circleAnimation(transform)} 3s ease infinite;`
-    : undefined,
+      ? `${circleAnimation(transform)} 3s ease infinite;`
+      : undefined,
   zIndex: isInViewerSpotlightResults
     ? ZIndex.REFLECTION_IN_FLIGHT_SPOTLIGHT
     : ZIndex.REFLECTION_IN_FLIGHT
@@ -77,7 +80,7 @@ const windowDims = {
 
 const OFFSCREEN_PADDING = 16
 const getCoords = (
-  remoteDrag: DeepNonNullable<NonNullable<RemoteReflection_reflection['remoteDrag']>>
+  remoteDrag: DeepNonNullable<NonNullable<RemoteReflection_reflection$data['remoteDrag']>>
 ) => {
   const {targetId, clientHeight, clientWidth, clientX, clientY, targetOffsetX, targetOffsetY} =
     remoteDrag
@@ -114,10 +117,10 @@ const getHeaderTransform = (ref: RefObject<HTMLDivElement>, topPadding = 18) => 
     headerTop === maxTop
       ? 'arrow_downward'
       : headerLeft === maxLeft
-      ? 'arrow_forward'
-      : headerLeft === minLeft
-      ? 'arrow_back'
-      : ('arrow_upward' as RemoteReflectionArrow)
+        ? 'arrow_forward'
+        : headerLeft === minLeft
+          ? 'arrow_back'
+          : ('arrow_upward' as RemoteReflectionArrow)
   return {
     arrow,
     headerTransform: `translate(${headerLeft}px,${headerTop}px)`
@@ -131,8 +134,8 @@ const getHeaderTransform = (ref: RefObject<HTMLDivElement>, topPadding = 18) => 
   and in the styled component depending on situation
 */
 const getStyle = (
-  remoteDrag: RemoteReflection_reflection['remoteDrag'],
-  isDropping: boolean | null,
+  remoteDrag: RemoteReflection_reflection$data['remoteDrag'],
+  isDropping: boolean | null | undefined,
   isSpotlight: boolean,
   style: React.CSSProperties
 ) => {
@@ -152,19 +155,63 @@ const getStyle = (
 interface Props {
   style: React.CSSProperties
   animation: string | undefined
-  reflection: RemoteReflection_reflection
-  meeting: RemoteReflection_meeting
+  reflection: RemoteReflection_reflection$key
+  meeting: RemoteReflection_meeting$key
 }
 
 const RemoteReflection = (props: Props) => {
-  const {meeting, reflection, style, animation} = props
+  const {meeting: meetingRef, reflection: reflectionRef, style, animation} = props
+  const reflection = useFragment(
+    graphql`
+      fragment RemoteReflection_reflection on RetroReflection {
+        id
+        content
+        isDropping
+        reflectionGroupId
+        remoteDrag {
+          dragUserId
+          dragUserName
+          isSpotlight
+          clientHeight
+          clientWidth
+          clientX
+          clientY
+          targetId
+          targetOffsetX
+          targetOffsetY
+        }
+        creator {
+          preferredName
+        }
+      }
+    `,
+    reflectionRef
+  )
+  const meeting = useFragment(
+    graphql`
+      fragment RemoteReflection_meeting on RetrospectiveMeeting {
+        ...useSpotlightResults_meeting
+        id
+        disableAnonymity
+        localPhase {
+          phaseType
+        }
+        meetingMembers {
+          isConnectedAt
+          userId
+        }
+      }
+    `,
+    meetingRef
+  )
   const {id: reflectionId, content, isDropping, reflectionGroupId, creator} = reflection
   const {meetingMembers, localPhase, disableAnonymity} = meeting
   const remoteDrag = reflection.remoteDrag as DeepNonNullable<
-    RemoteReflection_reflection['remoteDrag']
+    RemoteReflection_reflection$data['remoteDrag']
   >
+  const {generateHTML} = useTipTapContext()
   const ref = useRef<HTMLDivElement>(null)
-  const [editorState] = useEditorState(content)
+  const [html] = useState(() => generateHTML(JSON.parse(content)))
   const timeoutRef = useRef(0)
   const atmosphere = useAtmosphere()
   const spotlightResultGroups = useSpotlightResults(meeting)
@@ -184,8 +231,8 @@ const RemoteReflection = (props: Props) => {
       remoteDrag?.isSpotlight
         ? Times.REFLECTION_SPOTLIGHT_DRAG_STALE_TIMEOUT
         : localPhase.phaseType === VOTE
-        ? 0
-        : Times.REFLECTION_DRAG_STALE_TIMEOUT
+          ? 0
+          : Times.REFLECTION_DRAG_STALE_TIMEOUT
     )
     return () => {
       window.clearTimeout(timeoutRef.current)
@@ -195,7 +242,7 @@ const RemoteReflection = (props: Props) => {
   useEffect(() => {
     if (!remoteDrag || !meeting) return
     const remoteDragUser = meetingMembers.find((user) => user.userId === remoteDrag.dragUserId)
-    if (!remoteDragUser || !remoteDragUser.user.isConnected) {
+    if (!remoteDragUser || !remoteDragUser.isConnectedAt) {
       commitLocalUpdate(atmosphere, (store) => {
         const reflection = store.get(reflectionId)!
         reflection.setValue(true, 'isDropping')
@@ -203,11 +250,25 @@ const RemoteReflection = (props: Props) => {
     }
   }, [remoteDrag, meetingMembers])
 
-  if (!remoteDrag) return null
-  const {dragUserId, dragUserName, isSpotlight} = remoteDrag
+  const [arrow, setArrow] = useState<RemoteReflectionArrow | undefined>('arrow_downward')
+  useEffect(() => {
+    if (!remoteDrag) return
+    const {minTop} = getCoords(remoteDrag)
+    requestAnimationFrame(() => {
+      const nextVal = getHeaderTransform(ref, minTop)
+      if (nextVal.headerTransform !== headerTransform) {
+        setHeaderTransform(nextVal.headerTransform)
+        setArrow(nextVal.arrow)
+      }
+    })
+  }, [remoteDrag])
+  const [headerTransform, setHeaderTransform] = useState<string | undefined>(undefined)
 
-  const {nextStyle, transform, minTop} = getStyle(remoteDrag, isDropping, isSpotlight, style)
-  const {headerTransform, arrow} = getHeaderTransform(ref, minTop)
+  if (!remoteDrag) return null
+
+  const {dragUserId, dragUserName, isSpotlight} = remoteDrag
+  const {nextStyle, transform} = getStyle(remoteDrag, isDropping, isSpotlight, style)
+
   return (
     <>
       <RemoteReflectionModal
@@ -221,13 +282,11 @@ const RemoteReflection = (props: Props) => {
       >
         <ReflectionCardRoot>
           {!headerTransform && <UserDraggingHeader userId={dragUserId} name={dragUserName} />}
-          <ReflectionEditorWrapper
-            editorState={editorState}
-            readOnly
-            disableAnonymity={disableAnonymity}
-          />
+          <HTMLReflection html={html} disableAnonymity={disableAnonymity} />
           {disableAnonymity && (
-            <ReflectionCardAuthor>{creator?.preferredName}</ReflectionCardAuthor>
+            <div className='px-2 pt-0.5 pb-2'>
+              <ReflectionCardAuthor>{creator?.preferredName}</ReflectionCardAuthor>
+            </div>
           )}
         </ReflectionCardRoot>
       </RemoteReflectionModal>
@@ -245,44 +304,4 @@ const RemoteReflection = (props: Props) => {
   )
 }
 
-export default createFragmentContainer(RemoteReflection, {
-  reflection: graphql`
-    fragment RemoteReflection_reflection on RetroReflection {
-      id
-      content
-      isDropping
-      reflectionGroupId
-      remoteDrag {
-        dragUserId
-        dragUserName
-        isSpotlight
-        clientHeight
-        clientWidth
-        clientX
-        clientY
-        targetId
-        targetOffsetX
-        targetOffsetY
-      }
-      creator {
-        preferredName
-      }
-    }
-  `,
-  meeting: graphql`
-    fragment RemoteReflection_meeting on RetrospectiveMeeting {
-      ...useSpotlightResults_meeting
-      id
-      disableAnonymity
-      localPhase {
-        phaseType
-      }
-      meetingMembers {
-        userId
-        user {
-          isConnected
-        }
-      }
-    }
-  `
-})
+export default RemoteReflection

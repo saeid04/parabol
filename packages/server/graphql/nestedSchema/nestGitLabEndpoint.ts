@@ -1,12 +1,18 @@
-import {GraphQLObjectType, GraphQLResolveInfo, OperationDefinitionNode, parse, print} from 'graphql'
-import nestGraphQLEndpoint from 'nest-graphql-endpoint/lib/nestGraphQLEndpoint'
+import {fetch} from '@whatwg-node/fetch'
 import {
+  type GraphQLObjectType,
+  type GraphQLResolveInfo,
+  type OperationDefinitionNode,
+  parse,
+  print
+} from 'graphql'
+import nestGraphQLEndpoint from 'nest-graphql-endpoint/lib/nestGraphQLEndpoint'
+import type {
   EndpointExecutionResult,
   Executor,
   NestedSource,
   NestGraphQLEndpointParams
 } from 'nest-graphql-endpoint/lib/types'
-import fetch from 'node-fetch'
 
 const defaultExecutor: Executor<{
   accessToken: string
@@ -27,6 +33,7 @@ const defaultExecutor: Executor<{
         'Content-Type': 'application/json',
         Authorization: `Bearer ${accessToken}`,
         Accept: 'application/json',
+        'User-Agent': 'parabol',
         ...headers
       },
       body: JSON.stringify({

@@ -1,8 +1,8 @@
 import graphql from 'babel-plugin-relay/macro'
 import {commitMutation} from 'react-relay'
-import {MovePokerTemplateDimensionMutation as TMovePokerTemplateDimensionMutation} from '~/__generated__/MovePokerTemplateDimensionMutation.graphql'
-import {SharedUpdater, StandardMutation} from '../types/relayMutations'
-import {MovePokerTemplateDimensionMutation_team} from '../__generated__/MovePokerTemplateDimensionMutation_team.graphql'
+import type {MovePokerTemplateDimensionMutation as TMovePokerTemplateDimensionMutation} from '~/__generated__/MovePokerTemplateDimensionMutation.graphql'
+import type {MovePokerTemplateDimensionMutation_team$data} from '../__generated__/MovePokerTemplateDimensionMutation_team.graphql'
+import type {SharedUpdater, StandardMutation} from '../types/relayMutations'
 import handleMovePokerTemplateDimension from './handlers/handleMovePokerTemplateDimension'
 
 graphql`
@@ -15,7 +15,7 @@ graphql`
 `
 
 const mutation = graphql`
-  mutation MovePokerTemplateDimensionMutation($dimensionId: ID!, $sortOrder: Float!) {
+  mutation MovePokerTemplateDimensionMutation($dimensionId: ID!, $sortOrder: String!) {
     movePokerTemplateDimension(dimensionId: $dimensionId, sortOrder: $sortOrder) {
       error {
         message
@@ -26,7 +26,7 @@ const mutation = graphql`
 `
 
 export const movePokerTemplateDimensionTeamUpdater: SharedUpdater<
-  MovePokerTemplateDimensionMutation_team
+  MovePokerTemplateDimensionMutation_team$data
 > = (payload, {store}) => {
   if (!payload) return
   const templateId = payload.getLinkedRecord('dimension').getValue('templateId')

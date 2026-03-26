@@ -5,98 +5,34 @@
  *  - GitHub and GitLab schemas
  */
 import {addResolversToSchema, mergeSchemas} from '@graphql-tools/schema'
-import {GraphQLSchema} from 'graphql'
-import nestGitHubEndpoint from 'nest-graphql-endpoint/lib/nestGitHubEndpoint'
-import {IntegrationProviderGitLabOAuth2} from '../../postgres/queries/getIntegrationProvidersByIds'
-import githubSchema from '../../utils/githubSchema.graphql'
-import composeResolvers from '../composeResolvers'
-import {GQLContext} from '../graphql'
-import gitlabSchema from '../nestedSchema/GitLab/gitlabSchema.graphql'
-import nestGitLabEndpoint from '../nestedSchema/nestGitLabEndpoint'
-import resolveTypesForMutationPayloads from '../resolveTypesForMutationPayloads'
-import mutation from '../rootMutation'
-import query from '../rootQuery'
-import subscription from '../rootSubscription'
-import rootTypes from '../rootTypes'
-import permissions from './permissions'
 // Resolvers from SDL first definitions
+import {nestGitHub} from '../../utils/nestGitHub'
+import composeResolvers from '../composeResolvers'
+import resolveTypesForMutationPayloads from '../resolveTypesForMutationPayloads'
+import {typeDefs} from './importedTypeDefs'
+import {nestGitLab} from './nestGitLab'
+import {nestLinear} from './nestLinear'
+import permissions from './permissions'
 import resolvers from './resolvers'
 
-// Schema from legacy  TypeScript first definitions
-const legacyParabolSchema = new GraphQLSchema({
-  query,
-  mutation,
-  subscription,
-  types: rootTypes
-})
-
-const {schema: legacyParabolWithGitHubSchema, githubRequest} = nestGitHubEndpoint({
-  parentSchema: legacyParabolSchema,
-  parentType: 'GitHubIntegration',
-  fieldName: 'api',
-  resolveEndpointContext: ({accessToken}) => ({
-    accessToken,
-    headers: {Accept: 'application/vnd.github.bane-preview+json'}
-  }),
-  prefix: '_xGitHub',
-  schemaIDL: githubSchema
-})
-
-const {schema: legacyParabolWithGitLabSchema, gitlabRequest} = nestGitLabEndpoint({
-  parentSchema: legacyParabolSchema,
-  parentType: 'GitLabIntegration',
-  fieldName: 'api',
-  resolveEndpointContext: async (
-    {teamId, userId}: {teamId: string; userId: string},
-    _args,
-    {dataLoader}: GQLContext
-  ) => {
-    const token = await dataLoader.get('freshGitlabAuth').load({teamId, userId})
-    if (!token) throw new Error('No GitLab token found')
-    const {accessToken, providerId} = token
-    const provider = await dataLoader.get('integrationProviders').load(providerId)
-    if (!provider) throw new Error('No GitLab provider found')
-    const {serverBaseUrl} = provider as IntegrationProviderGitLabOAuth2
-    return {
-      accessToken: accessToken!,
-      baseUri: serverBaseUrl,
-      dataLoaderOptions: {maxBatchSize: 5}
-    }
-  },
-  prefix: '_xGitLab',
-  schemaIDL: gitlabSchema
-})
-
-const importAllStrings = (context: __WebpackModuleApi.RequireContext) => {
-  return context.keys().map((id) => context(id).default)
-}
-
-// Types from SDL first
-const typeDefs = importAllStrings(require.context('./typeDefs', false, /.graphql$/))
-
-const legacyParabolWithNestedSchema = mergeSchemas({
-  schemas: [legacyParabolWithGitHubSchema, legacyParabolWithGitLabSchema],
+// Merge old POJO definitions with SDL definitions
+const parabolTypeDefs = mergeSchemas({
   typeDefs
 })
 
+const {schema: typeDefsWithGitHub, githubRequest} = nestGitHub(parabolTypeDefs)
+const {schema: typeDefsWithGitHubGitLab, gitlabRequest} = nestGitLab(typeDefsWithGitHub)
+const {schema: typeDefsWithGitHubGitLabLinear, linearRequest} = nestLinear(typeDefsWithGitHubGitLab)
+
 // IMPORTANT! mergeSchemas has a bug where resolvers will be overwritten by the default resolvers
 // See https://github.com/ardatan/graphql-tools/issues/4367
-const parabolWithNestedResolversSchema = addResolversToSchema({
-  schema: legacyParabolWithNestedSchema,
-  resolvers: composeResolvers(resolvers, permissions)
-})
+const publicSchema = resolveTypesForMutationPayloads(
+  addResolversToSchema({
+    schema: typeDefsWithGitHubGitLabLinear,
+    resolvers: composeResolvers(resolvers, permissions),
+    inheritResolversFromInterfaces: true
+  })
+)
 
-const addRequestors = (schema: GraphQLSchema) => {
-  const finalSchema = schema as any
-  finalSchema.githubRequest = githubRequest
-  finalSchema.gitlabRequest = gitlabRequest
-  return finalSchema as GraphQLSchema & {
-    githubRequest: typeof githubRequest
-    gitlabRequest: typeof gitlabRequest
-  }
-}
-
-const rootSchema = addRequestors(resolveTypesForMutationPayloads(parabolWithNestedResolversSchema))
-
-export type RootSchema = typeof rootSchema
-export default rootSchema
+export {githubRequest, gitlabRequest, linearRequest}
+export default publicSchema

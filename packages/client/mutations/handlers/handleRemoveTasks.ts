@@ -1,9 +1,7 @@
-import {RecordSourceSelectorProxy} from 'relay-runtime'
+import type {RecordSourceSelectorProxy} from 'relay-runtime'
 import getDiscussionThreadConn from '~/mutations/connections/getDiscussionThreadConn'
 import {handleRemoveReply} from '~/mutations/DeleteCommentMutation'
-import {parseUserTaskFilterQueryParams} from '~/utils/useUserTaskFilters'
-import ITask from '../../../server/database/types/Task'
-import IUser from '../../../server/database/types/User'
+import {parseQueryParams} from '~/utils/useQueryParameterParser'
 import safeRemoveNodeFromArray from '../../utils/relay/safeRemoveNodeFromArray'
 import safeRemoveNodeFromConn from '../../utils/relay/safeRemoveNodeFromConn'
 import getArchivedTasksConn from '../connections/getArchivedTasksConn'
@@ -13,20 +11,20 @@ import getUserTasksConn from '../connections/getUserTasksConn'
 import pluralizeHandler from './pluralizeHandler'
 
 const handleRemoveTask = (taskId: string, store: RecordSourceSelectorProxy<any>) => {
-  const viewer = store.getRoot().getLinkedRecord<IUser>('viewer')
-  const task = store.get<ITask>(taskId)
+  const viewer = store.getRoot().getLinkedRecord('viewer')!
+  const task = store.get(taskId)
   if (!task) return
-  const teamId = task.getValue('teamId')
-  const discussionId = task.getValue('discussionId')
-  const threadParentId = task.getValue('threadParentId')
+  const teamId = task.getValue('teamId') as string
+  const discussionId = task.getValue('discussionId') as string
+  const threadParentId = task.getValue('threadParentId') as string
   if (threadParentId) {
     handleRemoveReply(taskId, threadParentId, store)
     return
   }
-  const meetingId = task.getValue('meetingId')
+  const meetingId = task.getValue('meetingId') as string
   const meeting = store.get(meetingId!)!
   const team = store.get(teamId)
-  const {userIds, teamIds} = parseUserTaskFilterQueryParams(viewer.getDataID(), window.location)
+  const {userIds, teamIds} = parseQueryParams(viewer.getDataID(), window.location)
   const archiveConns = [
     /* archived task conn in user dash*/ getArchivedTasksConn(viewer, userIds, teamIds),
     /* archived task conn in team dash*/ getArchivedTasksConn(viewer, null, [teamId])

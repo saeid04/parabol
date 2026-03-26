@@ -1,5 +1,5 @@
 import styled from '@emotion/styled'
-import React from 'react'
+import * as React from 'react'
 import UnderlineInput from './InputField/UnderlineInput'
 import TinyLabel from './TinyLabel'
 
@@ -24,6 +24,7 @@ const PasswordInputField = (props: Props) => {
       <Label>Password</Label>
       <UnderlineInput
         ariaLabel={'Password'}
+        autoComplete='current-password'
         autoFocus={autoFocus}
         error={dirty ? (error as string) : undefined}
         name='password'

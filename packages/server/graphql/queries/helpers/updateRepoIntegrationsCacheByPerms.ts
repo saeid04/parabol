@@ -1,10 +1,10 @@
 import ms from 'ms'
+import type {IntegrationProviderServiceEnumType} from '../../../integrations/TaskIntegrationManagerFactory'
 import getAllRepoIntegrationsRedisKey from '../../../utils/getAllRepoIntegrationsRedisKey'
 import getPrevUsedRepoIntegrationsRedisKey from '../../../utils/getPrevUsedRepoIntegrationsRedisKey'
 import getRedis from '../../../utils/getRedis'
 import getTaskServicesWithPerms from '../../../utils/getTaskServicesWithPerms'
-import {DataLoaderWorker} from '../../graphql'
-import {IntegrationProviderServiceEnumType} from '../../types/IntegrationProviderServiceEnum'
+import type {DataLoaderWorker} from '../../graphql'
 import getAllCachedRepoIntegrations from './getAllCachedRepoIntegrations'
 import getPrevUsedRepoIntegrations from './getPrevUsedRepoIntegrations'
 

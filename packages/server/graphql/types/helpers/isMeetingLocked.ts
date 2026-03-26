@@ -1,40 +1,41 @@
-import {DataLoaderWorker} from '../../graphql'
+import type {DataLoaderWorker} from '../../graphql'
+import {getFeatureTier} from './getFeatureTier'
 
+/*
+ * Meetings can be locked if:
+ * - the meeting enden more than 30 days ago on the starter tier
+ * - the organization is unpaid
+ */
 const isMeetingLocked = async (
   viewerId: string,
   teamId: string,
   endedAt: Date | undefined | null,
   dataLoader: DataLoaderWorker
 ) => {
+  const [team, hasNoMeetingHistoryLimit] = await Promise.all([
+    dataLoader.get('teams').loadNonNull(teamId),
+    dataLoader
+      .get('featureFlagByOwnerId')
+      .load({ownerId: viewerId, featureName: 'noMeetingHistoryLimit'})
+  ])
+  const {orgId} = team
+  const org = await dataLoader.get('organizations').loadNonNull(orgId)
+  const featureTier = getFeatureTier(org)
+  const {isPaid} = org
+
+  if (!isPaid) {
+    return true
+  }
+  if (hasNoMeetingHistoryLimit || featureTier !== 'starter') {
+    return false
+  }
+
   const freeLimit = new Date()
   freeLimit.setDate(freeLimit.getDate() - 30)
   if (!endedAt || endedAt > freeLimit) {
     return false
   }
-  const [team, viewer] = await Promise.all([
-    dataLoader.get('teams').loadNonNull(teamId),
-    dataLoader.get('users').loadNonNull(viewerId)
-  ])
 
-  const {featureFlags} = viewer
-  const {tier, isPaid, orgId, isArchived} = team
-
-  if (featureFlags.includes('noMeetingHistoryLimit')) {
-    return false
-  }
-
-  if (tier !== 'starter' && isPaid) {
-    return false
-  }
-
-  // Archived teams are not updated with the current tier, just check the organization
-  if (isArchived) {
-    const organization = await dataLoader.get('organizations').load(orgId)
-    const {tier} = organization
-    if (tier !== 'starter') {
-      return false
-    }
-  }
   return true
 }
 

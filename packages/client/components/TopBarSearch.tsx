@@ -1,65 +1,41 @@
 import styled from '@emotion/styled'
 import {Close, Search} from '@mui/icons-material'
 import graphql from 'babel-plugin-relay/macro'
-import React, {useRef} from 'react'
-import {createFragmentContainer} from 'react-relay'
-import {matchPath, RouteProps} from 'react-router'
+import type * as React from 'react'
+import {useRef} from 'react'
+import {useFragment} from 'react-relay'
+import {type Location, matchPath, useLocation} from 'react-router'
 import {commitLocalUpdate} from 'relay-runtime'
+import type {TopBarSearch_viewer$key} from '~/__generated__/TopBarSearch_viewer.graphql'
 import useAtmosphere from '~/hooks/useAtmosphere'
-import useRouter from '~/hooks/useRouter'
-import {PALETTE} from '~/styles/paletteV3'
-import {TopBarSearch_viewer} from '~/__generated__/TopBarSearch_viewer.graphql'
-import Atmosphere from '../Atmosphere'
+import {useSearchDialog} from '~/modules/search/SearchContext'
+import {Input} from '~/ui/Input/Input'
+import type Atmosphere from '../Atmosphere'
 
-const getShowSearch = (location: NonNullable<RouteProps['location']>) => {
+const getShowSearch = (location: Location) => {
   const {pathname} = location
   return (
     pathname.includes('/me/tasks') ||
-    !!matchPath(pathname, {
-      path: '/team/:teamId',
-      exact: true,
-      strict: false
-    }) ||
-    !!matchPath(pathname, {
-      path: '/team/:teamId/archive',
-      exact: true,
-      strict: false
-    }) ||
-    !!matchPath(pathname, {
-      path: '/meetings',
-      exact: true,
-      strict: false
-    })
+    !!matchPath('/team/:teamId', pathname) ||
+    !!matchPath('/team/:teamId/archive', pathname) ||
+    !!matchPath('/meetings', pathname)
   )
 }
 interface Props {
-  viewer: TopBarSearch_viewer | null
+  viewer: TopBarSearch_viewer$key | null
 }
 
-const Wrapper = styled('div')<{location: any}>(({location}) => ({
+const Wrapper = styled('div')<{location: Location}>(({location}) => ({
   alignItems: 'center',
   backgroundColor: 'hsla(0,0%,100%,.125)',
   borderRadius: 4,
   display: 'flex',
   flex: 1,
   height: 40,
-  margin: '8px 16px',
+  margin: 8,
   maxWidth: 480,
   visibility: getShowSearch(location) ? undefined : 'hidden'
 }))
-
-const SearchInput = styled('input')({
-  appearance: 'none',
-  border: '1px solid transparent',
-  color: PALETTE.SLATE_200,
-  fontSize: 20,
-  lineHeight: '24px',
-  margin: 0,
-  outline: 0,
-  padding: '12px 16px',
-  backgroundColor: 'transparent',
-  width: '100%'
-})
 
 const SearchIcon = styled('div')({
   height: 24,
@@ -78,22 +54,50 @@ const setSearch = (atmosphere: Atmosphere, value: string) => {
 }
 
 const TopBarSearch = (props: Props) => {
-  const {viewer} = props
+  const {viewer: viewerRef} = props
+  const viewer = useFragment(
+    graphql`
+      fragment TopBarSearch_viewer on User {
+        dashSearch
+      }
+    `,
+    viewerRef
+  )
   const dashSearch = viewer?.dashSearch ?? ''
   const inputRef = useRef<HTMLInputElement>(null)
   const atmosphere = useAtmosphere()
-  const {location} = useRouter()
+  const location = useLocation()
+  const {openSearch} = useSearchDialog()
+
   const onChange = (e: React.ChangeEvent<HTMLInputElement>) => {
-    setSearch(atmosphere, e.target.value)
+    const {value} = e.target
+    setSearch(atmosphere, value)
   }
+
+  const onKeyDown = (e: React.KeyboardEvent<HTMLInputElement>) => {
+    if (e.key === 'Enter') {
+      openSearch(dashSearch)
+    }
+  }
+
   const Icon = dashSearch ? Close : Search
+
   const onClick = () => {
     setSearch(atmosphere, '')
     inputRef.current?.focus()
   }
+
   return (
     <Wrapper location={location}>
-      <SearchInput ref={inputRef} onChange={onChange} placeholder={'Search'} value={dashSearch} />
+      <Input
+        ref={inputRef}
+        onChange={onChange}
+        onKeyDown={onKeyDown}
+        placeholder={'Search'}
+        value={dashSearch}
+        className='m-0 h-full w-full appearance-none border-transparent bg-transparent px-4 py-3 text-slate-200 text-xl leading-6 outline-none placeholder:text-slate-200/50 focus:outline-none focus-visible:border-transparent'
+        maxLength={255}
+      />
       <SearchIcon onClick={onClick}>
         <Icon />
       </SearchIcon>
@@ -101,10 +105,4 @@ const TopBarSearch = (props: Props) => {
   )
 }
 
-export default createFragmentContainer(TopBarSearch, {
-  viewer: graphql`
-    fragment TopBarSearch_viewer on User {
-      dashSearch
-    }
-  `
-})
+export default TopBarSearch

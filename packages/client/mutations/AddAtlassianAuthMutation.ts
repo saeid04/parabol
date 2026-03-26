@@ -1,7 +1,7 @@
 import graphql from 'babel-plugin-relay/macro'
 import {commitMutation} from 'react-relay'
-import {StandardMutation} from '../types/relayMutations'
-import {AddAtlassianAuthMutation as TAddAtlassianAuthMutation} from '../__generated__/AddAtlassianAuthMutation.graphql'
+import type {AddAtlassianAuthMutation as TAddAtlassianAuthMutation} from '../__generated__/AddAtlassianAuthMutation.graphql'
+import type {StandardMutation} from '../types/relayMutations'
 
 graphql`
   fragment AddAtlassianAuthMutation_team on AddAtlassianAuthPayload {
@@ -9,7 +9,7 @@ graphql`
       integrations {
         atlassian {
           ...AtlassianProviderRowAtlassianIntegration
-          ...TaskFooterIntegrateMenuViewerAtlassianIntegration
+          ...useIsIntegratedAtlassianIntegration
         }
       }
     }

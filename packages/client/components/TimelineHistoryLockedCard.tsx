@@ -1,15 +1,15 @@
 import styled from '@emotion/styled'
 import {Lock} from '@mui/icons-material'
 import graphql from 'babel-plugin-relay/macro'
-import React, {useEffect, useRef} from 'react'
+import {useEffect, useRef} from 'react'
 import {useFragment} from 'react-relay'
+import {useNavigate} from 'react-router'
+import type {TimelineHistoryLockedCard_organization$key} from '../__generated__/TimelineHistoryLockedCard_organization.graphql'
 import useAtmosphere from '../hooks/useAtmosphere'
 import useIsVisible from '../hooks/useIsVisible'
-import useRouter from '../hooks/useRouter'
-import SendClientSegmentEventMutation from '../mutations/SendClientSegmentEventMutation'
 import {cardShadow} from '../styles/elevation'
 import {PALETTE} from '../styles/paletteV3'
-import {TimelineHistoryLockedCard_organization$key} from '../__generated__/TimelineHistoryLockedCard_organization.graphql'
+import SendClientSideEvent from '../utils/SendClientSideEvent'
 import PrimaryButton from './PrimaryButton'
 
 interface Props {
@@ -69,20 +69,22 @@ const TimelineHistoryLockedCard = (props: Props) => {
       fragment TimelineHistoryLockedCard_organization on Organization {
         id
         name
+        isPaid
+        unpaidMessageHTML
       }
     `,
     organizationRef
   )
-  const {id: orgId, name: orgName} = organization ?? {}
+  const {id: orgId, name: orgName, isPaid, unpaidMessageHTML} = organization ?? {}
 
   const atmosphere = useAtmosphere()
-  const {history} = useRouter()
+  const navigate = useNavigate()
 
   const cardRef = useRef<HTMLDivElement>(null)
   const visible = useIsVisible(cardRef.current, 0.7)
   useEffect(() => {
     if (visible) {
-      SendClientSegmentEventMutation(atmosphere, 'Upgrade CTA Viewed', {
+      SendClientSideEvent(atmosphere, 'Upgrade CTA Viewed', {
         upgradeCTALocation: 'timelineHistoryLock',
         upgradeTier: 'team',
         orgId
@@ -91,24 +93,38 @@ const TimelineHistoryLockedCard = (props: Props) => {
   }, [visible])
 
   const onClick = () => {
-    SendClientSegmentEventMutation(atmosphere, 'Upgrade CTA Clicked', {
+    SendClientSideEvent(atmosphere, 'Upgrade CTA Clicked', {
       upgradeCTALocation: 'timelineHistoryLock',
       upgradeTier: 'team',
       orgId
     })
-    history.push(`/me/organizations/${orgId}`)
+    navigate(`/me/organizations/${orgId}/billing`)
   }
+
+  const title = isPaid === false ? 'Organization Locked' : 'Past Meetings Locked'
+  const body =
+    isPaid === false ? (
+      (unpaidMessageHTML && <div dangerouslySetInnerHTML={{__html: unpaidMessageHTML}} />) || (
+        <>
+          Your organization <>{orgName}</> is currently locked. Please contact your billing leader
+          to unlock.
+        </>
+      )
+    ) : (
+      <>
+        Your plan includes 30 days of meeting history. Unlock the full meeting history of{' '}
+        <i>{orgName}</i> by upgrading.
+      </>
+    )
+  const action = isPaid === false ? 'Go To Billing Page' : 'Unlock Past Meetings'
 
   return (
     <Card ref={cardRef}>
       <Icon />
-      <HeaderText>Past Meetings Locked</HeaderText>
-      <CardBody>
-        Your plan includes 30 days of meeting history. Unlock the full meeting history of{' '}
-        <i>{orgName}</i> by upgrading.
-      </CardBody>
+      <HeaderText>{title}</HeaderText>
+      <CardBody>{body}</CardBody>
       <PrimaryButton size='medium' onClick={onClick}>
-        Unlock Past Meetings
+        {action}
       </PrimaryButton>
     </Card>
   )

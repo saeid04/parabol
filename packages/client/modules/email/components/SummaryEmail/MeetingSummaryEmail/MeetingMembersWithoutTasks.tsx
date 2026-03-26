@@ -1,13 +1,12 @@
 import graphql from 'babel-plugin-relay/macro'
+import type {
+  MeetingMembersWithoutTasks_meeting$key,
+  MeetingTypeEnum
+} from 'parabol-client/__generated__/MeetingMembersWithoutTasks_meeting.graphql'
 import useEmailItemGrid from 'parabol-client/hooks/useEmailItemGrid'
 import {PALETTE} from 'parabol-client/styles/paletteV3'
 import {FONT_FAMILY} from 'parabol-client/styles/typographyV2'
-import {
-  MeetingMembersWithoutTasks_meeting,
-  MeetingTypeEnum
-} from 'parabol-client/__generated__/MeetingMembersWithoutTasks_meeting.graphql'
-import React from 'react'
-import {createFragmentContainer} from 'react-relay'
+import {useFragment} from 'react-relay'
 import EmailBorderBottom from './EmailBorderBottom'
 import SummaryAvatarHeader from './SummaryAvatarHeader'
 
@@ -30,11 +29,40 @@ const getHeaderText = (meetingType: MeetingTypeEnum) => {
 }
 
 interface Props {
-  meeting: MeetingMembersWithoutTasks_meeting
+  meeting: MeetingMembersWithoutTasks_meeting$key
 }
 
 const MeetingMembersWithoutTasks = (props: Props) => {
-  const {meeting} = props
+  const {meeting: meetingRef} = props
+  const meeting = useFragment(
+    graphql`
+      fragment MeetingMembersWithoutTasks_meeting on NewMeeting {
+        meetingType
+        meetingMembers {
+          ...SummaryAvatarHeader_meetingMember
+          id
+          user {
+            preferredName
+            rasterPicture
+          }
+          ... on ActionMeetingMember {
+            tasks {
+              id
+            }
+            doneTasks {
+              id
+            }
+          }
+          ... on RetrospectiveMeetingMember {
+            tasks {
+              id
+            }
+          }
+        }
+      }
+    `,
+    meetingRef
+  )
   const {meetingMembers, meetingType} = meeting
   if (meetingType === 'poker') return null
   const membersWithoutTasks = meetingMembers.filter(
@@ -46,7 +74,7 @@ const MeetingMembersWithoutTasks = (props: Props) => {
   membersWithoutTasks.sort((a, b) =>
     a.user.preferredName.toLowerCase() < b.user.preferredName.toLowerCase() ? -1 : 1
   )
-  // eslint-disable-next-line react-hooks/rules-of-hooks
+  // biome-ignore lint/correctness/useHookAtTopLevel: legacy
   const grid = useEmailItemGrid(membersWithoutTasks || [], 4)
   if (membersWithoutTasks.length === 0) return null
   return (
@@ -68,31 +96,4 @@ const MeetingMembersWithoutTasks = (props: Props) => {
   )
 }
 
-export default createFragmentContainer(MeetingMembersWithoutTasks, {
-  meeting: graphql`
-    fragment MeetingMembersWithoutTasks_meeting on NewMeeting {
-      meetingType
-      meetingMembers {
-        ...SummaryAvatarHeader_meetingMember
-        id
-        user {
-          preferredName
-          rasterPicture
-        }
-        ... on ActionMeetingMember {
-          tasks {
-            id
-          }
-          doneTasks {
-            id
-          }
-        }
-        ... on RetrospectiveMeetingMember {
-          tasks {
-            id
-          }
-        }
-      }
-    }
-  `
-})
+export default MeetingMembersWithoutTasks

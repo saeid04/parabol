@@ -1,7 +1,6 @@
 import graphql from 'babel-plugin-relay/macro'
-import React from 'react'
 import {useFragment} from 'react-relay'
-import {JiraServerScopingSearchBar_meeting$key} from '../__generated__/JiraServerScopingSearchBar_meeting.graphql'
+import type {JiraServerScopingSearchBar_meeting$key} from '../__generated__/JiraServerScopingSearchBar_meeting.graphql'
 import JiraServerScopingSearchFilterToggle from './JiraServerScopingSearchFilterToggle'
 import JiraServerScopingSearchHistoryToggle from './JiraServerScopingSearchHistoryToggle'
 import ScopingSearchBar from './ScopingSearchBar'
@@ -54,7 +53,7 @@ const JiraServerScopingSearchBar = (props: Props) => {
   })
   const currentFilters = selectedProjectsPaths.length ? selectedProjectsPaths.join(', ') : 'None'
 
-  const placeholder = isJQL ? `SPRINT = fun AND PROJECT = dev` : 'Search issues on Jira Server'
+  const placeholder = isJQL ? `SPRINT = fun AND PROJECT = dev` : 'Search issues on Jira Data Center'
 
   return (
     <ScopingSearchBar currentFilters={currentFilters}>

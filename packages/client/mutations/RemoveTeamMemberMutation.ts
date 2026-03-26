@@ -1,16 +1,17 @@
 import graphql from 'babel-plugin-relay/macro'
 import {commitMutation} from 'react-relay'
-import {
+import type {RemoveTeamMemberMutation as TRemoveTeamMemberMutation} from '../__generated__/RemoveTeamMemberMutation.graphql'
+import type {RemoveTeamMemberMutation_notification$data} from '../__generated__/RemoveTeamMemberMutation_notification.graphql'
+import type {RemoveTeamMemberMutation_task$data} from '../__generated__/RemoveTeamMemberMutation_task.graphql'
+import type {RemoveTeamMemberMutation_team$data} from '../__generated__/RemoveTeamMemberMutation_team.graphql'
+import type {
   OnNextHandler,
-  OnNextHistoryContext,
+  OnNextNavigateContext,
   SharedUpdater,
   SimpleMutation
 } from '../types/relayMutations'
 import onMeetingRoute from '../utils/onMeetingRoute'
 import onTeamRoute from '../utils/onTeamRoute'
-import {RemoveTeamMemberMutation as TRemoveTeamMemberMutation} from '../__generated__/RemoveTeamMemberMutation.graphql'
-import {RemoveTeamMemberMutation_task} from '../__generated__/RemoveTeamMemberMutation_task.graphql'
-import {RemoveTeamMemberMutation_team} from '../__generated__/RemoveTeamMemberMutation_team.graphql'
 import handleAddNotifications from './handlers/handleAddNotifications'
 import handleRemoveTasks from './handlers/handleRemoveTasks'
 import handleRemoveTeamMembers from './handlers/handleRemoveTeamMembers'
@@ -36,6 +37,7 @@ graphql`
 graphql`
   fragment RemoveTeamMemberMutation_teamTeam on Team {
     id
+    isViewerOnTeam
     activeMeetings {
       facilitatorStageId
       facilitatorUserId
@@ -45,7 +47,7 @@ graphql`
       phases {
         stages {
           id
-          readyCount
+          readyUserIds
         }
       }
     }
@@ -53,10 +55,7 @@ graphql`
 `
 
 graphql`
-  fragment RemoveTeamMemberMutation_team on RemoveTeamMemberPayload {
-    updatedTasks {
-      id
-    }
+  fragment RemoveTeamMemberMutation_notification on RemoveTeamMemberPayload {
     kickOutNotification {
       id
       type
@@ -68,6 +67,24 @@ graphql`
         }
       }
       ...KickedOut_notification
+    }
+    updatedTasks {
+      id
+    }
+    team {
+      id
+    }
+    teamMember {
+      id
+      userId
+    }
+  }
+`
+
+graphql`
+  fragment RemoveTeamMemberMutation_team on RemoveTeamMemberPayload {
+    updatedTasks {
+      id
     }
     team {
       ...RemoveTeamMemberMutation_teamTeam @relay(mask: false)
@@ -91,10 +108,10 @@ const mutation = graphql`
   }
 `
 
-export const removeTeamMemberTeamOnNext: OnNextHandler<
-  RemoveTeamMemberMutation_team,
-  OnNextHistoryContext
-> = (payload, {atmosphere, history}) => {
+export const removeTeamMemberNotificationOnNext: OnNextHandler<
+  RemoveTeamMemberMutation_notification$data,
+  OnNextNavigateContext
+> = (payload, {atmosphere, navigate}) => {
   if (!payload) return
   const {kickOutNotification} = payload
   if (!kickOutNotification) return
@@ -124,11 +141,11 @@ export const removeTeamMemberTeamOnNext: OnNextHandler<
     onTeamRoute(window.location.pathname, teamId) ||
     onMeetingRoute(window.location.pathname, meetingIds)
   ) {
-    history.push('/meetings')
+    navigate('/meetings')
   }
 }
 
-export const removeTeamMemberTasksUpdater: SharedUpdater<RemoveTeamMemberMutation_task> = (
+export const removeTeamMemberTasksUpdater: SharedUpdater<RemoveTeamMemberMutation_task$data> = (
   payload,
   {store}
 ) => {
@@ -137,15 +154,25 @@ export const removeTeamMemberTasksUpdater: SharedUpdater<RemoveTeamMemberMutatio
   handleUpsertTasks(tasks as any, store)
 }
 
-export const removeTeamMemberTeamUpdater: SharedUpdater<RemoveTeamMemberMutation_team> = (
+export const removeTeamMemberTeamUpdater: SharedUpdater<RemoveTeamMemberMutation_team$data> = (
   payload,
   {atmosphere, store}
 ) => {
   const removedUserId = payload.getLinkedRecord('teamMember').getValue('userId')
   const {viewerId} = atmosphere
+  if (removedUserId === viewerId) {
+    return
+  }
+  const teamMemberId = payload.getLinkedRecord('teamMember').getValue('id')
+  handleRemoveTeamMembers(teamMemberId, store)
+}
+
+export const removeTeamMemberNotificationUpdater: SharedUpdater<
+  RemoveTeamMemberMutation_notification$data
+> = (payload, {atmosphere, store}) => {
+  const removedUserId = payload.getLinkedRecord('teamMember').getValue('userId')
+  const {viewerId} = atmosphere
   if (removedUserId !== viewerId) {
-    const teamMemberId = payload.getLinkedRecord('teamMember').getValue('id')
-    handleRemoveTeamMembers(teamMemberId, store)
     return
   }
   const teamId = payload.getLinkedRecord('team').getValue('id')

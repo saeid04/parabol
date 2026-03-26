@@ -7,15 +7,10 @@ export default class DemoUser {
   viewerId: string
   createdAt = new Date().toJSON()
   email: string
-  featureFlags = {
-    azureDevOps: false,
-    msTeams: false
-  }
   facilitatorUserId: string
   facilitatorName: string
   inactive = false
   isConnected = true
-  lastSeenAtURLs = [`/meet/${RetroDemo.MEETING_ID}`]
   lastSeenAt = new Date().toJSON()
 
   rasterPicture: string

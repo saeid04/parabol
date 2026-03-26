@@ -1,12 +1,12 @@
 import {Add as AddIcon, Close as CloseIcon} from '@mui/icons-material'
 import graphql from 'babel-plugin-relay/macro'
-import React, {useState} from 'react'
+import {useState} from 'react'
 import {useFragment} from 'react-relay'
-import {MSTeamsProviderRow_viewer$key} from '~/__generated__/MSTeamsProviderRow_viewer.graphql'
+import type {MSTeamsProviderRow_viewer$key} from '~/__generated__/MSTeamsProviderRow_viewer.graphql'
 import MSTeamsProviderLogo from '../../../../components/MSTeamsProviderLogo'
 import {MenuPosition} from '../../../../hooks/useCoords'
 import useMenu from '../../../../hooks/useMenu'
-import useMutationProps, {MenuMutationProps} from '../../../../hooks/useMutationProps'
+import useMutationProps, {type MenuMutationProps} from '../../../../hooks/useMutationProps'
 import {Providers} from '../../../../types/constEnums'
 import MSTeamsConfigMenu from './MSTeamsConfigMenu'
 import MSTeamsPanel from './MSTeamsPanel'
@@ -18,14 +18,15 @@ interface Props {
 }
 
 graphql`
-  fragment MSTeamsProviderRowTeamMember on TeamMember {
-    integrations {
-      msTeams {
-        auth {
-          provider {
-            id
-          }
+  fragment MSTeamsProviderRowTeamMemberIntegrations on TeamMemberIntegrations {
+    msTeams {
+      auth {
+        provider {
+          id
         }
+      }
+      teamNotificationSettings {
+        ...NotificationSettings_settings
       }
     }
   }
@@ -37,7 +38,9 @@ const MSTeamsProviderRow = (props: Props) => {
       fragment MSTeamsProviderRow_viewer on User {
         ...MSTeamsPanel_viewer
         teamMember(teamId: $teamId) {
-          ...MSTeamsProviderRowTeamMember @relay(mask: false)
+          integrations {
+            ...MSTeamsProviderRowTeamMemberIntegrations @relay(mask: false)
+          }
         }
       }
     `,
@@ -45,12 +48,20 @@ const MSTeamsProviderRow = (props: Props) => {
   )
   const [isConnectClicked, setConnectClicked] = useState(false)
   const {togglePortal, originRef, menuPortal, menuProps} = useMenu(MenuPosition.UPPER_RIGHT)
-  const {submitting, submitMutation, onError, onCompleted} = useMutationProps()
-  const mutationProps = {submitting, submitMutation, onError, onCompleted} as MenuMutationProps
+  const {submitting, submitMutation, error, onError, onCompleted} = useMutationProps()
+  const mutationProps = {
+    submitting,
+    submitMutation,
+    onError,
+    onCompleted
+  } as MenuMutationProps
   const {teamMember} = viewer
   const {integrations} = teamMember!
   const {msTeams} = integrations
   const {auth} = msTeams
+
+  if (window.__ACTION__.mattermostWebhookIntegrationDisabled) return null
+
   return (
     <>
       <ProviderRow
@@ -64,6 +75,7 @@ const MSTeamsProviderRow = (props: Props) => {
         providerLogo={<MSTeamsProviderLogo />}
         connectButtonText={!isConnectClicked ? 'Connect' : 'Cancel'}
         connectButtonIcon={!isConnectClicked ? <AddIcon /> : <CloseIcon />}
+        error={error?.message}
       >
         {(auth || isConnectClicked) && <MSTeamsPanel teamId={teamId} viewerRef={viewer} />}
       </ProviderRow>

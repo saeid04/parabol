@@ -1,0 +1,30 @@
+import * as RadixDialog from '@radix-ui/react-dialog'
+import * as React from 'react'
+import {cn} from '../cn'
+import {DialogClose} from './DialogClose'
+import {DialogOverlay} from './DialogOverlay'
+
+export const DialogContent = React.forwardRef<
+  HTMLDivElement,
+  React.ComponentPropsWithoutRef<
+    React.ForwardRefExoticComponent<
+      RadixDialog.DialogContentProps & {noClose?: boolean} & React.RefAttributes<HTMLDivElement>
+    >
+  >
+>(({className, children, noClose, ...props}, ref) => (
+  <RadixDialog.Portal>
+    <DialogOverlay className='z-10' />
+    <RadixDialog.Content
+      ref={ref}
+      className={cn(
+        'fixed top-[50%] left-[50%] z-20 max-h-[85vh] w-[95vw] max-w-[95vw] translate-x-[-50%] translate-y-[-50%] rounded-lg bg-white p-6 shadow-dialog focus:outline-hidden md:w-2xl md:max-w-2xl',
+        className
+      )}
+      aria-describedby={undefined}
+      {...props}
+    >
+      {children}
+      {!noClose && <DialogClose />}
+    </RadixDialog.Content>
+  </RadixDialog.Portal>
+))

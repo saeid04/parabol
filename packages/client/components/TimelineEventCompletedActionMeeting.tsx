@@ -1,19 +1,19 @@
 import styled from '@emotion/styled'
 import graphql from 'babel-plugin-relay/macro'
-import React from 'react'
-import {createFragmentContainer} from 'react-relay'
+import {useFragment} from 'react-relay'
+import type {TimelineEventCompletedActionMeeting_timelineEvent$key} from '../__generated__/TimelineEventCompletedActionMeeting_timelineEvent.graphql'
 import useAtmosphere from '../hooks/useAtmosphere'
-import SendClientSegmentEventMutation from '../mutations/SendClientSegmentEventMutation'
 import relativeDate from '../utils/date/relativeDate'
+import {GQLID} from '../utils/GQLID'
 import plural from '../utils/plural'
-import {TimelineEventCompletedActionMeeting_timelineEvent} from '../__generated__/TimelineEventCompletedActionMeeting_timelineEvent.graphql'
+import SendClientSideEvent from '../utils/SendClientSideEvent'
 import StyledLink from './StyledLink'
+import TimelineEventTitle from './TImelineEventTitle'
 import TimelineEventBody from './TimelineEventBody'
 import TimelineEventCard from './TimelineEventCard'
-import TimelineEventTitle from './TImelineEventTitle'
 
 interface Props {
-  timelineEvent: TimelineEventCompletedActionMeeting_timelineEvent
+  timelineEvent: TimelineEventCompletedActionMeeting_timelineEvent$key
 }
 
 const Link = styled(StyledLink)({
@@ -25,7 +25,38 @@ const CountItem = styled('span')({
 })
 
 const TimelineEventCompletedActionMeeting = (props: Props) => {
-  const {timelineEvent} = props
+  const {timelineEvent: timelineEventRef} = props
+  const timelineEvent = useFragment(
+    graphql`
+      fragment TimelineEventCompletedActionMeeting_timelineEvent on TimelineEventCompletedActionMeeting {
+        ...TimelineEventCard_timelineEvent
+        id
+        type
+        meeting {
+          id
+          agendaItemCount
+          commentCount
+          createdAt
+          endedAt
+          name
+          taskCount
+          locked
+          organization {
+            id
+            viewerOrganizationUser {
+              id
+            }
+          }
+          summaryPageId
+        }
+        team {
+          id
+          name
+        }
+      }
+    `,
+    timelineEventRef
+  )
   const {meeting, team} = timelineEvent
   const {
     id: meetingId,
@@ -36,15 +67,18 @@ const TimelineEventCompletedActionMeeting = (props: Props) => {
     commentCount,
     taskCount,
     locked,
-    organization
+    organization,
+    summaryPageId
   } = meeting
   const {name: teamName} = team
   const {id: orgId, viewerOrganizationUser} = organization
   const canUpgrade = !!viewerOrganizationUser
-
+  const summaryURL = summaryPageId
+    ? `/pages/${GQLID.fromKey(summaryPageId)[0]}`
+    : `/new-summary/${meetingId}`
   const atmosphere = useAtmosphere()
   const onUpgrade = () => {
-    SendClientSegmentEventMutation(atmosphere, 'Upgrade CTA Clicked', {
+    SendClientSideEvent(atmosphere, 'Upgrade CTA Clicked', {
       upgradeCTALocation: 'timelineHistoryLock',
       upgradeTier: 'team',
       meetingId
@@ -84,7 +118,7 @@ const TimelineEventCompletedActionMeeting = (props: Props) => {
           <>
             <Link to={`/meet/${meetingId}/agendaitems/1`}>See the discussion</Link>
             {' in your meeting or '}
-            <Link to={`/new-summary/${meetingId}`}>review a summary</Link>
+            <Link to={summaryURL}>review a summary</Link>
           </>
         )}
       </TimelineEventBody>
@@ -92,32 +126,4 @@ const TimelineEventCompletedActionMeeting = (props: Props) => {
   )
 }
 
-export default createFragmentContainer(TimelineEventCompletedActionMeeting, {
-  timelineEvent: graphql`
-    fragment TimelineEventCompletedActionMeeting_timelineEvent on TimelineEventCompletedActionMeeting {
-      ...TimelineEventCard_timelineEvent
-      id
-      type
-      meeting {
-        id
-        agendaItemCount
-        commentCount
-        createdAt
-        endedAt
-        name
-        taskCount
-        locked
-        organization {
-          id
-          viewerOrganizationUser {
-            id
-          }
-        }
-      }
-      team {
-        id
-        name
-      }
-    }
-  `
-})
+export default TimelineEventCompletedActionMeeting

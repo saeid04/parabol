@@ -1,6 +1,5 @@
 import styled from '@emotion/styled'
-import React from 'react'
-import {Link} from 'react-router-dom'
+import {Link} from 'react-router'
 import useBreakpoint from '../../hooks/useBreakpoint'
 import useRefreshInterval from '../../hooks/useRefreshInterval'
 import {Breakpoint} from '../../types/constEnums'
@@ -33,7 +32,7 @@ export const NextMeetingCountdown = (props: NextMeetingCountdownProps) => {
 const TeamPromptEndedBadgeRoot = styled('div')({
   display: 'flex',
   justifyContent: 'center',
-  alignItems: 'start'
+  alignItems: 'center'
 })
 
 const StyledLink = styled(Link)({

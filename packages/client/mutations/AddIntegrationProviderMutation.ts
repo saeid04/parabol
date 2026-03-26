@@ -1,12 +1,14 @@
 import graphql from 'babel-plugin-relay/macro'
 import {commitMutation} from 'react-relay'
-import {StandardMutation} from '../types/relayMutations'
-import {AddIntegrationProviderMutation as TAddIntegrationProviderMutation} from '../__generated__/AddIntegrationProviderMutation.graphql'
+import type {AddIntegrationProviderMutation as TAddIntegrationProviderMutation} from '../__generated__/AddIntegrationProviderMutation.graphql'
+import type {StandardMutation} from '../types/relayMutations'
 
 graphql`
-  fragment AddIntegrationProviderMutation_team on AddIntegrationProviderSuccess {
+  fragment AddIntegrationProviderMutation_organization on AddIntegrationProviderSuccess {
     provider {
       id
+      teamId
+      orgId
       ... on IntegrationProviderWebhook {
         webhookUrl
       }
@@ -15,6 +17,13 @@ graphql`
         clientId
         tenantId
       }
+    }
+    teamMemberIntegrations {
+      ...MattermostProviderRowTeamMemberIntegrations @relay(mask: false)
+      ...MSTeamsProviderRowTeamMemberIntegrations @relay(mask: false)
+    }
+    orgIntegrationProviders {
+      ...GitLabProviders_orgIntegrationProviders @relay(mask: false)
     }
   }
 `
@@ -27,7 +36,7 @@ const mutation = graphql`
           message
         }
       }
-      ...AddIntegrationProviderMutation_team @relay(mask: false)
+      ...AddIntegrationProviderMutation_organization @relay(mask: false)
     }
   }
 `

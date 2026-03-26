@@ -1,5 +1,5 @@
 import styled from '@emotion/styled'
-import React from 'react'
+import {useNavigate} from 'react-router'
 import DialogContainer from '../../../../components/DialogContainer'
 import DialogContent from '../../../../components/DialogContent'
 import DialogTitle from '../../../../components/DialogTitle'
@@ -7,8 +7,7 @@ import IconLabel from '../../../../components/IconLabel'
 import PrimaryButton from '../../../../components/PrimaryButton'
 import useAtmosphere from '../../../../hooks/useAtmosphere'
 import useMutationProps from '../../../../hooks/useMutationProps'
-import useRouter from '../../../../hooks/useRouter'
-import RemoveOrgUserMutation from '../../../../mutations/RemoveOrgUserMutation'
+import RemoveOrgUsersMutation from '../../../../mutations/RemoveOrgUsersMutation'
 
 const StyledButton = styled(PrimaryButton)({
   margin: '1.5rem auto 0'
@@ -16,6 +15,7 @@ const StyledButton = styled(PrimaryButton)({
 
 interface Props {
   orgId: string
+  closePortal: () => void
 }
 
 const StyledDialogContainer = styled(DialogContainer)({
@@ -23,20 +23,23 @@ const StyledDialogContainer = styled(DialogContainer)({
 })
 
 const LeaveOrgModal = (props: Props) => {
-  const {orgId} = props
+  const {orgId, closePortal} = props
   const atmosphere = useAtmosphere()
-  const {history} = useRouter()
+  const navigate = useNavigate()
   const {onCompleted, onError, submitMutation, submitting} = useMutationProps()
   const handleClick = () => {
     if (submitting) return
     submitMutation()
-    RemoveOrgUserMutation(
+    RemoveOrgUsersMutation(
       atmosphere,
-      {orgId, userId: atmosphere.viewerId},
+      {orgId, userIds: [atmosphere.viewerId]},
       {
-        history,
+        navigate,
         onError,
-        onCompleted
+        onCompleted: () => {
+          onCompleted()
+          closePortal()
+        }
       }
     )
   }

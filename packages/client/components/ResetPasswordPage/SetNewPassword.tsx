@@ -1,11 +1,13 @@
 import styled from '@emotion/styled'
-import React from 'react'
-import {RouteComponentProps} from 'react-router'
+import type * as React from 'react'
+import {useNavigate, useParams} from 'react-router'
 import useCanonical from '~/hooks/useCanonical'
 import useAtmosphere from '../../hooks/useAtmosphere'
 import useForm from '../../hooks/useForm'
 import useMutationProps from '../../hooks/useMutationProps'
 import ResetPasswordMutation from '../../mutations/ResetPasswordMutation'
+import {passwordStrength} from '../../shared/passwordStrength'
+import {Security} from '../../types/constEnums'
 import Legitity from '../../validation/Legitity'
 import AuthenticationDialog from '../AuthenticationDialog'
 import DialogTitle from '../DialogTitle'
@@ -13,8 +15,6 @@ import ErrorAlert from '../ErrorAlert/ErrorAlert'
 import PasswordInputField from '../PasswordInputField'
 import PrimaryButton from '../PrimaryButton'
 import TeamInvitationWrapper from '../TeamInvitationWrapper'
-
-interface Props extends RouteComponentProps<{token: string}> {}
 
 const Form = styled('form')({
   display: 'flex',
@@ -41,14 +41,14 @@ const SubmitButton = styled(PrimaryButton)({
 const validatePassword = (password: string) => {
   return new Legitity(password)
     .required('Please enter a password')
-    .min(6, '6 character minimum')
+    .min(Security.MIN_PASSWORD_LENGTH, `${Security.MIN_PASSWORD_LENGTH} character minimum`)
     .max(1000, `That's a book, not a password`)
+    .test((value) => passwordStrength(value))
 }
 
-const SetNewPassword = (props: Props) => {
-  const {history, match} = props
-  const {params} = match
-  const {token} = params
+const SetNewPassword = () => {
+  const navigate = useNavigate()
+  const {token} = useParams()
   const atmosphere = useAtmosphere()
   useCanonical('reset-password')
   const {onCompleted, onError, error, submitting, submitMutation} = useMutationProps()
@@ -73,7 +73,11 @@ const SetNewPassword = (props: Props) => {
     if (passwordRes.error) return
     const {value: newPassword} = passwordRes
     submitMutation()
-    ResetPasswordMutation(atmosphere, {newPassword, token}, {onError, onCompleted, history})
+    ResetPasswordMutation(
+      atmosphere,
+      {newPassword, token: token!},
+      {onError, onCompleted, navigate}
+    )
   }
   return (
     <TeamInvitationWrapper>

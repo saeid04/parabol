@@ -1,16 +1,20 @@
 import graphql from 'babel-plugin-relay/macro'
 import {commitMutation} from 'react-relay'
-import {StandardMutation} from '../types/relayMutations'
-import {RemoveTeamMemberIntegrationAuthMutation as TRemoveTeamMemberIntegrationAuthMutation} from '../__generated__/RemoveTeamMemberIntegrationAuthMutation.graphql'
+import type {RemoveTeamMemberIntegrationAuthMutation as TRemoveTeamMemberIntegrationAuthMutation} from '../__generated__/RemoveTeamMemberIntegrationAuthMutation.graphql'
+import type {StandardMutation} from '../types/relayMutations'
 
 graphql`
   fragment RemoveTeamMemberIntegrationAuthMutation_team on RemoveTeamMemberIntegrationAuthSuccess {
     teamMember {
       ...GitLabProviderRowTeamMember
-      ...MattermostProviderRowTeamMember
       ...JiraServerProviderRowTeamMember
       ...AzureDevOpsProviderRowTeamMember
-      ...MSTeamsProviderRowTeamMember
+      ...GcalProviderRowTeamMember
+      integrations {
+        ...MattermostProviderRowTeamMemberIntegrations
+        ...MSTeamsProviderRowTeamMemberIntegrations
+        ...LinearProviderRowTeamMemberIntegrations
+      }
     }
   }
 `

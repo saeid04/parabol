@@ -2,15 +2,14 @@
 
 Upstream parabol have some issue that makes end user can’t deploy to their self hosted dokku instance or simply running `docker-compose up -d` on their local
 
-Some of the problems are the outdated Dockerfile and miss configured env. Most of the script are in root project that
+Some of the problems are the outdated Dockerfile and misconfigured env. Most of the scripts in the root project either need dependencies that are only available in sub-packages, or require a fully connected and migrated database before they can run.
 
-- Either need dependencies or devDependencies that most of the time being available only at sub packages package.json instead of root package.json
-- Require available and fully migrated database (including yarn build process)
-  So if either there is no connection to database or we prune the devDependencies the process will fail. Even on runtime, some of the packages need dependencies (like dotenv) that only available on other packages
-
-> Feature:
+> Features:
 >
-> - Enterprise org by default
+> - Enterprise org by default (via `IS_ENTERPRISE=true`)
+> - Single-stage Docker build with migration at container startup
+> - PostgreSQL 16 with pgvector, Valkey (Redis-compatible), no RethinkDB
+> - Uses pnpm (Node 24)
 
 ---
 
@@ -26,7 +25,7 @@ Then you can config the other .env value later. Please refer to upstream repo fo
 > `docker-compose -f docker-compose.yml -f ./docker/docker-compose.selfHosted.yml up -d`
 > instead to make the storage persistance
 
-If you saw connection refused when try to open the parabol app, since the migration and build need fully connected DB, after the container is created you might need to check parabol app log until you saw something like 
+If you saw connection refused when try to open the parabol app, since the migration and build need fully connected DB, after the container is created you might need to check parabol app log until you saw something like
 
 ```
 2023-02-10T02:45:26.698581809Z app[web.1]: 🔥🔥🔥 Server ID: 1. Ready for Sockets: Port 80 🔥🔥🔥
@@ -57,29 +56,27 @@ sudo dokku storage:mount parabol /var/lib/dokku/data/storage/parabol-data:/parab
 
 That will create the app and mount the self hosted directory
 
-### 2. You need to install 3 plugins: `redis`, `postgres`, `rethinkdb` 
+### 2. You need to install 2 plugins: `postgres`, `redis`
+
+> Note: RethinkDB is no longer required — the upstream has fully migrated to PostgreSQL 16.
 
 ```
 sudo dokku plugin:install https://github.com/dokku/dokku-postgres.git postgres
-sudo dokku plugin:install https://github.com/dokku/dokku-rethinkdb.git rethinkdb
 sudo dokku plugin:install https://github.com/dokku/dokku-redis.git redis
-```
 
 ### 3. Then create DB
 
 ```
-sudo dokku postgres:create pb-pg --image-version 12.10
-sudo dokku rethinkdb:create pb-db
+sudo dokku postgres:create pb-pg --image "pgvector/pgvector" --image-version "0.8.0-pg16"
 sudo dokku redis:create pb-redis
 ```
 
-This time you might need to save `postgres` and `rethinkDb` DSN that printed after creation, something like `postgres://username:thepassword@the-db-host:5432/pb_pg` we will need it later
+Save the `postgres` DSN printed after creation, e.g. `postgres://username:thepassword@the-db-host:5432/pb_pg` — you'll need it in step 5.
 
 ### 4. Link created DB
 
 ```
 sudo dokku postgres:link pb-pg parabol -a "POSTGRES_URL"
-sudo dokku rethinkdb:link pb-db parabol -a “RETHINKDB_URL"
 sudo dokku redis:link pb-redis parabol
 ```
 
@@ -89,28 +86,10 @@ For postgres we need to manually set this value first, because by default it’s
 Based value that you’re copied on step 3, for example: `postgres://username:thepassword@the-db-host:5432/pb_pg` then you can run
 
 ```
-sudo dokku config:set parabol POSTGRES_DB=pb_pg —no-restart
-sudo dokku config:set parabol POSTGRES_HOST=the-db-host —no-restart
-sudo dokku config:set parabol POSTGRES_PASSWORD=thepassword —no-restart
-sudo dokku config:set parabol POSTGRES_USER=username —no-restart
-```
-
-For RethinkDb we need to change DB name to `actionDevelopment`
-
-For example if your DSN is `rethinkdb://dokku-rethinkdb-pb-db:28015/pb-db` then change it with:
-
-```
-dokku config:set parabol RETHINKDB_URL="rethinkdb://dokku-rethinkdb-pb-db:28015/actionDevelopment"
-```
-
-By default heroku buildpack will pruning devDependencies and as I mention earlier, that could be a problem. NPM/Yarn might use cache as well which make the process longer and we don't need anyway. then you can disable it by:
-
-```
-sudo dokku config:set parabol NPM_CONFIG_PRODUCTION=false --no-restart
-sudo dokku config:set parabol YARN_PRODUCTION=false --no-restart
-sudo dokku config:set parabol YARN2_SKIP_PRUNING=true --no-restart
-sudo dokku config:set parabol USE_YARN_CACHE=false --no-restart
-sudo dokku config:set parabol NODE_MODULES_CACHE=true --no-restart
+sudo dokku config:set parabol POSTGRES_DB=pb_pg --no-restart
+sudo dokku config:set parabol POSTGRES_HOST=the-db-host --no-restart
+sudo dokku config:set parabol POSTGRES_PASSWORD=thepassword --no-restart
+sudo dokku config:set parabol POSTGRES_USER=username --no-restart
 ```
 
 Then excluding:
@@ -119,7 +98,6 @@ Then excluding:
 - `POSTGRES_HOST`
 - `POSTGRES_PASSWORD`
 - `POSTGRES_USER`
-- `RETHINKDB_URL` and
 - `REDIS_URL`
 
 You can copy the rest of environments on `.env.example`
@@ -159,7 +137,7 @@ sudo dokku builder-dockerfile:set parabol dockerfile-path docker/Dockerfile.prod
 ```
 
 But the trade off are the migration process and build will happens AFTER the container is up, because as i mention earlier even the build process need to be connected to fully migrated database, and the Dockerfile build process is not connected yet to database and not exposed to ENV
- Probably need to skip check as well
+Probably need to skip check as well
 
 > 🔥 BEWARE 🔥 This will disable zero downtime deployment, you might need to wait up to 10 mins after deployment until the migration finish successfully and the app will unaccessible during that time
 
@@ -207,19 +185,13 @@ This isn’t ideal, but the easiest way. You could actually use CI/CD to spin up
 
 # FAQ
 
-If you get no output during `pgtyped -c ./packages/server/postgres/pgtypedConfig.js` try to check your postgres log
+If postgres fails to connect, check the logs:
 
 ```
 sudo dokku postgres:logs pb-pg -t
 ```
 
-If you find something like on the last line
-
-```
-2023-02-09 14:40:12.969 UTC [7225] FATAL:  canceling authentication due to timeout
-```
-
-Then probably you run wrong postgres version. make sure to install v12.10
+Make sure you're using the `pgvector/pgvector:0.8.0-pg16` image.
 
 # Another known config
 
@@ -234,9 +206,7 @@ sudo dokku config:set parabol INVITATION_SHORTLINK=parabol.foo.com/invitation-li
 ## If something goes wrong, you might need to set this as well
 
 ```
-sudo dokku config:set parabol PROTO=http --no-restart
-sudo dokku config:set parabol HOST=<you.domain> --no-restart
-sudo dokku config:set parabol PORT=80 --no-restart
+sudo dokku config:set parabol APP_ORIGIN=https://<your.domain> --no-restart
 sudo dokku ps:restart parabol
 ```
 
@@ -245,9 +215,7 @@ sudo dokku ps:restart parabol
 ```
 sudo dokku config:set parabol GOOGLE_OAUTH_CLIENT_ID='client_id' --no-restart
 sudo dokku config:set parabol GOOGLE_OAUTH_CLIENT_SECRET='secret' --no-restart
-sudo dokku config:set parabol PROTO=https --no-restart
-sudo dokku config:set parabol HOST=<your.domain>
-sudo dokku config:set parabol PORT=443 --no-restart
+sudo dokku config:set parabol APP_ORIGIN=https://<your.domain>
 sudo dokku ps:restart parabol
 ```
 
@@ -255,7 +223,7 @@ The value of `client id` and `secret` can be gather on google cloud console http
 
 You need to set Authorized redirect URI's to `https://<your.domain>/auth/google` on google cloud console
 
-> Make sure to correctly set vaalue for `PROTO` `HOST` and `PORT`, since it'll be used on `packages/server/appOrigin.ts` to construct app origin and later will be use to construct google callback URL. If you find `Invalid Login Code` during google login you might wanna check these setting or the callback url you set on google cloud console
+> Make sure to set `APP_ORIGIN` to your public URL (e.g. `https://your.domain`), since it is used in `packages/server/appOrigin.ts` to construct the app origin for OAuth callbacks. If you see `Invalid Login Code` during Google login, check this value and the redirect URI you set in the Google Cloud Console.
 
 ## Enable JIRA integration
 

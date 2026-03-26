@@ -1,13 +1,12 @@
-import {keyframes} from '@emotion/core'
+import {keyframes} from '@emotion/react'
 import styled from '@emotion/styled'
-import React from 'react'
-import {useHistory} from 'react-router'
+import {useNavigate} from 'react-router'
 import customTemplate from '../../../../../static/images/illustrations/customTemplate.png'
+import type {MeetingTypeEnum} from '../../../__generated__/TeamInvitationQuery.graphql'
 import FloatingActionButton from '../../../components/FloatingActionButton'
 import useAtmosphere from '../../../hooks/useAtmosphere'
-import SendClientSegmentEventMutation from '../../../mutations/SendClientSegmentEventMutation'
 import {BezierCurve} from '../../../types/constEnums'
-import {MeetingTypeEnum} from '../../../__generated__/TeamInvitationQuery.graphql'
+import SendClientSideEvent from '../../../utils/SendClientSideEvent'
 
 const fadein = keyframes`
 0% { opacity: 0; }
@@ -75,15 +74,15 @@ interface Props {
 
 const CustomTempateUpgradeMsg = (props: Props) => {
   const {orgId, meetingType} = props
-  const history = useHistory()
+  const navigate = useNavigate()
   const atmosphere = useAtmosphere()
 
   const handleClick = () => {
-    SendClientSegmentEventMutation(atmosphere, 'Upgrade CTA Clicked', {
+    SendClientSideEvent(atmosphere, 'Upgrade CTA Clicked', {
       upgradeCTALocation: 'createNewTemplate',
       meetingType
     })
-    history.push(`/me/organizations/${orgId}/billing`)
+    navigate(`/me/organizations/${orgId}/billing`)
   }
 
   return (

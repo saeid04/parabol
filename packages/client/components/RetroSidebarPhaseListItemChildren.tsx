@@ -1,11 +1,10 @@
 import graphql from 'babel-plugin-relay/macro'
-import React from 'react'
-import {createFragmentContainer} from 'react-relay'
-import useGotoStageId from '~/hooks/useGotoStageId'
-import {
+import {useFragment} from 'react-relay'
+import type {
   NewMeetingPhaseTypeEnum,
-  RetroSidebarPhaseListItemChildren_meeting
+  RetroSidebarPhaseListItemChildren_meeting$key
 } from '~/__generated__/RetroSidebarPhaseListItemChildren_meeting.graphql'
+import type useGotoStageId from '~/hooks/useGotoStageId'
 import isPhaseComplete from '../utils/meetings/isPhaseComplete'
 import MeetingSidebarTeamMemberStageItems from './MeetingSidebarTeamMemberStageItems'
 import RetroSidebarDiscussSection from './RetroSidebarDiscussSection'
@@ -14,11 +13,26 @@ interface Props {
   gotoStageId: ReturnType<typeof useGotoStageId>
   handleMenuClick: () => void
   phaseType: NewMeetingPhaseTypeEnum
-  meeting: RetroSidebarPhaseListItemChildren_meeting
+  meeting: RetroSidebarPhaseListItemChildren_meeting$key
 }
 
 const RetroSidebarPhaseListItemChildren = (props: Props) => {
-  const {gotoStageId, handleMenuClick, phaseType, meeting} = props
+  const {gotoStageId, handleMenuClick, phaseType, meeting: meetingRef} = props
+  const meeting = useFragment(
+    graphql`
+      fragment RetroSidebarPhaseListItemChildren_meeting on RetrospectiveMeeting {
+        ...MeetingSidebarTeamMemberStageItems_meeting
+        ...RetroSidebarDiscussSection_meeting
+        phases {
+          phaseType
+          stages {
+            isComplete
+          }
+        }
+      }
+    `,
+    meetingRef
+  )
   const {phases} = meeting
   const showDiscussSection = phases && isPhaseComplete('vote', phases)
   if (phaseType === 'checkin') {
@@ -42,17 +56,4 @@ const RetroSidebarPhaseListItemChildren = (props: Props) => {
   return null
 }
 
-export default createFragmentContainer(RetroSidebarPhaseListItemChildren, {
-  meeting: graphql`
-    fragment RetroSidebarPhaseListItemChildren_meeting on RetrospectiveMeeting {
-      ...MeetingSidebarTeamMemberStageItems_meeting
-      ...RetroSidebarDiscussSection_meeting
-      phases {
-        phaseType
-        stages {
-          isComplete
-        }
-      }
-    }
-  `
-})
+export default RetroSidebarPhaseListItemChildren

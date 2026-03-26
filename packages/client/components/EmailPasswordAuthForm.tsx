@@ -1,27 +1,32 @@
 import styled from '@emotion/styled'
-import React, {forwardRef, useEffect, useImperativeHandle, useState} from 'react'
-import Atmosphere from '../Atmosphere'
+import type * as React from 'react'
+import {forwardRef, useEffect, useImperativeHandle, useState} from 'react'
+import {useLocation, useNavigate} from 'react-router'
+import {commitLocalUpdate} from 'relay-runtime'
+import type Atmosphere from '../Atmosphere'
 import useAtmosphere from '../hooks/useAtmosphere'
 import useForm from '../hooks/useForm'
 import useMutationProps from '../hooks/useMutationProps'
-import useRouter from '../hooks/useRouter'
 import AcceptTeamInvitationMutation from '../mutations/AcceptTeamInvitationMutation'
 import LoginWithPasswordMutation from '../mutations/LoginWithPasswordMutation'
 import SignUpWithPasswordMutation from '../mutations/SignUpWithPasswordMutation'
+import {passwordStrength} from '../shared/passwordStrength'
 import {PALETTE} from '../styles/paletteV3'
-import {LocalStorageKey} from '../types/constEnums'
+import {LocalStorageKey, Security} from '../types/constEnums'
+import {cn} from '../ui/cn'
 import {CREATE_ACCOUNT_BUTTON_LABEL, SIGNIN_LABEL} from '../utils/constants'
 import getAnonymousId from '../utils/getAnonymousId'
 import getOAuthPopupFeatures from '../utils/getOAuthPopupFeatures'
 import getSAMLIdP from '../utils/getSAMLIdP'
 import getSSODomainFromEmail from '../utils/getSSODomainFromEmail'
-import getTokenFromSSO from '../utils/getTokenFromSSO'
 import getValidRedirectParam from '../utils/getValidRedirectParam'
+import {emitGA4SignUpEvent} from '../utils/handleSuccessfulLogin'
+import loginSSO from '../utils/loginSSO'
 import Legitity from '../validation/Legitity'
 import {emailRegex} from '../validation/regex'
 import EmailInputField from './EmailInputField'
 import ErrorAlert from './ErrorAlert/ErrorAlert'
-import {AuthPageSlug} from './GenericAuthentication'
+import type {AuthPageSlug} from './GenericAuthentication'
 import PasswordInputField from './PasswordInputField'
 import PlainButton from './PlainButton/PlainButton'
 import PrimaryButton from './PrimaryButton'
@@ -29,6 +34,8 @@ import RaisedButton from './RaisedButton'
 import StyledTip from './StyledTip'
 
 interface Props {
+  // used to determine the coordinates of the auth popup
+  getOffsetTop?: () => number
   email: string
   invitationToken: string | undefined | null
   // is the primary login action (not secondary to Google Oauth)
@@ -37,9 +44,6 @@ interface Props {
   goToPage?: (page: AuthPageSlug, params: string) => void
 }
 
-const FieldGroup = styled('div')({
-  margin: '16px 0'
-})
 const FieldBlock = styled('div')<{isSSO?: boolean}>(({isSSO}) => ({
   margin: '0 0 1.25rem',
   visibility: isSSO ? 'hidden' : undefined
@@ -78,33 +82,37 @@ const validateEmail = (email: string) => {
     .matches(emailRegex, 'Please enter a valid email address')
 }
 
-const validatePassword = (password: string) => {
+const validatePassword = (password: string, {email}: {email: string}) => {
   return new Legitity(password)
     .required('Please enter a password')
-    .min(6, '6 character minimum')
+    .min(Security.MIN_PASSWORD_LENGTH, `${Security.MIN_PASSWORD_LENGTH} character minimum`)
     .max(1000, `That's a book, not a password`)
+    .test((value) => passwordStrength(value, email))
 }
 
 const EmailPasswordAuthForm = forwardRef((props: Props, ref: any) => {
   const isInternalAuthEnabled = window.__ACTION__.AUTH_INTERNAL_ENABLED
   const isSSOAuthEnabled = window.__ACTION__.AUTH_SSO_ENABLED
-
-  const {isPrimary, isSignin, invitationToken, email, goToPage} = props
-  const {location} = useRouter()
+  const isGoogleAuthEnabled = window.__ACTION__.AUTH_GOOGLE_ENABLED
+  const isMicrosoftAuthEnabled = window.__ACTION__.AUTH_MICROSOFT_ENABLED
+  const isSingleTenantSSO =
+    isSSOAuthEnabled && !isGoogleAuthEnabled && !isMicrosoftAuthEnabled && !isInternalAuthEnabled
+  const {getOffsetTop, isPrimary, isSignin, invitationToken, email, goToPage} = props
+  const location = useLocation()
   const params = new URLSearchParams(location.search)
   const isSSODefault = isSSOAuthEnabled && Boolean(params.get('sso'))
   const signInWithSSOOnly = isSSOAuthEnabled && !isInternalAuthEnabled
   const [isSSO, setIsSSO] = useState(isSSODefault || signInWithSSOOnly)
+  const [ssoMessage, setSSOMessage] = useState('')
   const [pendingDomain, setPendingDomain] = useState('')
-  const [ssoURL, setSSOURL] = useState('')
-  const [ssoDomain, setSSODomain] = useState('')
+  const [ssoDomain, setSSODomain] = useState<string>()
   const {submitMutation, onCompleted, submitting, error, onError} = useMutationProps()
   const atmosphere = useAtmosphere()
-  const {history} = useRouter()
+  const navigate = useNavigate()
   const {fields, onChange, setDirtyField, validateField} = useForm({
     email: {
       getDefault: () => email,
-      validate: validateEmail
+      validate: signInWithSSOOnly ? undefined : validateEmail
     },
     password: {
       getDefault: () => '',
@@ -120,6 +128,17 @@ const EmailPasswordAuthForm = forwardRef((props: Props, ref: any) => {
     onCompleted()
   }, [location])
 
+  useEffect(() => {
+    if (!isSingleTenantSSO) return
+    const attemptLogin = async () => {
+      const url = await getSSOUrl(atmosphere, email)
+      if (url) {
+        window.location.href = url
+      }
+    }
+    attemptLogin()
+  }, [isSingleTenantSSO])
+
   const handleBlur = async (e: React.FocusEvent<HTMLInputElement>) => {
     const {name} = e.target
     if (name === 'email' || name === 'password') {
@@ -130,12 +149,22 @@ const EmailPasswordAuthForm = forwardRef((props: Props, ref: any) => {
       const domain = getSSODomainFromEmail(email)
       if (domain && domain !== pendingDomain) {
         setPendingDomain(domain)
+        // Fetch the url to verify SSO is configured for this domain.
+        // Don't cache it as we need a fresh one for login
         const url = await getSSOUrl(atmosphere, email)
-        setSSODomain(domain)
-        setSSOURL(url || '')
+        setSSODomain(url ? domain : undefined)
+        // hide the password field if it's SSO to avoid confusion
+        if (url && !isSSO) {
+          setIsSSO(true)
+          // easiest way to reset the message is on each isSSO change, so wait till that happened for the line above and set it after
+          setTimeout(() => setSSOMessage('Your Organization requires SSO'), 0)
+        }
       }
     }
   }
+  useEffect(() => {
+    setSSOMessage('')
+  }, [isSSO])
 
   const toggleSSO = () => {
     setIsSSO(!isSSO)
@@ -147,8 +176,9 @@ const EmailPasswordAuthForm = forwardRef((props: Props, ref: any) => {
 
   const tryLoginWithSSO = async (email: string) => {
     const domain = getSSODomainFromEmail(email)!
-    const validSSOURL = domain === ssoDomain && ssoURL
-    const isProbablySSO = isSSO || !fields.password.value || validSSOURL
+    const hadValidSSOURL = domain === ssoDomain
+    const isProbablySSO = isSSO || !fields.password.value || hadValidSSOURL
+    const top = getOffsetTop?.() || 56
     let optimisticPopup
     if (isProbablySSO) {
       // Safari blocks all calls to window.open that are not triggered SYNCHRONOUSLY from an event
@@ -163,31 +193,36 @@ const EmailPasswordAuthForm = forwardRef((props: Props, ref: any) => {
       optimisticPopup = window.open(
         '',
         'SSO',
-        getOAuthPopupFeatures({width: 385, height: 550, top: 64})
+        getOAuthPopupFeatures({width: 385, height: 576, top})
       )
     }
-    const url = validSSOURL || (await getSSOUrl(atmosphere, email))
+    const url = await getSSOUrl(atmosphere, email)
     if (!url) {
       optimisticPopup?.close()
       return false
     }
     submitMutation()
-    const {token, error} = await getTokenFromSSO(url)
-    if (!token) {
-      onError(new Error(error || 'Error logging in'))
+    const response = await loginSSO(url, top)
+    if ('error' in response) {
+      onError(new Error(response.error || 'Error logging in'))
       return true
     }
-    atmosphere.setAuthToken(token)
+    const {ga4Args} = response
+    commitLocalUpdate(atmosphere, (store) => {
+      const root = store.getRoot()
+      root.setValue(ga4Args.isNewUser, 'isNewUser')
+    })
+    emitGA4SignUpEvent(ga4Args)
     if (invitationToken) {
       localStorage.removeItem(LocalStorageKey.INVITATION_TOKEN)
       AcceptTeamInvitationMutation(
         atmosphere,
         {invitationToken},
-        {history, onCompleted, onError, ignoreApproval: true}
+        {navigate, onCompleted, onError, ignoreApproval: true}
       )
     } else {
       const nextUrl = getValidRedirectParam() || '/meetings'
-      history.push(nextUrl)
+      navigate(nextUrl)
     }
     return true
   }
@@ -195,6 +230,7 @@ const EmailPasswordAuthForm = forwardRef((props: Props, ref: any) => {
   const onSubmit = async (e: React.FormEvent) => {
     e.preventDefault()
     if (submitting) return
+    onCompleted()
     setDirtyField()
     const {email: emailRes, password: passwordRes} = validateField()
     if (emailRes.error) return
@@ -210,11 +246,16 @@ const EmailPasswordAuthForm = forwardRef((props: Props, ref: any) => {
     if (isSignin) {
       LoginWithPasswordMutation(
         atmosphere,
-        {email, password, invitationToken: invitationToken || '', isInvitation: !!invitationToken},
-        {onError, onCompleted, history}
+        {
+          email,
+          password,
+          invitationToken: invitationToken || '',
+          isInvitation: !!invitationToken
+        },
+        {onError, onCompleted, navigate}
       )
     } else {
-      const segmentId = getAnonymousId()
+      const pseudoId = await getAnonymousId()
       SignUpWithPasswordMutation(
         atmosphere,
         {
@@ -222,12 +263,13 @@ const EmailPasswordAuthForm = forwardRef((props: Props, ref: any) => {
           password,
           invitationToken: invitationToken || '',
           isInvitation: !!invitationToken,
-          segmentId
+          pseudoId,
+          params: location.search
         },
         {
           onError,
           onCompleted,
-          history
+          navigate
         }
       )
     }
@@ -240,8 +282,8 @@ const EmailPasswordAuthForm = forwardRef((props: Props, ref: any) => {
       <Form onSubmit={onSubmit}>
         {error && <ErrorAlert message={error.message} />}
         {isSSO && submitting && <HelpMessage>Continue through the login popup</HelpMessage>}
-        <FieldGroup>
-          <FieldBlock>
+        <div className={cn('relative', signInWithSSOOnly ? 'hidden' : 'mt-4 mb-4')}>
+          <FieldBlock isSSO={signInWithSSOOnly}>
             <EmailInputField
               autoFocus={!hasEmail}
               {...fields.email}
@@ -249,6 +291,9 @@ const EmailPasswordAuthForm = forwardRef((props: Props, ref: any) => {
               onBlur={handleBlur}
             />
           </FieldBlock>
+          {ssoMessage && (
+            <div className='absolute w-full text-center font-medium text-sm'>{ssoMessage}</div>
+          )}
           {isInternalAuthEnabled && (
             <FieldBlock isSSO={isSSO}>
               <PasswordInputField
@@ -259,7 +304,7 @@ const EmailPasswordAuthForm = forwardRef((props: Props, ref: any) => {
               />
             </FieldBlock>
           )}
-        </FieldGroup>
+        </div>
         <Button size='medium' disabled={false} waiting={submitting}>
           {isSignin ? SIGNIN_LABEL : CREATE_ACCOUNT_BUTTON_LABEL}
           {signInWithSSOOnly ? ' with SSO' : ''}

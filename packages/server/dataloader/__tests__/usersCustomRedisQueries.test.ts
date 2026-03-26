@@ -1,32 +1,27 @@
 import faker from 'faker'
 import '../../../../scripts/webpack/utils/dotenv'
-import getDataLoader from '../../graphql/getDataLoader'
-import getPg from '../../postgres/getPg'
-
-afterAll(async () => {
-  const pg = getPg()
-  const dataloader = getDataLoader()
-
-  await pg.end()
-  dataloader.dispose(true)
-  // TODO shutdown redis to properly end test
-})
+import isValid from '../../graphql/isValid'
+import getKysely from '../../postgres/getKysely'
+import {getNewDataLoader} from '../getNewDataLoader'
 
 test('Result is mapped to correct id', async () => {
-  const pg = getPg()
-  const dataloader = getDataLoader()
+  const dataloader = getNewDataLoader('test')
 
-  const expectedUsers = faker.helpers.shuffle(
-    (await pg.query('SELECT "id", "email" FROM "User" LIMIT 100')).rows
-  )
+  const existingUsers = await getKysely()
+    .selectFrom('User')
+    .select(['id', 'email'])
+    .limit(100)
+    .execute()
+  // just shuffle to make sure our comparison is correct
+  const expectedUsers = faker.helpers.shuffle(existingUsers)
+
   const userIds = expectedUsers.map(({id}) => id)
-
-  const actualUsers = (await (dataloader.get('users') as any).loadMany(userIds)).map(
-    ({id, email}) => ({
+  const actualUsers = (await dataloader.get('users').loadMany(userIds))
+    .filter(isValid)
+    .map(({id, email}) => ({
       id,
       email
-    })
-  )
+    }))
 
   console.log('Ran with #users:', actualUsers.length)
 

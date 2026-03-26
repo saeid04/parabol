@@ -1,48 +1,49 @@
 import styled from '@emotion/styled'
 import graphql from 'babel-plugin-relay/macro'
-import React from 'react'
-import {commitLocalUpdate, createFragmentContainer} from 'react-relay'
+import {commitLocalUpdate, useFragment} from 'react-relay'
+import type {DashboardAvatar_teamMember$key} from '../../__generated__/DashboardAvatar_teamMember.graphql'
 import useAtmosphere from '../../hooks/useAtmosphere'
 import {MenuPosition} from '../../hooks/useCoords'
 import useMutationProps from '../../hooks/useMutationProps'
 import useTooltip from '../../hooks/useTooltip'
 import ToggleTeamDrawerMutation from '../../mutations/ToggleTeamDrawerMutation'
-import {PALETTE} from '../../styles/paletteV3'
-import defaultUserAvatar from '../../styles/theme/images/avatar-user.svg'
 import {ElementWidth} from '../../types/constEnums'
-import {DashboardAvatar_teamMember} from '../../__generated__/DashboardAvatar_teamMember.graphql'
 import Avatar from '../Avatar/Avatar'
 
 interface Props {
-  teamMember: DashboardAvatar_teamMember
+  teamMember: DashboardAvatar_teamMember$key
 }
 
 const AvatarWrapper = styled('div')({
   width: ElementWidth.DASHBOARD_AVATAR_OVERLAPPED
 })
 
-const StyledAvatar = styled(Avatar)<{isConnected: boolean; picture: string}>(
-  ({isConnected, picture}) => ({
-    // opacity causes transparency making overlap look bad. use img instead
-    backgroundImage: `${
-      isConnected ? '' : 'linear-gradient(rgba(255,255,255,.65), rgba(255,255,255,.65)),'
-    } url(${picture}), url(${defaultUserAvatar})`,
-    border: `2px solid ${PALETTE.SLATE_200}`,
-    ':hover': {
-      backgroundImage: `linear-gradient(rgba(255,255,255,.5), rgba(255,255,255,.5)),
-    url(${picture}), url(${defaultUserAvatar})`
-    }
-  })
-)
-
 const DashboardAvatar = (props: Props) => {
-  const {teamMember} = props
-  const {id: teamMemberId, picture, teamId, preferredName} = teamMember
+  const {teamMember: teamMemberRef} = props
+  const teamMember = useFragment(
+    graphql`
+      fragment DashboardAvatar_teamMember on TeamMember {
+        ...TeamMemberAvatarMenu_teamMember
+        ...LeaveTeamModal_teamMember
+        ...PromoteTeamMemberModal_teamMember
+        ...RemoveTeamMemberModal_teamMember
+        id
+        teamId
+        user {
+          picture
+          preferredName
+          isConnected
+        }
+      }
+    `,
+    teamMemberRef
+  )
+  const {id: teamMemberId, teamId} = teamMember
   const {user} = teamMember
   if (!user) {
     throw new Error(`User Avatar unavailable. ${JSON.stringify(teamMember)}`)
   }
-  const {isConnected} = user
+  const {isConnected, preferredName, picture} = user
   const atmosphere = useAtmosphere()
   const {submitting, onError, onCompleted, submitMutation} = useMutationProps()
   const {tooltipPortal, openTooltip, closeTooltip, originRef} = useTooltip<HTMLDivElement>(
@@ -68,33 +69,15 @@ const DashboardAvatar = (props: Props) => {
 
   return (
     <AvatarWrapper onMouseEnter={openTooltip} onMouseLeave={closeTooltip}>
-      <StyledAvatar
-        {...teamMember}
-        isConnected={!!isConnected}
+      <Avatar
         onClick={handleClick}
-        picture={picture || defaultUserAvatar}
+        picture={picture}
         ref={originRef}
-        size={ElementWidth.DASHBOARD_AVATAR}
+        className={`h-7 w-7 border-2 border-slate-200 border-solid after:absolute after:h-full after:w-full after:content-[""] hover:after:bg-white/30 ${!isConnected && 'after:bg-white/60'}`}
       />
       {tooltipPortal(preferredName)}
     </AvatarWrapper>
   )
 }
 
-export default createFragmentContainer(DashboardAvatar, {
-  teamMember: graphql`
-    fragment DashboardAvatar_teamMember on TeamMember {
-      ...TeamMemberAvatarMenu_teamMember
-      ...LeaveTeamModal_teamMember
-      ...PromoteTeamMemberModal_teamMember
-      ...RemoveTeamMemberModal_teamMember
-      id
-      picture
-      teamId
-      preferredName
-      user {
-        isConnected
-      }
-    }
-  `
-})
+export default DashboardAvatar

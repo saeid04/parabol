@@ -1,5 +1,4 @@
 import {ContactInfo, ExternalLinks, Threshold} from 'parabol-client/types/constEnums'
-import React from 'react'
 import {EMAIL_CORS_OPTIONS} from '../../../../types/cors'
 import makeAppURL from '../../../../utils/makeAppURL'
 import {emailCopyStyle, emailLinkStyle} from '../../styles'
@@ -9,7 +8,7 @@ import EmailFooter from '../EmailFooter/EmailFooter'
 import EmptySpace from '../EmptySpace/EmptySpace'
 import Header from '../Header/Header'
 import Layout from '../Layout/Layout'
-import {LimitsEmailProps} from './LockedEmail'
+import type {LimitsEmailProps} from './LockedEmail'
 
 const innerMaxWidth = 480
 

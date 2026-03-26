@@ -1,69 +1,59 @@
 // Should roughly match runMigrations.js except it isn't run in PM2 in dev
 // This file is bundled by webpack into a small migrate.js file which includes all migration files & their deps
 // It is used by PPMIs who are only provided with the bundles
-import Redis from 'ioredis'
+import {Migrator} from 'kysely'
 import path from 'path'
-import {parse} from 'url'
-import cliPgmConfig from '../../packages/server/postgres/pgmConfig'
+import {migrations} from '../../.config/kyselyMigrations'
+import getKysely from '../../packages/server/postgres/getKysely'
+import {Logger} from '../../packages/server/utils/Logger'
 import '../webpack/utils/dotenv'
-import pgMigrate from './pgMigrateRunner'
-import * as rethinkMigrate from './rethinkMigrateRunner'
-
-const migrateRethinkDB = async () => {
-  const {hostname, port, path: urlPath} = parse(process.env.RETHINKDB_URL!)
-  process.env.host = hostname!
-  process.env.port = port!
-  process.env.db = urlPath!.slice(1)
-  process.env.r = process.cwd()
-  const context = (require as any).context('../../packages/server/database/migrations', false, /.(js|ts)$/)
-  const collector = {}
-  context.keys().forEach((relativePath) => {
-    const {name} = path.parse(relativePath)
-    collector[name] = context(relativePath)
-  })
-  try {
-    await rethinkMigrate.up({all: true, migrations: collector})
-  } catch (e) {
-    console.error('Migration error', e)
-  }
-}
+import {pgEnsureExtensions} from './pgEnsureExtensions'
 
 const migratePG = async () => {
+  Logger.log('🐘 Postgres Migration Started')
+  await pgEnsureExtensions()
   // pgm uses a dynamic require statement, which doesn't work with webpack
   // if we ignore that dynamic require, we'd still have to include the migrations directory AND any dependencies it might have
   // by processing through webpack's require.context, we let webpack handle everything
-  const context = (require as any).context('../../packages/server/postgres/migrations', false, /.ts$/)
-  const collector = {}
-  context.keys().forEach((relativePath) => {
-    const {name, ext} = path.parse(relativePath)
-    const key = `${cliPgmConfig['migrations-dir']}/${name}${ext}`
-    collector[key] = context(relativePath)
+  const context = (require as any).context(
+    '../../packages/server/postgres/migrations',
+    false,
+    /\.ts$/
+  )
+  const collector: Record<string, any> = {}
+  context.keys().forEach((relativePath: any) => {
+    const {name} = path.parse(relativePath)
+    collector[name] = context(relativePath)
   })
-  const programmaticPgmConfig = {
-    dbClient: cliPgmConfig,
-    dir: path.join(__dirname, '..', cliPgmConfig['migrations-dir']),
-    direction: 'up',
-    migrationsTable: cliPgmConfig['migrations-table'],
-    migrations: collector
+  const pg = getKysely()
+  const migrator = new Migrator({
+    ...migrations,
+    db: pg,
+    provider: {
+      async getMigrations() {
+        return collector
+      }
+    }
+  })
+  const {error, results} = await migrator.migrateToLatest()
+
+  results?.forEach((it) => {
+    if (it.status === 'Success') {
+      Logger.log(`  ✅ Migration: ${it.migrationName}`)
+    } else if (it.status === 'Error') {
+      Logger.error(`  ⛔️ Migration: ${it.migrationName}`)
+    }
+  })
+
+  if (error) {
+    Logger.log('🐘 Postgres Migration Failed')
+    throw error
+  } else {
+    Logger.log('🐘 Postgres Migration Complete')
   }
-  return pgMigrate(programmaticPgmConfig as any)
 }
 
-const clearRedis = async () => {
-  const redis = new Redis(process.env.REDIS_URL!, {connectionName: 'devRedis'})
-  await redis.flushall()
-  redis.disconnect()
-}
+// If called via CLI
+if (require.main === module) migratePG()
 
-const migrateDBs = async () => {
-  // RethinkDB must be run first because
-  // Some PG migrations depemd on the latest state of RethinkDB
-  await migrateRethinkDB()
-  return migratePG()
-}
-
-const runMigrations = async () => {
-  await Promise.all([clearRedis(), migrateDBs()])
-}
-
-runMigrations()
+export default migratePG

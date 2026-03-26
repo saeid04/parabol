@@ -1,6 +1,5 @@
 import styled from '@emotion/styled'
-import React from 'react'
-import {RouteComponentProps, withRouter} from 'react-router-dom'
+import {useNavigate} from 'react-router'
 import useBreakpoint from '../hooks/useBreakpoint'
 import {meetingAvatarMediaQueries} from '../styles/meeting'
 import GiftSVG from './GiftSVG'
@@ -23,9 +22,9 @@ const Label = styled('div')({
   marginLeft: 8
 })
 
-const DemoCreateAccountButton = (props: RouteComponentProps) => {
-  const {history} = props
-  const handleClick = () => history.push('/create-account?from=demo')
+const DemoCreateAccountButton = () => {
+  const navigate = useNavigate()
+  const handleClick = () => navigate('/create-account?from=demo')
   const isBreakpoint = useBreakpoint(480)
   return (
     <StyledButton palette='blue' onClick={handleClick}>
@@ -35,4 +34,4 @@ const DemoCreateAccountButton = (props: RouteComponentProps) => {
   )
 }
 
-export default withRouter(DemoCreateAccountButton)
+export default DemoCreateAccountButton

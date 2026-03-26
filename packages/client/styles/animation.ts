@@ -1,5 +1,5 @@
 // Timing function to decelerate
-import {keyframes} from '@emotion/core'
+import {keyframes} from '@emotion/react'
 
 export const DECELERATE = 'cubic-bezier(0, 0, .2, 1)'
 
@@ -17,10 +17,10 @@ export const fadeIn = keyframes`
     opacity: 0;
     transform: scale(0);
   }
-	100% {
-	  opacity: 1;
-	  transform: scale(1);
-	}
+  100% {
+    opacity: 1;
+    transform: scale(1);
+  }
 `
 
 export const fadeUp = keyframes`
@@ -28,8 +28,8 @@ export const fadeUp = keyframes`
     opacity: 0;
     transform: translateY(8px);
   }
-	100% {
-	  opacity: 1;
-	  transform: translateY(0);
-	}
+  100% {
+    opacity: 1;
+    transform: translateY(0);
+  }
 `

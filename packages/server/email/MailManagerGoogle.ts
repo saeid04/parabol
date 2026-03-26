@@ -1,6 +1,6 @@
 import nodemailer from 'nodemailer'
-import sendToSentry from '../utils/sendToSentry'
-import MailManager, {MailManagerOptions} from './MailManager'
+import logError from '../utils/logError'
+import MailManager, {type MailManagerOptions} from './MailManager'
 
 export default class MailManagerGoogle extends MailManager {
   transport = nodemailer.createTransport({
@@ -24,7 +24,7 @@ export default class MailManagerGoogle extends MailManager {
       })
     } catch (e) {
       const error = e instanceof Error ? e : new Error('Failed to sendMail')
-      sendToSentry(error, {
+      logError(error, {
         tags: {to: JSON.stringify(to), type: 'Google nodemailer error'}
       })
       return false

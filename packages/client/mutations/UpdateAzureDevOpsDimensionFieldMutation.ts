@@ -1,11 +1,11 @@
 import graphql from 'babel-plugin-relay/macro'
 import {commitMutation} from 'react-relay'
-import {DiscriminateProxy} from '../types/generics'
-import {StandardMutation} from '../types/relayMutations'
+import type {AzureDevOpsFieldMenu_stage$data} from '../__generated__/AzureDevOpsFieldMenu_stage.graphql'
+import type {PokerMeeting_meeting$data} from '../__generated__/PokerMeeting_meeting.graphql'
+import type {UpdateAzureDevOpsDimensionFieldMutation as TUpdateAzureDevOpsDimensionFieldMutation} from '../__generated__/UpdateAzureDevOpsDimensionFieldMutation.graphql'
+import type {DiscriminateProxy} from '../types/generics'
+import type {StandardMutation} from '../types/relayMutations'
 import createProxyRecord from '../utils/relay/createProxyRecord'
-import {AzureDevOpsFieldMenu_stage} from '../__generated__/AzureDevOpsFieldMenu_stage.graphql'
-import {PokerMeeting_meeting} from '../__generated__/PokerMeeting_meeting.graphql'
-import {UpdateAzureDevOpsDimensionFieldMutation as TUpdateAzureDevOpsDimensionFieldMutation} from '../__generated__/UpdateAzureDevOpsDimensionFieldMutation.graphql'
 
 graphql`
   fragment UpdateAzureDevOpsDimensionFieldMutation_team on UpdateAzureDevOpsDimensionFieldSuccess {
@@ -58,14 +58,14 @@ const UpdateAzureDevOpsDimensionFieldMutation: StandardMutation<
     variables,
     optimisticUpdater: (store) => {
       const {meetingId, instanceId, dimensionName, fieldName} = variables
-      const meeting = store.get<PokerMeeting_meeting>(meetingId)
+      const meeting = store.get<PokerMeeting_meeting$data>(meetingId)
       if (!meeting) {
         return
       }
       // handle meeting records
       const phases = meeting.getLinkedRecords('phases')
       const estimatePhase = phases.find((phase) => phase.getValue('phaseType') === 'ESTIMATE')!
-      const stages = estimatePhase.getLinkedRecords<AzureDevOpsFieldMenu_stage[]>('stages')
+      const stages = estimatePhase.getLinkedRecords<AzureDevOpsFieldMenu_stage$data[]>('stages')
       stages.forEach((stage) => {
         const dimensionRef = stage.getLinkedRecord('dimensionRef')
         const dimensionRefName = dimensionRef.getValue('name')

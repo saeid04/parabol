@@ -1,27 +1,29 @@
-import GenericMeetingPhase from './GenericMeetingPhase'
+import type {AutogroupReflectionGroupType, TranscriptBlock} from '../../postgres/types'
+import type {RetroMeetingPhase} from '../../postgres/types/NewMeetingPhase'
 import Meeting from './Meeting'
 
 interface Input {
-  id?: string
+  id?: string | null
   teamId: string
   meetingCount: number
-  name?: string
-  phases: [GenericMeetingPhase, ...GenericMeetingPhase[]]
+  name: string
+  phases: [RetroMeetingPhase, ...RetroMeetingPhase[]]
   facilitatorUserId: string
-  showConversionModal?: boolean
   templateId: string
   totalVotes: number
   maxVotesPerGroup: number
   disableAnonymity: boolean
-}
-
-export function isMeetingRetrospective(meeting: Meeting): meeting is MeetingRetrospective {
-  return meeting.meetingType === 'retrospective'
+  transcription?: TranscriptBlock[] | null
+  autogroupReflectionGroups?: AutogroupReflectionGroupType[] | null
+  resetReflectionGroups?: AutogroupReflectionGroupType[] | null
+  recallBotId?: string
+  videoMeetingURL?: string | null
+  meetingSeriesId?: number | null
+  scheduledEndTime?: Date | null
 }
 
 export default class MeetingRetrospective extends Meeting {
-  meetingType!: 'retrospective'
-  showConversionModal?: boolean
+  meetingType = 'retrospective' as const
   autoGroupThreshold?: number | null
   nextAutoGroupThreshold?: number | null
   totalVotes: number
@@ -33,11 +35,15 @@ export default class MeetingRetrospective extends Meeting {
   templateId: string
   topicCount?: number
   reflectionCount?: number
+  transcription?: TranscriptBlock[] | null
+  recallBotId?: string | null
+  videoMeetingURL?: string | null
+  autogroupReflectionGroups?: AutogroupReflectionGroupType[] | null
+  resetReflectionGroups?: AutogroupReflectionGroupType[] | null
 
   constructor(input: Input) {
     const {
       id,
-      showConversionModal,
       teamId,
       meetingCount,
       name,
@@ -46,7 +52,14 @@ export default class MeetingRetrospective extends Meeting {
       templateId,
       totalVotes,
       maxVotesPerGroup,
-      disableAnonymity
+      disableAnonymity,
+      transcription,
+      autogroupReflectionGroups,
+      resetReflectionGroups,
+      recallBotId,
+      videoMeetingURL,
+      meetingSeriesId,
+      scheduledEndTime
     } = input
     super({
       id,
@@ -55,12 +68,18 @@ export default class MeetingRetrospective extends Meeting {
       phases,
       facilitatorUserId,
       meetingType: 'retrospective',
-      name: name ?? `Retro #${meetingCount + 1}`
+      name,
+      meetingSeriesId,
+      scheduledEndTime
     })
     this.totalVotes = totalVotes
     this.maxVotesPerGroup = maxVotesPerGroup
-    this.showConversionModal = showConversionModal
     this.templateId = templateId
     this.disableAnonymity = disableAnonymity
+    this.transcription = transcription
+    this.autogroupReflectionGroups = autogroupReflectionGroups
+    this.resetReflectionGroups = resetReflectionGroups
+    this.recallBotId = recallBotId
+    this.videoMeetingURL = videoMeetingURL
   }
 }

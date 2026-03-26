@@ -1,0 +1,83 @@
+name: parabol-dev
+
+services:
+  datadog:
+    image: gcr.io/datadoghq/agent:7
+    restart: unless-stopped
+    env_file: ../../../.env
+    ports:
+      - "8126:8126"
+    networks:
+      - parabol-network
+    volumes:
+      - "./datadog/dd-conf.d:/etc/datadog-agent/conf.d/local.d/"
+      - "../../../dev/logs:/var/log/datadog/logs"
+      - /var/run/docker.sock:/var/run/docker.sock
+      - /proc/:/host/proc/:ro
+      - /sys/fs/cgroup:/host/sys/fs/cgroup:ro
+  postgres:
+    image: pgvector/pgvector:0.8.0-pg16
+    restart: unless-stopped
+    env_file: ../../../.env
+    ports:
+      - "5432:5432"
+    volumes:
+      - "postgres-data:/var/lib/postgresql/data"
+    networks:
+      - parabol-network
+  pgadmin:
+    image: dpage/pgadmin4:8.9
+    depends_on:
+      - postgres
+    env_file: ../../../.env
+    volumes:
+      - "pgadmin-data:/var/lib/pgadmin"
+    ports:
+      - "5050:80"
+    networks:
+      - parabol-network
+    restart: unless-stopped
+  valkey:
+    image: valkey/valkey:9.0-alpine
+    command: valkey-server --save ""
+    restart: unless-stopped
+    ports:
+      - "6379:6379"
+    volumes:
+      - valkey-data:/data
+    networks:
+      - parabol-network
+  redis-commander:
+    image: ghcr.io/joeferner/redis-commander:0.9.1
+    hostname: redis-commander
+    restart: unless-stopped
+    environment:
+      - REDIS_HOSTS=local:valkey:6379
+    ports:
+      - "8081:8081"
+    networks:
+      parabol-network:
+  text-embeddings-inference:
+    image: ghcr.io/huggingface/text-embeddings-inference:cpu-1.8
+    environment:
+      - MODEL_ID=Svenni551/Qwen3-Embedding-0.6B-ONNX-INT8
+      - POOLING=mean
+      - MAX_CLIENT_BATCH_SIZE=8
+      - MAX_BATCH_TOKENS=4096
+      - AUTO_TRUNCATE=true
+    platform: linux/x86_64
+    hostname: text-embeddings-inference
+    restart: unless-stopped
+    ports:
+      - "3040:80"
+    volumes:
+      - text-embeddings-inference-data:/data
+    networks:
+      parabol-network:
+networks:
+  parabol-network:
+volumes:
+  valkey-data: {}
+  postgres-data: {}
+  pgadmin-data: {}
+  text-embeddings-inference-data: {}

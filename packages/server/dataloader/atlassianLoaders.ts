@@ -3,28 +3,22 @@ import {decode} from 'jsonwebtoken'
 import JiraIssueId from 'parabol-client/shared/gqlIds/JiraIssueId'
 import JiraProjectId from 'parabol-client/shared/gqlIds/JiraProjectId'
 import {SubscriptionChannel} from 'parabol-client/types/constEnums'
-import {
-  JiraGetIssueRes,
-  JiraGQLFields,
-  JiraProject,
-  RateLimitError
-} from 'parabol-client/utils/AtlassianManager'
-import {JiraIssueMissingEstimationFieldHintEnum} from '../graphql/private/resolverTypes'
-import {AtlassianAuth} from '../postgres/queries/getAtlassianAuthByUserIdTeamId'
-import getAtlassianAuthsByUserId from '../postgres/queries/getAtlassianAuthsByUserId'
-import getJiraDimensionFieldMap, {
-  GetJiraDimensionFieldMapParams,
-  JiraDimensionFieldMap
-} from '../postgres/queries/getJiraDimensionFieldMap'
-import insertTaskEstimate from '../postgres/queries/insertTaskEstimate'
+import type {JiraIssueMissingEstimationFieldHintEnum} from '../graphql/private/resolverTypes'
+import getKysely from '../postgres/getKysely'
 import upsertAtlassianAuths from '../postgres/queries/upsertAtlassianAuths'
+import {selectAtlassianAuth, selectJiraDimensionFieldMap} from '../postgres/select'
+import type {AtlassianAuth, JiraDimensionFieldMap} from '../postgres/types'
+import AtlassianServerManager, {
+  type JiraIssueRaw,
+  type JiraProject
+} from '../utils/AtlassianServerManager'
 import {hasDefaultEstimationField, isValidEstimationField} from '../utils/atlassian/jiraFields'
 import {downloadAndCacheImages, updateJiraImageUrls} from '../utils/atlassian/jiraImages'
-import {getIssue} from '../utils/atlassian/jiraIssues'
-import AtlassianServerManager from '../utils/AtlassianServerManager'
+import {generateJiraExtraFields} from '../utils/generateJiraExtraFields'
+import logError from '../utils/logError'
 import publish from '../utils/publish'
-import sendToSentry from '../utils/sendToSentry'
-import RootDataLoader from './RootDataLoader'
+import {redisStoreAndNetwork} from '../utils/redisStoreAndNetwork'
+import type RootDataLoader from './RootDataLoader'
 
 type TeamUserKey = {
   teamId: string
@@ -51,9 +45,13 @@ export const freshAtlassianAuth = (
 ): DataLoader<TeamUserKey, AtlassianAuth | null, string> => {
   return new DataLoader<TeamUserKey, AtlassianAuth | null, string>(
     async (keys) => {
+      const pg = getKysely()
       const results = await Promise.allSettled(
         keys.map(async ({userId, teamId}) => {
-          const userAtlassianAuths = await getAtlassianAuthsByUserId(userId)
+          const userAtlassianAuths = await selectAtlassianAuth()
+            .where('userId', '=', userId)
+            .where('isActive', '=', true)
+            .execute()
           const atlassianAuthToRefresh = userAtlassianAuths.find(
             (atlassianAuth) => atlassianAuth.teamId === teamId
           )
@@ -68,7 +66,17 @@ export const freshAtlassianAuth = (
           if (!decodedToken || decodedToken.exp < inAMinute) {
             const oauthRes = await AtlassianServerManager.refresh(refreshToken)
             if (oauthRes instanceof Error) {
-              sendToSentry(oauthRes)
+              // If we can't refresh it, it's broken. mark it inactive
+              if (oauthRes.message === 'refresh_token is invalid') {
+                await pg
+                  .updateTable('AtlassianAuth')
+                  .set({isActive: false})
+                  .where('userId', '=', userId)
+                  .where('teamId', '=', teamId)
+                  .where('isActive', '=', true)
+                  .execute()
+              }
+              logError(oauthRes)
               return null
             }
             const {accessToken, refreshToken: newRefreshToken} = oauthRes
@@ -156,7 +164,7 @@ export const jiraRemoteProject = (
           const manager = new AtlassianServerManager(accessToken)
           const projectRes = await manager.getProject(cloudId, projectKey)
           if (projectRes instanceof Error) {
-            sendToSentry(projectRes, {userId, tags: {teamId, projectKey}})
+            logError(projectRes, {userId, tags: {teamId, projectKey}})
             return null
           }
           return projectRes
@@ -176,10 +184,21 @@ type JiraIssueField = {
   fieldName: string
   fieldType: 'string' | 'number'
 }
-export type JiraIssue = JiraGetIssueRes['fields'] & {
+export type JiraIssue = {
+  cloudId: string
+  issueKey: string
+  id: string
+  description: any
+  descriptionHTML: string
+  summary: string
+  issuetype: {id: string; iconUrl: string}
+  created: string
+  lastUpdated: string
+  project?: {simplified: boolean}
+  extraFields: ReturnType<typeof generateJiraExtraFields>
   issueType: string
   possibleEstimationFields: JiraIssueField[]
-  descriptionHTML: string
+  missingEstimationFieldHint?: JiraIssueMissingEstimationFieldHintEnum
   teamId: string
   userId: string
 }
@@ -199,36 +218,40 @@ export const jiraIssue = (
           const {accessToken} = auth
           const manager = new AtlassianServerManager(accessToken)
 
-          const cacheImagesUpdateEstimates = async (issueRes: JiraGetIssueRes) => {
+          const cacheImagesUpdateEstimates = async (issueRes: JiraIssueRaw) => {
             const {fields} = issueRes
             const {updatedDescription, imageUrlToHash} = updateJiraImageUrls(
               cloudId,
-              issueRes.fields.descriptionHTML
+              issueRes.renderedFields.description ?? ''
             )
             downloadAndCacheImages(manager, imageUrlToHash)
             // update our records
             await Promise.all(
               estimates.map((estimate) => {
-                const {jiraFieldId, label, discussionId, name, taskId, userId} = estimate
+                const {label, discussionId, name, taskId, userId} = estimate
+                const jiraFieldId = estimate.jiraFieldId as keyof typeof fields | null
                 if (!jiraFieldId) {
                   return undefined
                 }
-                const freshEstimate = String(fields[jiraFieldId as keyof JiraGQLFields])
+                const freshEstimate = String(fields[jiraFieldId]).slice(0, 100)
                 if (freshEstimate === label) return undefined
                 // mutate current dataloader
                 estimate.label = freshEstimate
-                return insertTaskEstimate({
-                  changeSource: 'external',
-                  // keep the link to the discussion alive, if possible
-                  discussionId,
-                  jiraFieldId,
-                  label: freshEstimate,
-                  name,
-                  meetingId: null,
-                  stageId: null,
-                  taskId,
-                  userId
-                })
+                return getKysely()
+                  .insertInto('TaskEstimate')
+                  .values({
+                    changeSource: 'external',
+                    // keep the link to the discussion alive, if possible
+                    discussionId,
+                    jiraFieldId,
+                    label: freshEstimate,
+                    name,
+                    meetingId: null,
+                    stageId: null,
+                    taskId,
+                    userId
+                  })
+                  .execute()
               })
             )
 
@@ -244,16 +267,22 @@ export const jiraIssue = (
                   })
                 }
                 if (schema.type === 'timetracking') {
-                  possibleEstimationFields.push({
-                    fieldId: 'timeestimate',
-                    fieldName: issueRes.names['timeestimate'],
-                    fieldType: 'string'
-                  })
-                  possibleEstimationFields.push({
-                    fieldId: 'timeoriginalestimate',
-                    fieldName: issueRes.names['timeoriginalestimate'],
-                    fieldType: 'string'
-                  })
+                  const timeEstimate = issueRes.names['timeestimate']
+                  if (timeEstimate) {
+                    possibleEstimationFields.push({
+                      fieldId: 'timeestimate',
+                      fieldName: timeEstimate,
+                      fieldType: 'string'
+                    })
+                  }
+                  const timeOriginalEstimate = issueRes.names['timeoriginalestimate']
+                  if (timeOriginalEstimate) {
+                    possibleEstimationFields.push({
+                      fieldId: 'timeoriginalestimate',
+                      fieldName: timeOriginalEstimate,
+                      fieldType: 'string'
+                    })
+                  }
                 }
               }
             )
@@ -264,11 +293,16 @@ export const jiraIssue = (
               hasDefaultEstimationField(possibleEstimationFields.map(({fieldName}) => fieldName))
                 ? undefined
                 : simplified
-                ? 'teamManagedStoryPoints'
-                : 'companyManagedStoryPoints'
+                  ? 'teamManagedStoryPoints'
+                  : 'companyManagedStoryPoints'
 
             return {
               ...fields,
+              cloudId,
+              issueKey,
+              id: JiraIssueId.join(cloudId, issueKey),
+              lastUpdated: issueRes.changelog.histories[0]?.created ?? fields.created,
+              extraFields: generateJiraExtraFields(issueRes),
               issueType: fields.issuetype.id,
               possibleEstimationFields,
               missingEstimationFieldHint,
@@ -278,24 +312,22 @@ export const jiraIssue = (
             }
           }
 
-          const publishUpdatedIssue = async (issue: JiraGetIssueRes) => {
-            const res = await cacheImagesUpdateEstimates(issue)
-            publish(SubscriptionChannel.NOTIFICATION, viewerId, 'JiraIssue', res)
-          }
-          const issueRes = await getIssue(
-            manager,
-            cloudId,
-            issueKey,
-            publishUpdatedIssue,
-            ['*all'],
-            ['names', 'schema']
+          const redisKey = `jira:${cloudId}:${issueKey}:["*all"]["names","schema"]`
+          const issueRes = await redisStoreAndNetwork(
+            redisKey,
+            () => manager.getIssue(cloudId, issueKey, ['*all'], ['names', 'schema']),
+            cacheImagesUpdateEstimates,
+            {
+              onUpdate: (res) => {
+                publish(SubscriptionChannel.NOTIFICATION, viewerId, 'JiraIssue', res)
+              }
+            }
           )
-          if (issueRes instanceof Error || issueRes instanceof RateLimitError) {
-            sendToSentry(issueRes, {userId, tags: {cloudId, issueKey, teamId}})
+          if (issueRes instanceof Error) {
+            logError(issueRes, {userId, tags: {cloudId, issueKey, teamId}})
             return null
           }
-          const res = await cacheImagesUpdateEstimates(issueRes)
-          return res
+          return issueRes
         })
       )
       return results.map((result) => (result.status === 'fulfilled' ? result.value : null))
@@ -323,7 +355,7 @@ export const atlassianCloudNameLookup = (
           const manager = new AtlassianServerManager(accessToken)
           const result = await manager.getCloudNameLookup()
           if (result instanceof Error) {
-            sendToSentry(result, {userId, tags: {teamId}})
+            logError(result, {userId, tags: {teamId}})
             return {}
           }
           return result
@@ -363,11 +395,23 @@ export const atlassianCloudName = (
 }
 
 export const jiraDimensionFieldMap = (parent: RootDataLoader) =>
-  new DataLoader<GetJiraDimensionFieldMapParams, JiraDimensionFieldMap[], string>(
+  new DataLoader<
+    {teamId: string; cloudId: string; projectKey: string; dimensionName: string; issueType: string},
+    JiraDimensionFieldMap[],
+    string
+  >(
     async (keys) => {
       return Promise.all(
         keys.map(async (params) => {
-          return getJiraDimensionFieldMap(params)
+          const {cloudId, dimensionName, issueType, projectKey, teamId} = params
+          return selectJiraDimensionFieldMap()
+            .where('teamId', '=', teamId)
+            .where('cloudId', '=', cloudId)
+            .where('projectKey', '=', projectKey)
+            .where('dimensionName', '=', dimensionName)
+            .orderBy(({eb}) => eb.case().when('issueType', '=', issueType).then(0).else(1).end())
+            .orderBy('updatedAt', 'desc')
+            .execute()
         })
       )
     },

@@ -1,10 +1,9 @@
 import styled from '@emotion/styled'
-import React from 'react'
 import {DECELERATE} from '../styles/animation'
 import {PALETTE} from '../styles/paletteV3'
 import {Radius} from '../types/constEnums'
 import PlainButton from './PlainButton/PlainButton'
-import {SnackAction} from './Snackbar'
+import type {SnackAction} from './Snackbar'
 
 interface Props {
   action: SnackAction | null | undefined

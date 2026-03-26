@@ -1,9 +1,9 @@
 import graphql from 'babel-plugin-relay/macro'
-import React, {useMemo} from 'react'
+import {useMemo} from 'react'
 import {useFragment} from 'react-relay'
 import {RRule} from 'rrule'
-import {TeamPromptMeetingStatus_meeting$key} from '~/__generated__/TeamPromptMeetingStatus_meeting.graphql'
-import {TimeLeftBadge} from './Recurrence/TimeLeftBadge'
+import type {TeamPromptMeetingStatus_meeting$key} from '~/__generated__/TeamPromptMeetingStatus_meeting.graphql'
+import {TimeLeftBadge} from '../Recurrence/TimeLeftBadge'
 import {TeamPromptEndedBadge} from './TeamPromptEndedBadge'
 
 interface Props {

@@ -1,15 +1,15 @@
-import React, {forwardRef} from 'react'
-import useSegmentTrack from '../../hooks/useSegmentTrack'
+import {forwardRef} from 'react'
+import useClientSideTrack from '../../hooks/useClientSideTrack'
 import {ExternalLinks} from '../../types/constEnums'
 import HelpMenuContent from './HelpMenuContent'
 import HelpMenuCopy from './HelpMenuCopy'
 import HelpMenuLink from './HelpMenuLink'
 
-interface Props {}
+type Props = {}
 
 const ActionMeetingLastCallHelpMenu = forwardRef((_props: Props, ref: any) => {
   const {closePortal} = ref
-  useSegmentTrack('Help Menu Open', {phase: 'firstcall'})
+  useClientSideTrack('Help Menu Open', {phase: 'firstcall'})
   return (
     <HelpMenuContent closePortal={closePortal}>
       <HelpMenuCopy>{'Here’s a chance to add any last topics for discussion.'}</HelpMenuCopy>

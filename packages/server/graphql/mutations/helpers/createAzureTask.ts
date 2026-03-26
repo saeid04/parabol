@@ -1,12 +1,13 @@
-import {DataLoaderWorker} from '../../../graphql/graphql'
-import {IGetTeamMemberIntegrationAuthQueryResult} from '../../../postgres/queries/generated/getTeamMemberIntegrationAuthQuery'
-import {IntegrationProviderAzureDevOps} from '../../../postgres/queries/getIntegrationProvidersByIds'
+import type {JSONContent} from '@tiptap/core'
+import type {DataLoaderWorker} from '../../../graphql/graphql'
+import type {TeamMemberIntegrationAuth} from '../../../postgres/types'
+import type {IntegrationProviderAzureDevOps} from '../../../postgres/types/IntegrationProvider'
 import AzureDevOpsServerManager from '../../../utils/AzureDevOpsServerManager'
 
 const createAzureTask = async (
-  rawContentStr: string,
+  rawContentJSON: JSONContent,
   serviceProjectHash: string,
-  azureAuth: IGetTeamMemberIntegrationAuthQueryResult,
+  azureAuth: TeamMemberIntegrationAuth,
   dataLoader: DataLoaderWorker
 ) => {
   const provider = await dataLoader.get('integrationProviders').loadNonNull(azureAuth.providerId)
@@ -15,7 +16,10 @@ const createAzureTask = async (
     provider as IntegrationProviderAzureDevOps
   )
 
-  return manager.createTask({rawContentStr, integrationRepoId: serviceProjectHash})
+  return manager.createTask({
+    rawContentJSON,
+    integrationRepoId: serviceProjectHash
+  })
 }
 
 export default createAzureTask

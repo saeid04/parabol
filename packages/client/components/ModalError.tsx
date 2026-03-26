@@ -1,9 +1,9 @@
 import styled from '@emotion/styled'
-import React, {forwardRef, Ref} from 'react'
+import {forwardRef, type Ref} from 'react'
 import useModal from '~/hooks/useModal'
 import DialogContent from './DialogContent'
 import DialogTitle from './DialogTitle'
-import MenuContents, {MenuContentsProps} from './MenuContents'
+import MenuContents, {type MenuContentsProps} from './MenuContents'
 import PrimaryButton from './PrimaryButton'
 import ReportErrorFeedback from './ReportErrorFeedback'
 
@@ -30,7 +30,9 @@ const ModalError = forwardRef((props: Props, ref: Ref<HTMLDivElement>) => {
       <DialogContent>
         {'We’ve alerted the developers. Try refreshing the page'}
         <Button onClick={openPortal}>Report Feedback</Button>
-        {modalPortal(<ReportErrorFeedback closePortal={closePortal} eventId={eventId} />)}
+        {modalPortal(
+          <ReportErrorFeedback closePortal={closePortal} eventId={eventId} error={error} />
+        )}
       </DialogContent>
     </ErrorBlock>
   )

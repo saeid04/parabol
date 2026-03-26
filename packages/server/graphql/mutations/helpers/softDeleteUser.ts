@@ -1,38 +1,60 @@
-import TeamMemberId from 'parabol-client/shared/gqlIds/TeamMemberId'
-import getRethink from '../../../database/rethinkDriver'
-import removeAtlassianAuth from '../../../postgres/queries/removeAtlassianAuth'
-import removeGitHubAuth from '../../../postgres/queries/removeGitHubAuth'
+import getKysely from '../../../postgres/getKysely'
 import getDeletedEmail from '../../../utils/getDeletedEmail'
-import {DataLoaderWorker} from '../../graphql'
+import type {DataLoaderWorker} from '../../graphql'
 import removeFromOrg from './removeFromOrg'
 import removeSlackAuths from './removeSlackAuths'
 
 const removeGitHubAuths = async (userId: string, teamIds: string[]) =>
-  Promise.all(teamIds.map((teamId) => removeGitHubAuth(userId, teamId)))
+  Promise.all(
+    teamIds.map((teamId) => {
+      return getKysely()
+        .updateTable('GitHubAuth')
+        .set({isActive: false})
+        .where('userId', '=', userId)
+        .where('teamId', '=', teamId)
+        .where('isActive', '=', true)
+        .execute()
+    })
+  )
 
-const removeAtlassianAuths = async (userId: string, teamIds: string[]) =>
-  Promise.all(teamIds.map((teamId) => removeAtlassianAuth(userId, teamId)))
+const removeAtlassianAuths = async (userId: string, teamIds: string[]) => {
+  if (teamIds.length === 0) return
+  const pg = getKysely()
+  return pg
+    .updateTable('AtlassianAuth')
+    .set({isActive: false})
+    .where('userId', '=', userId)
+    .where('teamId', 'in', teamIds)
+    .where('isActive', '=', true)
+    .execute()
+}
+
+const removePageAcces = async (userId: string) => {
+  const pg = getKysely()
+  // Do this first because deleting from PageAccess will cause n triggers & we want to do it all at once
+  await pg.deleteFrom('PageUserSortOrder').where('userId', '=', userId).execute()
+  await Promise.all([
+    pg.deleteFrom('PageAccess').where('userId', '=', userId).execute(),
+    pg.deleteFrom('PageUserAccess').where('userId', '=', userId).execute(),
+    pg.deleteFrom('PageAccessRequest').where('userId', '=', userId).execute()
+  ])
+}
 
 const softDeleteUser = async (userIdToDelete: string, dataLoader: DataLoaderWorker) => {
-  const r = await getRethink()
   const orgUsers = await dataLoader.get('organizationUsersByUserId').load(userIdToDelete)
   const orgIds = orgUsers.map((orgUser) => orgUser.orgId)
 
   await Promise.all(
     orgIds.map((orgId) => removeFromOrg(userIdToDelete, orgId, undefined, dataLoader))
   )
-  const teamMemberIds = await r
-    .table('TeamMember')
-    .getAll(userIdToDelete, {index: 'userId'})
-    .getField('id')
-    .coerceTo('array')
-    .run()
-  const teamIds = teamMemberIds.map((id) => TeamMemberId.split(id).teamId)
+  const teamMembers = await dataLoader.get('teamMembersByUserId').load(userIdToDelete)
+  const teamIds = teamMembers.map(({teamId}) => teamId)
 
   await Promise.all([
     removeAtlassianAuths(userIdToDelete, teamIds),
     removeGitHubAuths(userIdToDelete, teamIds),
-    removeSlackAuths(userIdToDelete, teamIds, true)
+    removeSlackAuths(userIdToDelete, teamIds, true),
+    removePageAcces(userIdToDelete)
   ])
 
   return getDeletedEmail(userIdToDelete)

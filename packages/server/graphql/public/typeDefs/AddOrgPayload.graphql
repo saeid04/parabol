@@ -1,0 +1,16 @@
+type AddOrgPayload {
+  organization: Organization
+  error: StandardMutationError
+
+  team: Team
+
+  """
+  The teamMember that just created the new team, if this is a creation
+  """
+  teamMember: TeamMember
+
+  """
+  The ID of the suggestion to create a new team
+  """
+  removedSuggestedActionId: ID
+}

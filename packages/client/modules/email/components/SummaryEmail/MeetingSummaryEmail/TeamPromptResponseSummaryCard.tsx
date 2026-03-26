@@ -1,28 +1,29 @@
 import styled from '@emotion/styled'
-import {generateHTML} from '@tiptap/html'
 import graphql from 'babel-plugin-relay/macro'
-import {TeamPromptResponseSummaryCard_stage$key} from 'parabol-client/__generated__/TeamPromptResponseSummaryCard_stage.graphql'
-import React from 'react'
+import type {TeamPromptResponseSummaryCard_stage$key} from 'parabol-client/__generated__/TeamPromptResponseSummaryCard_stage.graphql'
+import type * as React from 'react'
 import {useFragment} from 'react-relay'
 import {PALETTE} from '~/styles/paletteV3'
-import {createEditorExtensions} from '../../../../../components/promptResponse/tiptapConfig'
+import {useTipTapContext} from '../../../../../components/TipTapProvider'
 
 const responseSummaryCardStyles: React.CSSProperties = {
-  margin: '12px',
-  width: '251px'
+  padding: '12px',
+  width: '100%'
 }
 
-const promptResponseStyles = {
+const promptResponseStyles: React.CSSProperties = {
   minHeight: '40px',
   lineHeight: '20px',
   border: 'solid',
   borderWidth: '1px',
   borderColor: PALETTE.SLATE_300,
   borderRadius: '4px',
-  padding: '12px 16px 12px 16px'
+  padding: '12px 16px 12px 16px',
+  overflow: 'auto',
+  wordWrap: 'break-word'
 }
 
-const avatarStyles = {
+const avatarStyles: React.CSSProperties = {
   borderRadius: '100%',
   minWidth: 48
 }
@@ -30,17 +31,18 @@ const avatarStyles = {
 // Note: Emotion doesn't work in email, so these styles will only be present in the app.
 const StyledEditor = styled('div')`
   min-height: 40px;
-  line-height: 20px;
+  line-height: 1.25;
 
-  :is(ul, ol) {
+  ul,
+  ol {
     list-style-position: outside;
     padding-inline-start: 16px;
     margin-block-start: 4px;
     margin-block-end: 4px;
   }
 
-  :is(ol) {
-    margin-inline-start: 2px;
+  ol {
+    margin-inline-start: 4px;
   }
 
   p.is-editor-empty:first-of-type::before {
@@ -53,6 +55,15 @@ const StyledEditor = styled('div')`
 
   p:empty::after {
     content: '\\00A0';
+  }
+
+  p {
+    margin-block-start: 4px;
+    margin-block-end: 4px;
+  }
+
+  hr {
+    border-top: 1px solid ${PALETTE.SLATE_300};
   }
 
   [data-type='mention'] {
@@ -81,11 +92,11 @@ const TeamPromptResponseSummaryCard = (props: Props) => {
       fragment TeamPromptResponseSummaryCard_stage on TeamPromptResponseStage {
         id
         teamMember {
-          userId
           user {
+            id
             rasterPicture
+            preferredName
           }
-          preferredName
         }
         response {
           plaintextContent
@@ -97,10 +108,11 @@ const TeamPromptResponseSummaryCard = (props: Props) => {
     stageRef
   )
   const {teamMember, response} = stage
-  const {user, preferredName} = teamMember
-  const {rasterPicture} = user
+  const {user} = teamMember
+  const {rasterPicture, preferredName} = user
   const contentJSON = response ? JSON.parse(response.content) : null
-  const html = generateHTML(contentJSON, createEditorExtensions())
+  const {generateHTML} = useTipTapContext()
+  const html = generateHTML(contentJSON)
 
   return (
     <div style={responseSummaryCardStyles}>

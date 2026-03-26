@@ -1,5 +1,5 @@
 import styled from '@emotion/styled'
-import React, {ReactNode} from 'react'
+import type {ReactNode} from 'react'
 import {PALETTE} from '~/styles/paletteV3'
 
 const Header = styled('div')({
@@ -7,7 +7,7 @@ const Header = styled('div')({
   fontSize: 12,
   lineHeight: '12px',
   justifyContent: 'space-between',
-  paddingBottom: 8,
+  padding: '4px 0 0',
   width: '100%'
 })
 

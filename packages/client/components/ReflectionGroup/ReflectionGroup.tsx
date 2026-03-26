@@ -1,8 +1,9 @@
 import styled from '@emotion/styled'
 import graphql from 'babel-plugin-relay/macro'
-import React, {RefObject, useEffect, useMemo, useRef, useState} from 'react'
+import {type RefObject, useEffect, useMemo, useRef, useState} from 'react'
 import {commitLocalUpdate, useFragment} from 'react-relay'
-import {PortalId} from '~/hooks/usePortal'
+import type {ReflectionGroup_meeting$key} from '../../__generated__/ReflectionGroup_meeting.graphql'
+import type {ReflectionGroup_reflectionGroup$key} from '../../__generated__/ReflectionGroup_reflectionGroup.graphql'
 import useAtmosphere from '../../hooks/useAtmosphere'
 import useEventCallback from '../../hooks/useEventCallback'
 import useExpandedReflections from '../../hooks/useExpandedReflections'
@@ -13,10 +14,8 @@ import {
   Times
 } from '../../types/constEnums'
 import {GROUP} from '../../utils/constants'
-import {ReflectionGroup_meeting$key} from '../../__generated__/ReflectionGroup_meeting.graphql'
-import {ReflectionGroup_reflectionGroup$key} from '../../__generated__/ReflectionGroup_reflectionGroup.graphql'
-import {SwipeColumn} from '../GroupingKanban'
-import {OpenSpotlight} from '../GroupingKanbanColumn'
+import type {SwipeColumn} from '../GroupingKanban'
+import type {OpenSpotlight} from '../GroupingKanbanColumn'
 import ReflectionGroupHeader from '../ReflectionGroupHeader'
 import ExpandedReflectionStack from '../RetroReflectPhase/ExpandedReflectionStack'
 import DraggableReflectionCard from './DraggableReflectionCard'
@@ -30,24 +29,27 @@ export const getCardStackPadding = (count: number) => {
   return Math.max(0, Math.min(3, count) - 1) * ReflectionStackPerspective.Y
 }
 
-const Group = styled('div')<{staticReflectionCount: number; isSpotlightSource: boolean}>(
-  ({staticReflectionCount, isSpotlightSource}) => ({
-    height: 'max-content',
-    position: 'relative',
-    paddingTop: ElementWidth.REFLECTION_CARD_PADDING,
-    paddingBottom: isSpotlightSource
-      ? ElementWidth.REFLECTION_CARD_PADDING
-      : ElementWidth.REFLECTION_CARD_PADDING + getCardStackPadding(staticReflectionCount),
-    transition: `padding-bottom ${Times.REFLECTION_DROP_DURATION}ms`
-  })
-)
+const Group = styled('div')<{
+  staticReflectionCount: number
+  isSpotlightSource: boolean
+  skipTransition: boolean
+}>(({staticReflectionCount, isSpotlightSource, skipTransition}) => ({
+  height: 'max-content',
+  position: 'relative',
+  paddingTop: ElementWidth.REFLECTION_CARD_PADDING,
+  paddingBottom: isSpotlightSource
+    ? ElementWidth.REFLECTION_CARD_PADDING
+    : ElementWidth.REFLECTION_CARD_PADDING + getCardStackPadding(staticReflectionCount),
+  transition: skipTransition ? undefined : `padding-bottom ${Times.REFLECTION_DROP_DURATION}ms`
+}))
 
 const ReflectionWrapper = styled('div')<{
   staticIdx: number
-  isDropping: boolean | null
+  isDropping: boolean | null | undefined
   groupCount: number
   isHiddenSpotlightSource: boolean
-}>(({staticIdx, isDropping, groupCount, isHiddenSpotlightSource}) => {
+  skipTransition: boolean
+}>(({staticIdx, isDropping, groupCount, isHiddenSpotlightSource, skipTransition}) => {
   const isHidden = staticIdx === -1 || isDropping || isHiddenSpotlightSource
   const multiple = Math.max(0, Math.min(staticIdx, 2))
   const scaleX =
@@ -60,7 +62,8 @@ const ReflectionWrapper = styled('div')<{
     left: 0,
     outline: 0,
     transform: `translateY(${translateY}px) scaleX(${scaleX})`,
-    transition: isHidden ? undefined : `transform ${Times.REFLECTION_DROP_DURATION}ms`,
+    transition:
+      isHidden || skipTransition ? undefined : `transform ${Times.REFLECTION_DROP_DURATION}ms`,
     visibility: isHidden ? 'hidden' : undefined,
     zIndex: 3 - multiple
   }
@@ -73,7 +76,6 @@ interface Props {
   reflectionGroupRef: ReflectionGroup_reflectionGroup$key
   swipeColumn?: SwipeColumn
   dataCy?: string
-  expandedReflectionGroupPortalParentId?: PortalId
   reflectionIdsToHide?: string[] | null
   isSpotlightEntering?: boolean
   showDragHintAnimation?: boolean
@@ -87,7 +89,6 @@ const ReflectionGroup = (props: Props) => {
     reflectionGroupRef,
     swipeColumn,
     dataCy,
-    expandedReflectionGroupPortalParentId,
     reflectionIdsToHide,
     isSpotlightEntering,
     showDragHintAnimation
@@ -171,15 +172,14 @@ const ReflectionGroup = (props: Props) => {
         !reflection.isViewerDragging && (!reflection.remoteDrag || reflection.isDropping)
     )
   }, [visibleReflections])
+  const prevCountRef = useRef(staticReflections.length)
+  const skipTransition = staticReflections.length < prevCountRef.current
+  useEffect(() => {
+    prevCountRef.current = staticReflections.length
+  })
   const stackRef = useRef<HTMLDivElement>(null)
   const {setItemsRef, scrollRef, bgRef, modalHeaderRef, portal, portalStatus, collapse, expand} =
-    useExpandedReflections(
-      groupRef,
-      stackRef,
-      visibleReflections.length,
-      headerRef,
-      expandedReflectionGroupPortalParentId
-    )
+    useExpandedReflections(groupRef, stackRef, visibleReflections.length, headerRef)
   const atmosphere = useAtmosphere()
   const [isEditing, thisSetIsEditing] = useState(false)
   const isDragPhase = phaseType === 'group' && !isComplete
@@ -195,10 +195,15 @@ const ReflectionGroup = (props: Props) => {
   }
 
   const watchForClick = useEventCallback((e: MouseEvent) => {
-    const isClickOnGroup = e.composedPath().find((el) => el === groupRef.current)
+    const target = e.target as Node
+    const isClickOnGroup = groupRef.current?.contains(target)
     if (!isClickOnGroup) {
-      document.removeEventListener('click', watchForClick)
-      setIsEditing(false)
+      const isClickInRoot = document.getElementById('root')?.contains(target)
+      // If the click is in a portal, ignore it, it could be link editing inside tiptap, etc.
+      if (isClickInRoot) {
+        document.removeEventListener('click', watchForClick)
+        setIsEditing(false)
+      }
     }
   })
   const onClick = () => {
@@ -256,6 +261,7 @@ const ReflectionGroup = (props: Props) => {
         ref={groupRef}
         staticReflectionCount={staticReflections.length}
         isSpotlightSource={isSpotlightSrcGroup && !isBehindSpotlight}
+        skipTransition={skipTransition}
         data-cy={dataCy}
       >
         {showHeader && (
@@ -280,6 +286,7 @@ const ReflectionGroup = (props: Props) => {
                 staticIdx={staticIdx}
                 isDropping={isDropping}
                 isHiddenSpotlightSource={isSpotlightSrcGroup && isBehindSpotlight}
+                skipTransition={skipTransition}
               >
                 <DraggableReflectionCard
                   dataCy={`${dataCy}-card-${staticIdx}`}

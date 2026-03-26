@@ -1,16 +1,16 @@
 import styled from '@emotion/styled'
 import graphql from 'babel-plugin-relay/macro'
-import React from 'react'
-import {PreloadedQuery, usePreloadedQuery} from 'react-relay'
+import {type PreloadedQuery, usePreloadedQuery} from 'react-relay'
 import useDocumentTitle from '~/hooks/useDocumentTitle'
+import type {NewTeamQuery} from '../../__generated__/NewTeamQuery.graphql'
 import IconLabel from '../../components/IconLabel'
 import LinkButton from '../../components/LinkButton'
 import useBreakpoint from '../../hooks/useBreakpoint'
 import {cardShadow} from '../../styles/elevation'
 import {PALETTE} from '../../styles/paletteV3'
 import {ExternalLinks} from '../../types/constEnums'
-import {NewTeamQuery} from '../../__generated__/NewTeamQuery.graphql'
 import NewTeamForm from './components/NewTeamForm/NewTeamForm'
+
 const NewTeamLayout = styled('div')({
   alignItems: 'center',
   backgroundColor: PALETTE.SLATE_200,
@@ -80,8 +80,7 @@ const NewTeam = (props: Props) => {
         }
       }
     `,
-    queryRef,
-    {UNSTABLE_renderPolicy: 'full'}
+    queryRef
   )
   const {viewer} = data
   const {organizations} = viewer

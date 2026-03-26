@@ -1,0 +1,244 @@
+import {fetch} from '@whatwg-node/fetch'
+import {sign} from 'jsonwebtoken'
+import mime from 'mime-types'
+import makeAppURL from 'parabol-client/utils/makeAppURL'
+import path from 'path'
+import appOrigin from '../appOrigin'
+import {Logger} from '../utils/Logger'
+import FileStoreManager, {type FileAssetDir, type PartialPath} from './FileStoreManager'
+
+interface CloudKey {
+  clientEmail: string
+  privateKeyId: string
+  privateKey: string
+}
+
+export default class GCSManager extends FileStoreManager {
+  static GOOGLE_EXPIRY = 3600
+  // e.g. development, production
+  private envSubDir: string
+  // e.g. action-files.parabol.co
+  private bucket: string
+  private accessToken: string | undefined
+
+  // The CDN_BASE_URL without the env, e.g. storage.google.com/:bucket
+  baseUrl: string
+  private cloudKey: CloudKey
+  constructor() {
+    super()
+    const {
+      CDN_BASE_URL,
+      GOOGLE_GCS_BUCKET,
+      GOOGLE_CLOUD_CLIENT_EMAIL,
+      GOOGLE_CLOUD_PRIVATE_KEY,
+      GOOGLE_CLOUD_PRIVATE_KEY_ID
+    } = process.env
+    if (!CDN_BASE_URL || CDN_BASE_URL === 'key_CDN_BASE_URL') {
+      throw new Error('CDN_BASE_URL ENV VAR NOT SET')
+    }
+
+    if (!GOOGLE_CLOUD_CLIENT_EMAIL || !GOOGLE_CLOUD_PRIVATE_KEY_ID || !GOOGLE_CLOUD_PRIVATE_KEY) {
+      throw new Error(
+        'Env Vars GOOGLE_CLOUD_CLIENT_EMAIL,GOOGLE_CLOUD_PRIVATE_ID,GOOGLE_CLOUD_PRIVATE_KEY must be set'
+      )
+    }
+
+    if (!GOOGLE_GCS_BUCKET) {
+      throw new Error('GOOGLE_GCS_BUCKET ENV VAR NOT SET')
+    }
+    const baseUrl = new URL(CDN_BASE_URL.replace(/^\/+/, 'https://'))
+    const {hostname, pathname} = baseUrl
+    if (!hostname || !pathname) {
+      throw new Error('CDN_BASE_URL ENV VAR IS INVALID')
+    }
+    if (pathname.endsWith('/'))
+      throw new Error('CDN_BASE_URL must end with the env, no trailing slash, e.g. /production')
+
+    this.envSubDir = pathname.split('/').at(-1) as string
+
+    this.baseUrl = baseUrl.href.slice(0, baseUrl.href.lastIndexOf(this.envSubDir))
+
+    this.bucket = GOOGLE_GCS_BUCKET
+    this.cloudKey = {
+      clientEmail: GOOGLE_CLOUD_CLIENT_EMAIL,
+      privateKey: GOOGLE_CLOUD_PRIVATE_KEY.replace(/\\n/gm, '\n'),
+      privateKeyId: GOOGLE_CLOUD_PRIVATE_KEY_ID
+    }
+    // refresh the token every hour
+    // do this on an interval vs. on demand to reduce request latency
+    // unref it so things like pushToCDN can exit
+    setInterval(
+      async () => {
+        this.accessToken = await this.getFreshAccessToken()
+      },
+      (GCSManager.GOOGLE_EXPIRY - 100) * 1000
+    ).unref()
+  }
+
+  private async getFreshAccessToken() {
+    const authUrl = 'https://www.googleapis.com/oauth2/v4/token'
+    const {clientEmail, privateKeyId, privateKey} = this.cloudKey
+    try {
+      // GCS only accepts OAuth2 Tokens
+      // To get a token, we self-sign a JWT, then trade it in for an OAuth2 Token
+      const jwt = sign(
+        {
+          scope: 'https://www.googleapis.com/auth/devstorage.read_write'
+        },
+        privateKey,
+        {
+          algorithm: 'RS256',
+          audience: authUrl,
+          subject: clientEmail,
+          issuer: clientEmail,
+          keyid: privateKeyId,
+          expiresIn: GCSManager.GOOGLE_EXPIRY
+        }
+      )
+      const accessTokenRes = await fetch(authUrl, {
+        method: 'POST',
+        body: JSON.stringify({
+          grant_type: 'urn:ietf:params:oauth:grant-type:jwt-bearer',
+          assertion: jwt
+        })
+      })
+      const accessTokenJson = await accessTokenRes.json()
+      return accessTokenJson.access_token
+    } catch {
+      return undefined
+    }
+  }
+
+  private async getAccessToken() {
+    if (this.accessToken) return this.accessToken
+    this.accessToken = await this.getFreshAccessToken()
+    return this.accessToken
+  }
+
+  protected async putFile(
+    file: Buffer<ArrayBufferLike>,
+    fullPath: string,
+    options?: {contentDisposition?: string}
+  ) {
+    const {contentDisposition} = options ?? {}
+    const contentType = mime.lookup(fullPath) || 'application/octet-stream'
+    const url = new URL(`https://storage.googleapis.com/upload/storage/v1/b/${this.bucket}/o`)
+    url.searchParams.append('name', fullPath)
+    const accessToken = await this.getAccessToken()
+
+    let body: Buffer | any
+    let uploadContentType: string
+    if (contentDisposition) {
+      // Use multipart upload to set metadata atomically during object creation.
+      // This avoids a separate PATCH request which requires storage.objects.update permission.
+      // https://cloud.google.com/storage/docs/uploading-objects#uploading-an-object-with-metadata
+      // The boundary is a random UUID so it cannot collide with file content.
+      const boundary = crypto.randomUUID()
+      const metadata = JSON.stringify({contentDisposition})
+      body = Buffer.concat([
+        Buffer.from(
+          `--${boundary}\r\nContent-Type: application/json; charset=UTF-8\r\n\r\n${metadata}\r\n--${boundary}\r\nContent-Type: ${contentType}\r\n\r\n`
+        ),
+        file as Buffer,
+        Buffer.from(`\r\n--${boundary}--`)
+      ])
+      url.searchParams.append('uploadType', 'multipart')
+      uploadContentType = `multipart/related; boundary="${boundary}"`
+    } else {
+      body = file as any
+      url.searchParams.append('uploadType', 'media')
+      uploadContentType = contentType
+    }
+
+    try {
+      const r = await fetch(url, {
+        method: 'POST',
+        body,
+        headers: {
+          Authorization: `Bearer ${accessToken}`,
+          Accept: 'application/json',
+          'Content-Type': uploadContentType,
+          'User-Agent': 'parabol'
+        }
+      })
+      if (!r.ok) {
+        throw new Error(`GCS Upload Error: ${r.status}`)
+      }
+    } catch (e) {
+      // https://github.com/nodejs/undici/issues/583#issuecomment-1577475664
+      // GCS will cause undici to error randomly with `SocketError: other side closed` `code: 'UND_ERR_SOCKET'`
+      if ((e as any).cause?.code === 'UND_ERR_SOCKET') {
+        Logger.log('   Retrying GCS Post:', fullPath)
+        await this.putFile(file, fullPath, options)
+      } else {
+        throw e
+      }
+    }
+  }
+
+  async putBuildFile(file: Buffer<ArrayBufferLike>, partialPath: string): Promise<string> {
+    const fullPath = this.prependPath(partialPath, 'build')
+    await this.putFile(file, fullPath)
+    return this.getPublicFileLocation(fullPath)
+  }
+
+  async copyFile(oldPartialPath: PartialPath, newPartialPath: PartialPath) {
+    const accessToken = await this.getAccessToken()
+    const oldFullPath = encodeURIComponent(this.prependPath(oldPartialPath))
+    const newFullPath = encodeURIComponent(this.prependPath(newPartialPath))
+    const copyURL = `https://storage.googleapis.com/storage/v1/b/${this.bucket}/o/${oldFullPath}/rewriteTo/b/${this.bucket}/o/${newFullPath}`
+    const moveRes = await fetch(copyURL, {
+      method: 'POST',
+      headers: {
+        Authorization: `Bearer ${accessToken}`,
+        Accept: 'application/json',
+        'User-Agent': 'parabol'
+      }
+    })
+    if (!moveRes.ok) {
+      const text = await moveRes.text()
+      throw new Error(`GCS Copy Error: ${moveRes.status} ${text}. ${copyURL}`)
+    }
+    return makeAppURL(appOrigin, `/assets/${newPartialPath}`)
+  }
+  async moveFile(oldPartialPath: PartialPath, newPartialPath: PartialPath): Promise<void> {
+    const accessToken = await this.getAccessToken()
+    const oldFullPath = encodeURIComponent(this.prependPath(oldPartialPath))
+    const newFullPath = encodeURIComponent(this.prependPath(newPartialPath))
+    const moveURL = `https://storage.googleapis.com/storage/v1/b/${this.bucket}/o/${oldFullPath}/moveTo/o/${newFullPath}`
+    const moveRes = await fetch(moveURL, {
+      method: 'POST',
+      headers: {
+        Authorization: `Bearer ${accessToken}`,
+        Accept: 'application/json',
+        'User-Agent': 'parabol'
+      }
+    })
+    if (!moveRes.ok) {
+      const text = await moveRes.text()
+      throw new Error(`GCS Move Error: ${moveRes.status} ${text}. ${moveURL}`)
+    }
+  }
+  prependPath(partialPath: string, assetDir: FileAssetDir = 'store') {
+    return path.join(this.envSubDir, assetDir, partialPath)
+  }
+  getPublicFileLocation(fullPath: string) {
+    return `${this.baseUrl}${fullPath}`
+  }
+  async checkExists(partialPath: string, assetDir?: FileAssetDir) {
+    const fullPath = encodeURIComponent(this.prependPath(partialPath, assetDir))
+    const url = `https://storage.googleapis.com/storage/v1/b/${this.bucket}/o/${fullPath}`
+    const res = await fetch(url)
+    return res.status !== 404
+  }
+  async presignUrl(partialPath: PartialPath, _expiresIn = 604800): Promise<string> {
+    // for PPMIs where a public bucket is not allowed, we special case build files
+    if (partialPath.startsWith('/build/')) {
+      const filename = partialPath.slice('/build/'.length)
+      const fullPath = this.prependPath(filename, 'build')
+      return this.getPublicFileLocation(fullPath)
+    }
+    const fullPath = this.prependPath(partialPath, 'store')
+    return this.getPublicFileLocation(fullPath)
+  }
+}

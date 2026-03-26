@@ -1,27 +1,71 @@
+import makeAppURL from '../../client/utils/makeAppURL'
+import appOrigin from '../appOrigin'
 import generateUID from '../generateUID'
+import type {AssetScopeEnum} from '../graphql/public/resolverTypes'
 
-export interface PutFileOptions {
-  partialPath: string
-  buffer: Buffer
-}
+export type FileAssetDir = 'store' | 'build'
+
+export type AssetType = 'assets' | 'picture' | 'metadata' | 'template'
+export type PartialPath =
+  | `${AssetScopeEnum}/${string}/${AssetType}/${string}.${string}`
+  | `Organization/${string}/idpMetadata.xml`
+  | `__debug__/${string}`
+  | `build/${string}`
 
 export default abstract class FileStoreManager {
-  static getUserAvatarPath(userId: string, ext: string): string {
-    return `User/${userId}/picture/${generateUID()}.${ext}`
-  }
+  abstract baseUrl: string
+  abstract checkExists(fileName: string, assetDir?: FileAssetDir): Promise<boolean>
+  abstract prependPath(partialPath: string, assetDir?: FileAssetDir): string
+  abstract getPublicFileLocation(fullPath: string): string
 
-  static getOrgAvatarPath(orgId: string, ext: string): string {
-    return `Organization/${orgId}/picture/${generateUID()}.${ext}`
-  }
+  protected abstract putFile(
+    file: ArrayBufferLike | Buffer<ArrayBufferLike>,
+    fullPath: string,
+    options?: {contentDisposition?: string}
+  ): Promise<void>
+  abstract putBuildFile(
+    file: ArrayBufferLike | Buffer<ArrayBufferLike>,
+    partialPath: string
+  ): Promise<string>
 
-  protected abstract prependPath(partialPath: string): string
-  protected abstract _putFile(fullPath: string, buffer: Buffer): Promise<void>
-  protected abstract getPublicFileLocation(fullPath: string): string
-
-  async putFile(options: PutFileOptions): Promise<string> {
-    const {partialPath, buffer} = options
+  abstract copyFile(oldKey: PartialPath, newKey: PartialPath): Promise<string>
+  abstract moveFile(oldKey: PartialPath, newKey: PartialPath): Promise<void>
+  abstract presignUrl(partialPath: PartialPath, expiresIn?: number): Promise<string>
+  async putUserFile(file: ArrayBufferLike | Buffer<ArrayBufferLike>, partialPath: PartialPath) {
     const fullPath = this.prependPath(partialPath)
-    await this._putFile(fullPath, buffer)
-    return this.getPublicFileLocation(fullPath)
+    await this.putFile(file, fullPath, {contentDisposition: 'attachment'})
+    return makeAppURL(appOrigin, `/assets/${partialPath}`)
+  }
+  async putUserAvatar(
+    file: ArrayBufferLike | Buffer<ArrayBufferLike>,
+    userId: string,
+    ext: string,
+    name?: string
+  ) {
+    const filename = name ?? generateUID()
+    // replace the first dot, if there is one, but not any other dots
+    const dotfreeExt = ext.replace(/^\./, '')
+    return this.putUserFile(file, `User/${userId}/picture/${filename}.${dotfreeExt}`)
+  }
+
+  async putOrgAvatar(file: Buffer<ArrayBufferLike>, orgId: string, ext: string, name?: string) {
+    const filename = name ?? generateUID()
+    const dotfreeExt = ext.replace(/^\./, '')
+    return this.putUserFile(file, `Organization/${orgId}/picture/${filename}.${dotfreeExt}`)
+  }
+
+  async putTemplateIllustration(
+    file: Buffer<ArrayBufferLike>,
+    orgId: string,
+    ext: string,
+    name?: string
+  ) {
+    const filename = name ?? generateUID()
+    const dotfreeExt = ext.replace(/^\./, '')
+    return this.putUserFile(file, `Organization/${orgId}/template/${filename}.${dotfreeExt}`)
+  }
+
+  async putDebugFile(file: Buffer<ArrayBufferLike>, nameWithExt: string) {
+    return this.putUserFile(file, `__debug__/${nameWithExt}`)
   }
 }

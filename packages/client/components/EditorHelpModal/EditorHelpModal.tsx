@@ -1,13 +1,9 @@
 import styled from '@emotion/styled'
-import UserAgent from 'fbjs/lib/UserAgent'
-import React from 'react'
 import {PALETTE} from '../../styles/paletteV3'
 import {Radius} from '../../types/constEnums'
+import {modKey} from '../../utils/platform'
 import IconButton from '../IconButton'
 import IconLabel from '../IconLabel'
-
-const isOSX = UserAgent.isPlatform('Mac OS X')
-const modKey = isOSX ? '⌘' : 'ctrl'
 
 const ModalHeader = styled('div')({
   alignItems: 'center',
@@ -210,7 +206,7 @@ const EditorHelpModal = (props: Props) => {
           <HelpList listIndex={listIndex} key={`shortcutList${listIndex + 1}`}>
             {shortcutList.map((shortcut, shortcutIndex) => {
               return (
-                <HelpRow shortcutIndex={shortcutIndex} key={`${shortcutList}${shortcutIndex + 1}`}>
+                <HelpRow shortcutIndex={shortcutIndex} key={`${shortcut.label}`}>
                   <Icon>
                     <IconLabel icon={shortcut.icon} />
                   </Icon>

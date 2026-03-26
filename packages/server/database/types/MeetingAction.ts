@@ -1,25 +1,17 @@
-import AgendaItemsPhase from './AgendaItemsPhase'
-import CheckInPhase from './CheckInPhase'
-import GenericMeetingPhase from './GenericMeetingPhase'
+import type {CheckInMeetingPhase} from '../../postgres/types/NewMeetingPhase'
 import Meeting from './Meeting'
-import UpdatesPhase from './UpdatesPhase'
 
-type CheckInMeetingPhase = CheckInPhase | UpdatesPhase | GenericMeetingPhase | AgendaItemsPhase
 interface Input {
   id?: string
   teamId: string
   meetingCount: number
-  name?: string
+  name: string
   phases: [CheckInMeetingPhase, ...CheckInMeetingPhase[]]
   facilitatorUserId: string
 }
 
-export function isMeetingAction(meeting: Meeting): meeting is MeetingAction {
-  return meeting.meetingType === 'action'
-}
-
 export default class MeetingAction extends Meeting {
-  meetingType!: 'action'
+  meetingType = 'action' as const
   taskCount?: number
   commentCount?: number
   agendaItemCount?: number
@@ -32,7 +24,7 @@ export default class MeetingAction extends Meeting {
       phases,
       facilitatorUserId,
       meetingType: 'action',
-      name: name ?? `Check-in #${meetingCount + 1}`
+      name
     })
   }
 }

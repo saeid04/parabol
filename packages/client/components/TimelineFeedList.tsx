@@ -1,10 +1,12 @@
 import styled from '@emotion/styled'
 import graphql from 'babel-plugin-relay/macro'
-import React, {useMemo} from 'react'
+import {useMemo} from 'react'
 import {usePaginationFragment} from 'react-relay'
+import {Link} from 'react-router'
 import useLoadNextOnScrollBottom from '~/hooks/useLoadNextOnScrollBottom'
-import {TimelineFeedListPaginationQuery} from '../__generated__/TimelineFeedListPaginationQuery.graphql'
-import {TimelineFeedList_query$key} from '../__generated__/TimelineFeedList_query.graphql'
+import {compareTimelineLabels, getTimeGroup, type TimelineGroup} from '~/utils/date/timelineGroups'
+import type {TimelineFeedList_query$key} from '../__generated__/TimelineFeedList_query.graphql'
+import type {TimelineFeedListPaginationQuery} from '../__generated__/TimelineFeedListPaginationQuery.graphql'
 import TimelineEvent from './TimelineEvent'
 import TimelineHistoryLockedCard from './TimelineHistoryLockedCard'
 
@@ -28,7 +30,13 @@ const TimelineFeedList = (props: Props) => {
       fragment TimelineFeedList_query on Query
       @refetchable(queryName: "TimelineFeedListPaginationQuery") {
         viewer {
-          timeline(first: $first, after: $after) @connection(key: "TimelineFeedList_timeline") {
+          timeline(
+            first: $first
+            after: $after
+            teamIds: $teamIds
+            eventTypes: $eventTypes
+            archived: $archived
+          ) @connection(key: "TimelineFeedList_timeline") {
             edges {
               cursor
               node {
@@ -36,6 +44,7 @@ const TimelineFeedList = (props: Props) => {
                 __typename
                 id
                 teamId
+                createdAt
                 organization {
                   id
                   viewerOrganizationUser {
@@ -99,14 +108,59 @@ const TimelineFeedList = (props: Props) => {
     }
   }, [timeline.edges])
 
+  const groupedFreeHistory = useMemo(() => {
+    const groups: TimelineGroup[] = []
+
+    freeHistory.forEach((edge) => {
+      const eventDate = new Date(edge.node.createdAt)
+      const label = getTimeGroup(eventDate)
+
+      let group = groups.find((g) => g.label === label)
+      if (!group) {
+        group = {events: [], label}
+        groups.push(group)
+      }
+      group.events.push(edge)
+    })
+
+    // Sort groups by label order (newer first)
+    groups.sort((a, b) => compareTimelineLabels(a.label, b.label))
+    return groups
+  }, [freeHistory])
+
+  if (freeHistory.length === 0 && !lockedHistory?.length) {
+    return (
+      <div className='text-base'>
+        Looks like you have no events with these filters.
+        <Link to={'/me'} className='font-sans font-semibold text-sky-500 no-underline'>
+          {' '}
+          Show all events.
+        </Link>
+      </div>
+    )
+  }
+
   return (
     <ResultScroller>
-      {freeHistory.map(({node: timelineEvent}) => (
-        <TimelineEvent key={timelineEvent.id} timelineEvent={timelineEvent} />
+      {groupedFreeHistory.map(({label, events}) => (
+        <div key={label}>
+          <div className='my-2 flex items-center gap-4 py-4'>
+            <div className='h-[1px] flex-1 bg-slate-400' />
+            <div className='rounded-full border border-slate-200 bg-slate-50 px-3 py-1 font-medium text-slate-600 text-sm'>
+              {label}
+            </div>
+            <div className='h-[1px] flex-1 bg-slate-400' />
+          </div>
+          {events.map(({node: timelineEvent}) => (
+            <TimelineEvent key={timelineEvent.id} timelineEvent={timelineEvent} />
+          ))}
+        </div>
       ))}
       {lockedHistory && (
         <>
-          <TimelineHistoryLockedCard organizationRef={lockedHistory[0]!.node.organization} />
+          <TimelineHistoryLockedCard
+            organizationRef={lockedHistory[0]!.node.organization ?? null}
+          />
           {lockedHistory.map(({node: timelineEvent}) => (
             <TimelineEvent key={timelineEvent.id} timelineEvent={timelineEvent} />
           ))}

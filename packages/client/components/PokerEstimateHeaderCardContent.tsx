@@ -1,12 +1,18 @@
 import styled from '@emotion/styled'
 import {Launch} from '@mui/icons-material'
-import React, {useState} from 'react'
+import graphql from 'babel-plugin-relay/macro'
+import {useState} from 'react'
+import {useFragment} from 'react-relay'
+import type {PokerEstimateHeaderCardContent_task$key} from '~/__generated__/PokerEstimateHeaderCardContent_task.graphql'
 import useBreakpoint from '~/hooks/useBreakpoint'
 import {Elevation} from '~/styles/elevation'
 import {PALETTE} from '~/styles/paletteV3'
 import {Breakpoint} from '~/types/constEnums'
 import CardButton from './CardButton'
 import IconLabel from './IconLabel'
+import {JiraExtraFieldsContent} from './JiraExtraFieldsContent'
+import {TaskJiraFieldsContent} from './TaskJiraFieldsContent'
+import {TaskMoreOptionsMenu} from './TaskMoreOptionsMenu'
 
 const HeaderCardWrapper = styled('div')<{isDesktop: boolean}>(({isDesktop}) => ({
   display: 'flex',
@@ -41,7 +47,7 @@ const CardTitleWrapper = styled('div')({
   width: '100%'
 })
 
-const CardDescription = styled('div')<{isExpanded: boolean}>(({isExpanded}) => ({
+const CardDescriptionWrapper = styled('div')<{isExpanded: boolean}>(({isExpanded}) => ({
   color: PALETTE.SLATE_700,
   fontWeight: 'normal',
   lineHeight: '20px',
@@ -51,6 +57,16 @@ const CardDescription = styled('div')<{isExpanded: boolean}>(({isExpanded}) => (
   overflowY: isExpanded ? 'auto' : 'hidden',
   transition: 'all 300ms'
 }))
+
+const CardDescriptionContent = styled('div')`
+  a {
+    text-decoration: underline;
+    :hover,
+    :focus {
+      color: ${PALETTE.SLATE_700};
+    }
+  }
+`
 
 const StyledIcon = styled(Launch)({
   height: 18,
@@ -77,14 +93,40 @@ export type PokerEstimateHeaderCardContentProps = {
   url: string
   linkTitle: string
   linkText: string
+  onRefresh?: () => void
+  isRefreshing?: boolean
+  taskRef: PokerEstimateHeaderCardContent_task$key
 }
 
 const PokerEstimateHeaderCardContent = (props: PokerEstimateHeaderCardContentProps) => {
-  const {cardTitle, descriptionHTML, url, linkTitle, linkText} = props
+  const {cardTitle, descriptionHTML, url, linkTitle, linkText, onRefresh, isRefreshing, taskRef} =
+    props
   const [isExpanded, setIsExpanded] = useState(true)
   const toggleExpand = () => {
     setIsExpanded((isExpanded) => !isExpanded)
   }
+  const handleRefresh = () => {
+    if (onRefresh) {
+      onRefresh()
+    }
+  }
+  const task = useFragment(
+    graphql` fragment PokerEstimateHeaderCardContent_task on Task {
+    ...TaskJiraFieldsContent_task
+    team {
+      jiraDisplayFieldIds
+    }
+    integration {
+      __typename
+      ... on JiraIssue {
+        ...JiraExtraFieldsContent_issue
+      }
+    }
+  }`,
+    taskRef
+  )
+  const {team, integration} = task
+  const {jiraDisplayFieldIds} = team
   const isDesktop = useBreakpoint(Breakpoint.SIDEBAR_LEFT)
   return (
     <HeaderCardWrapper isDesktop={isDesktop}>
@@ -93,14 +135,40 @@ const PokerEstimateHeaderCardContent = (props: PokerEstimateHeaderCardContentPro
           <CardTitle>{cardTitle}</CardTitle>
           <CardIcons>
             <CardButton>
-              <IconLabel icon='unfold_more' onClick={toggleExpand} />
+              <IconLabel
+                icon='refresh'
+                onClick={isRefreshing ? undefined : handleRefresh}
+                tooltip='Refresh contents'
+              />
             </CardButton>
+            <CardButton>
+              {isExpanded ? (
+                <IconLabel icon='unfold_less' onClick={toggleExpand} tooltip='Collapse contents' />
+              ) : (
+                <IconLabel icon='unfold_more' onClick={toggleExpand} tooltip='Expand contents' />
+              )}
+            </CardButton>
+            {integration?.__typename === 'JiraIssue' && (
+              <TaskMoreOptionsMenu
+                jiraFieldsContent={
+                  <TaskJiraFieldsContent
+                    taskRef={task}
+                    onAddJiraField={() => setIsExpanded(true)}
+                  />
+                }
+              />
+            )}
           </CardIcons>
         </CardTitleWrapper>
-        <CardDescription
-          isExpanded={isExpanded}
-          dangerouslySetInnerHTML={{__html: descriptionHTML}}
-        />
+        <CardDescriptionWrapper isExpanded={isExpanded}>
+          <CardDescriptionContent dangerouslySetInnerHTML={{__html: descriptionHTML}} />
+          {integration?.__typename === 'JiraIssue' && (
+            <JiraExtraFieldsContent
+              jiraDisplayFieldIds={jiraDisplayFieldIds!}
+              issueRef={integration}
+            />
+          )}
+        </CardDescriptionWrapper>
         <StyledLink href={url} rel='noopener noreferrer' target='_blank' title={linkTitle}>
           <StyledLabel>{linkText}</StyledLabel>
           <StyledIcon />

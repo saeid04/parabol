@@ -1,31 +1,72 @@
-import * as validator from '@authenio/samlify-node-xmllint'
 import base64url from 'base64url'
 import getSSODomainFromEmail from 'parabol-client/utils/getSSODomainFromEmail'
 import querystring from 'querystring'
 import * as samlify from 'samlify'
-import getRethink from '../../../database/rethinkDriver'
+import {InvoiceItemType} from '../../../../client/types/constEnums'
+import adjustUserCount from '../../../billing/helpers/adjustUserCount'
 import AuthToken from '../../../database/types/AuthToken'
 import User from '../../../database/types/User'
 import generateUID from '../../../generateUID'
 import {USER_PREFERRED_NAME_LIMIT} from '../../../postgres/constants'
+import getKysely from '../../../postgres/getKysely'
 import {getUserByEmail} from '../../../postgres/queries/getUsersByEmails'
 import encodeAuthToken from '../../../utils/encodeAuthToken'
+import {isSingleTenantSSO} from '../../../utils/getSAMLURLFromEmail'
+import {getSSOMetadataFromURL} from '../../../utils/getSSOMetadataFromURL'
+import logError from '../../../utils/logError'
+import {samlXMLValidator} from '../../../utils/samlXMLValidator'
+import standardError from '../../../utils/standardError'
 import bootstrapNewUser from '../../mutations/helpers/bootstrapNewUser'
-import {SSORelayState} from '../../queries/SAMLIdP'
-import {MutationResolvers} from '../resolverTypes'
+import getSignOnURL from '../../public/mutations/helpers/SAMLHelpers/getSignOnURL'
+import type {SSORelayState} from '../../public/queries/SAMLIdP'
+import type {MutationResolvers} from '../resolverTypes'
+import {generateIdenticon} from './helpers/generateIdenticon'
+import {shouldRefreshMetadata} from './helpers/shouldRefreshMetadata'
 
 const serviceProvider = samlify.ServiceProvider({})
-samlify.setSchemaValidator(validator)
+samlify.setSchemaValidator(samlXMLValidator)
 
-const getRelayState = (body: any) => {
-  const {RelayState} = body
+const CLAIM_SPEC = {
+  'http://schemas.xmlsoap.org/ws/2005/05/identity/claims/emailaddress': 'email',
+  'http://schemas.xmlsoap.org/ws/2005/05/identity/claims/name': 'name',
+  'http://schemas.microsoft.com/identity/claims/displayname': 'displayname'
+}
+
+const getRelayState = (body: querystring.ParsedUrlQuery) => {
   let relayState = {} as SSORelayState
   try {
-    relayState = JSON.parse(base64url.decode(RelayState))
-  } catch (e) {
+    relayState = JSON.parse(base64url.decode(body.RelayState as string))
+  } catch {
     // ignore
   }
   return relayState
+}
+
+const getUserByEmailOrPersistentNameId = async (
+  email: string,
+  persistentNameId: string | undefined,
+  domains: string[]
+) => {
+  const user = await getUserByEmail(email)
+  if (user) return user
+  if (!persistentNameId) return null
+  const pg = getKysely()
+  const userByPersistentNameId = await pg
+    .selectFrom('User')
+    .selectAll()
+    .where('persistentNameId', '=', persistentNameId)
+    .limit(1)
+    .executeTakeFirst()
+  if (!userByPersistentNameId) return null
+  // Do not blindly trust the IdP. Verify that it has control over the email address
+  const ssoDomain = getSSODomainFromEmail(userByPersistentNameId.email)
+  if (!isSingleTenantSSO && (!ssoDomain || !domains.includes(ssoDomain))) {
+    // don't blindly trust the IdP unless there is only 1
+    return new Error(`${userByPersistentNameId.email} does not belong to ${domains.join(', ')}`)
+  }
+  // At this point we can trust that the IdP controls this account and has changed the users email address
+  await pg.updateTable('User').set({email}).where('id', '=', userByPersistentNameId.id).execute()
+  return userByPersistentNameId
 }
 
 const loginSAML: MutationResolvers['loginSAML'] = async (
@@ -33,71 +74,215 @@ const loginSAML: MutationResolvers['loginSAML'] = async (
   {samlName, queryString},
   {dataLoader}
 ) => {
-  const r = await getRethink()
-  const body = querystring.parse(queryString)
-  const normalizedName = samlName.trim().toLowerCase()
-  const doc = await r.table('SAML').get(normalizedName).run()
+  const pg = getKysely()
 
-  if (!doc) return {error: {message: `${normalizedName} has not been created in Parabol yet`}}
-  const {domains, metadata} = doc
+  const normalizedName = samlName.trim().toLowerCase()
+  const body = querystring.parse(queryString)
+  const relayState = getRelayState(body)
+  const {metadataURL: newMetadataURL, isInvited} = relayState
+  const doc = await dataLoader.get('saml').load(normalizedName)
+  dataLoader.get('saml').clear(normalizedName)
+
+  if (!doc) {
+    // Often the SAML Domain is confused with the email domain, so let's check that and give a helpful error
+    const saml = await dataLoader.get('samlByDomain').load(normalizedName)
+    if (saml) {
+      return {
+        error: {
+          message: `SSO is enabled for ${normalizedName} but the SAML Entity IDs do not match. Please check your IdP's settings.`
+        }
+      }
+    }
+    return {
+      error: {
+        message: `Ask customer service to enable SSO for ${normalizedName}.`
+      }
+    }
+  }
+  const {
+    domains,
+    metadata: existingMetadata,
+    metadataURL: existingMetadataURL,
+    orgId,
+    samlOrgAttribute
+  } = doc
+
+  const shouldRefresh = shouldRefreshMetadata(doc)
+  const fetchMetadataUrl = newMetadataURL || (shouldRefresh ? existingMetadataURL : null)
+  if (fetchMetadataUrl) {
+    console.log('Fetching new SAML metadata', {
+      shouldRefresh,
+      newMetadataURL
+    })
+  }
+
+  const newMetadata = fetchMetadataUrl ? await getSSOMetadataFromURL(fetchMetadataUrl) : undefined
+  if (newMetadata instanceof Error) {
+    return standardError(newMetadata)
+  }
+  const metadata = newMetadata || existingMetadata
+  if (!metadata) {
+    return {
+      error: {message: 'No metadata found! Please contact customer service'}
+    }
+  }
   const idp = samlify.IdentityProvider({metadata})
   let loginResponse
   try {
-    loginResponse = await serviceProvider.parseLoginResponse(idp, 'post', {body})
+    loginResponse = await serviceProvider.parseLoginResponse(idp, 'post', {
+      body
+    })
   } catch (e) {
-    const message = e instanceof Error ? e.message : 'parseLoginResponse failed'
-    return {error: {message}}
+    if (e instanceof Error) {
+      return standardError(e)
+    }
+    const message = typeof e === 'string' ? e : 'parseLoginResponse failed'
+    return standardError(new Error(message), {extras: {body}})
   }
   if (!loginResponse) {
-    return {error: {message: 'Error with query from identity provider'}}
+    return standardError(new Error('Error with query from identity provider'), {
+      extras: {body}
+    })
   }
-  const relayState = getRelayState(body)
-  const {isInvited} = relayState
+
   const {extract} = loginResponse
-  const {attributes, nameID: name} = extract
-  const caseInsensitiveAtttributes = {} as Record<Lowercase<string>, string | undefined>
-  Object.keys(attributes).forEach((key) => {
-    const lowercaseKey = key.toLowerCase()
-    const value = attributes[key]
-    caseInsensitiveAtttributes[lowercaseKey] = String(value)
-  })
-  const {email: inputEmail, emailaddress, displayname} = caseInsensitiveAtttributes
-  const preferredName = displayname || name
+  const {attributes, nameID} = extract
+  const normalizedAttributes = Object.fromEntries(
+    Object.entries(attributes).map(([key, value]) => {
+      const normalizedKey = CLAIM_SPEC[key as keyof typeof CLAIM_SPEC] ?? key.toLowerCase()
+      // This happens if the IdP sends duplicate claims
+      if (Array.isArray(value)) {
+        return [normalizedKey, Array.from(new Set(value.map(String))).toString()]
+      }
+      return [normalizedKey, String(value)]
+    })
+  )
+
+  const {
+    email: inputEmail,
+    emailaddress,
+    displayname,
+    name,
+    persistentuserid,
+    persistentnameid
+  } = normalizedAttributes
+  const preferredName = displayname || name || nameID
+  const persistentNameId = persistentnameid || persistentuserid || nameID
   const email = inputEmail?.toLowerCase() || emailaddress?.toLowerCase()
   if (!email) {
-    return {error: {message: 'Email attribute was not included in SAML response'}}
+    return standardError(
+      new Error(
+        `Email attribute is missing from the SAML response. The following attributes were included: ${Object.keys(attributes).join(', ') || '<None>'}`
+      ),
+      {extras: {attributes}}
+    )
   }
   if (email.length > USER_PREFERRED_NAME_LIMIT) {
     return {error: {message: 'Email is too long'}}
   }
   const ssoDomain = getSSODomainFromEmail(email)
   if (!ssoDomain || !domains.includes(ssoDomain)) {
-    // don't blindly trust the IdP
-    return {error: {message: `${email} does not belong to ${domains.join(', ')}`}}
+    if (!isSingleTenantSSO) {
+      // don't blindly trust the IdP unless there is only 1
+      return standardError(new Error(`${email} does not belong to ${domains.join(', ')}`), {
+        extras: {attributes}
+      })
+    }
   }
 
-  const user = await getUserByEmail(email)
+  const user = await getUserByEmailOrPersistentNameId(email, persistentNameId, domains)
+  if (user instanceof Error) return standardError(user)
+
+  if (newMetadata) {
+    // Only org admins may update SAML metadata.
+    // Verify before persisting — the email is already validated against the SAML domains above.
+    if (!orgId || !user) {
+      return standardError(new Error('Only org admins can update SAML metadata'))
+    }
+    const organizationUser = await dataLoader
+      .get('organizationUsersByUserIdOrgId')
+      .load({orgId, userId: user.id})
+    if (organizationUser?.role !== 'ORG_ADMIN') {
+      return standardError(new Error('Only org admins can update SAML metadata'))
+    }
+    // Revalidate metadata & persist to DB
+    // Generate the URL to verify the metadata, don't persist it as it needs to be generated fresh
+    const url = getSignOnURL(metadata, normalizedName)
+    if (url instanceof Error) {
+      return standardError(url)
+    }
+    await pg
+      .updateTable('SAML')
+      .set({metadata: newMetadata, metadataURL: fetchMetadataUrl})
+      .where('id', '=', normalizedName)
+      .execute()
+  }
+
   if (user) {
+    if (persistentNameId && !user.persistentNameId) {
+      await pg.updateTable('User').set({persistentNameId}).where('id', '=', user.id).execute()
+    }
     return {
+      userId: user.id,
       authToken: encodeAuthToken(new AuthToken({sub: user.id, tms: user.tms, rol: user.rol})),
       isNewUser: false
     }
   }
 
   const userId = `sso|${generateUID()}`
+  const picture = await generateIdenticon(userId, preferredName)
   const tempUser = new User({
     id: userId,
     email,
     preferredName,
-    tier: 'enterprise'
+    picture
   })
 
-  const authToken = await bootstrapNewUser(tempUser, !isInvited)
-  const newUser = await dataLoader.get('users').loadNonNull(userId)
+  // find orgs specified in the SAML claim
+  const orgIds = await (async () => {
+    if (!samlOrgAttribute) {
+      return []
+    }
+    const samlOrgIdsAttribute = attributes[samlOrgAttribute]
+    if (!samlOrgIdsAttribute) {
+      // This is probably a misconfiguration but should not stop us from accepting the new user
+      logError(
+        new Error(
+          `The SAML attribute ${samlOrgAttribute} is missing from the SAML response. The following attributes were included: ${Object.keys(attributes).join(', ')}`
+        )
+      )
+      return []
+    }
+    const samlOrgIds = Array.isArray(samlOrgIdsAttribute)
+      ? samlOrgIdsAttribute
+      : [samlOrgIdsAttribute]
+    if (samlOrgIds.length === 0) {
+      return []
+    }
+    const orgs = await pg
+      .selectFrom('Organization')
+      .select('id')
+      .where('samlId', 'in', samlOrgIds)
+      .execute()
+    return orgs.map(({id}) => id)
+  })()
+
+  // if we don't provision via SAML claim, we default to the orgId from the SAML document
+  if (!samlOrgAttribute && orgId) {
+    orgIds.push(orgId)
+  }
+
+  const isOrganic = orgIds.length > 0 && !isInvited
+  const authToken = await bootstrapNewUser(tempUser, !isOrganic, dataLoader)
+
+  await Promise.all(
+    orgIds.map((orgId) => adjustUserCount(userId, orgId, InvoiceItemType.ADD_USER, dataLoader))
+  )
+
   return {
+    userId,
     authToken: encodeAuthToken(authToken),
-    isNewUser: true,
-    isPatient0: newUser.isPatient0
+    isNewUser: true
   }
 }
 

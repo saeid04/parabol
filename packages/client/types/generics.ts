@@ -1,5 +1,5 @@
-import {MutableRefObject} from 'react'
-import {RecordProxy} from 'relay-runtime'
+import type {MutableRefObject} from 'react'
+import type {RecordProxy} from 'relay-runtime'
 
 export type Omit<T, K> = Pick<T, Exclude<keyof T, K>>
 export type Subtract<T, K> = Omit<T, keyof K>
@@ -7,29 +7,33 @@ export type DeepPartial<T> = {
   [P in keyof T]?: T[P] extends (infer U)[]
     ? DeepPartial<U>[]
     : T[P] extends readonly (infer U)[]
-    ? readonly DeepPartial<U>[]
-    : DeepPartial<T[P]>
+      ? readonly DeepPartial<U>[]
+      : DeepPartial<T[P]>
 }
 export type DeepNullable<T> = {
   [P in keyof T]: T[P] extends (infer U)[]
     ? DeepNullable<U>[] | null
     : T[P] extends readonly (infer U)[]
-    ? readonly DeepNullable<U>[] | null
-    : DeepNullable<T[P]> | null
+      ? readonly DeepNullable<U>[] | null
+      : DeepNullable<T[P]> | null
 }
 
 export type DeepNonNullable<T> = T extends (...args: any[]) => any
   ? T
   : T extends any[]
-  ? DeepNonNullableArray<T[number]>
-  : T extends object
-  ? DeepNonNullableObject<T>
-  : T
+    ? DeepNonNullableArray<T[number]>
+    : T extends object
+      ? DeepNonNullableObject<T>
+      : T
 
 interface DeepNonNullableArray<T> extends Array<DeepNonNullable<NonNullable<T>>> {}
 
 type DeepNonNullableObject<T> = {
   [P in keyof T]-?: DeepNonNullable<NonNullable<T[P]>>
+}
+
+export type NonNullableProps<T> = {
+  [K in keyof T]: NonNullable<T[K]>
 }
 
 // export type DeepNullableObject<T> = {
@@ -47,7 +51,9 @@ export type DeepReadonly<T> = {
   readonly [P in keyof T]: DeepReadonly<T[P]>
 }
 export type Writeable<T> = {-readonly [P in keyof T]: T[P]}
-export type DeepWriteable<T> = {-readonly [P in keyof T]: DeepWriteable<T[P]>}
+export type DeepWriteable<T> = {
+  -readonly [P in keyof T]: DeepWriteable<T[P]>
+}
 // there's rumor of a negated operator coming to TS soon...
 export type NotVoid =
   | {[key: string]: NotVoid}
@@ -64,7 +70,6 @@ export type ValueOf<T> = T[keyof T]
 export type FirstParam<T> = T extends (arg1: infer A, ...args: any[]) => any ? A : never
 export type SecondPlusParams<T> = T extends (node: any, ...args: infer A) => void ? A : never
 export type UnshiftToTuple<V, T extends any[]> = Parameters<(a: V, ...args: T) => void>
-export type Unpromise<T> = T extends Promise<infer U> ? U : T
 export type Unref<T> = T extends MutableRefObject<infer U> ? U : T
 export type RefCallbackInstance<T extends HTMLElement = HTMLElement> = T | null
 export type Unarray<T> = T extends ArrayLike<infer U> ? U : T
@@ -96,6 +101,15 @@ export type WithFieldsAsType<TObj, NType, F> = {
   [K in keyof TObj]: K extends F
     ? NType
     : TObj[K] extends object
-    ? WithFieldsAsType<TObj[K], NType, F>
-    : TObj[K]
+      ? WithFieldsAsType<TObj[K], NType, F>
+      : TObj[K]
+}
+
+export type Tuple<T, N, R extends T[] = []> = R['length'] extends N ? R : Tuple<T, N, [...R, T]>
+export type ParseInt<T extends string> = T extends `${infer Digit extends number}` ? Digit : never
+
+declare global {
+  interface Array<T> {
+    findLastIndex(predicate: (value: T, index: number, obj: T[]) => unknown, thisArg?: any): number
+  }
 }

@@ -1,8 +1,8 @@
 import graphql from 'babel-plugin-relay/macro'
-import React from 'react'
-import {createFragmentContainer} from 'react-relay'
-import {TaskColumnAddTask_teams} from '~/__generated__/TaskColumnAddTask_teams.graphql'
-import {AreaEnum, TaskStatusEnum} from '~/__generated__/UpdateTaskMutation.graphql'
+import {useFragment} from 'react-relay'
+import type {TaskColumnAddTask_teams$key} from '~/__generated__/TaskColumnAddTask_teams.graphql'
+import type {AreaEnum, TaskStatusEnum} from '~/__generated__/UpdateTaskMutation.graphql'
+import type {TaskColumnAddTask_tasks$key} from '../../../../__generated__/TaskColumnAddTask_tasks.graphql'
 import AddTaskButton from '../../../../components/AddTaskButton/AddTaskButton'
 import useAtmosphere from '../../../../hooks/useAtmosphere'
 import CreateTaskMutation from '../../../../mutations/CreateTaskMutation'
@@ -10,7 +10,6 @@ import dndNoise from '../../../../utils/dndNoise'
 import getNextSortOrder from '../../../../utils/getNextSortOrder'
 import fromTeamMemberId from '../../../../utils/relay/fromTeamMemberId'
 import {taskStatusLabels} from '../../../../utils/taskStatus'
-import {TaskColumnAddTask_tasks} from '../../../../__generated__/TaskColumnAddTask_tasks.graphql'
 import TaskColumnAddTaskSelectTeam from './TaskColumnAddTaskSelectTeam'
 
 interface Props {
@@ -18,10 +17,10 @@ interface Props {
   isViewerMeetingSection?: boolean
   meetingId?: string
   status: TaskStatusEnum
-  tasks: TaskColumnAddTask_tasks
+  tasks: TaskColumnAddTask_tasks$key
   myTeamMemberId?: string
   teamMemberFilterId: string
-  teams: TaskColumnAddTask_teams | null
+  teams: TaskColumnAddTask_teams$key | null | undefined
 }
 
 const TaskColumnAddTask = (props: Props) => {
@@ -29,12 +28,29 @@ const TaskColumnAddTask = (props: Props) => {
     area,
     isViewerMeetingSection,
     status,
-    tasks,
+    tasks: tasksRef,
     meetingId,
     myTeamMemberId,
     teamMemberFilterId,
-    teams
+    teams: teamsRef
   } = props
+  const tasks = useFragment(
+    graphql`
+      fragment TaskColumnAddTask_tasks on Task @relay(plural: true) {
+        sortOrder
+      }
+    `,
+    tasksRef
+  )
+  const teams = useFragment(
+    graphql`
+      fragment TaskColumnAddTask_teams on Team @relay(plural: true) {
+        id
+        ...TaskColumnAddTaskSelectTeam_teams
+      }
+    `,
+    teamsRef
+  )
   const atmosphere = useAtmosphere()
   const label = taskStatusLabels[status]
   const sortOrder = getNextSortOrder(tasks, dndNoise())
@@ -47,7 +63,13 @@ const TaskColumnAddTask = (props: Props) => {
         CreateTaskMutation(
           atmosphere,
           {
-            newTask: {status, teamId, userId: userId || viewerId, sortOrder, meetingId}
+            newTask: {
+              status,
+              teamId,
+              userId: userId || viewerId,
+              sortOrder,
+              meetingId
+            }
           },
           {}
         )
@@ -69,16 +91,4 @@ const TaskColumnAddTask = (props: Props) => {
   return null
 }
 
-export default createFragmentContainer(TaskColumnAddTask, {
-  tasks: graphql`
-    fragment TaskColumnAddTask_tasks on Task @relay(plural: true) {
-      sortOrder
-    }
-  `,
-  teams: graphql`
-    fragment TaskColumnAddTask_teams on Team @relay(plural: true) {
-      id
-      ...TaskColumnAddTaskSelectTeam_teams
-    }
-  `
-})
+export default TaskColumnAddTask

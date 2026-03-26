@@ -1,5 +1,5 @@
 import generateUID from '../../generateUID'
-import GenericMeetingStage, {GenericMeetingStageInput} from './GenericMeetingStage'
+import GenericMeetingStage, {type GenericMeetingStageInput} from './GenericMeetingStage'
 
 interface Input extends Omit<GenericMeetingStageInput, 'phaseType'> {
   teamMemberId: string
@@ -9,7 +9,7 @@ interface Input extends Omit<GenericMeetingStageInput, 'phaseType'> {
 export default class TeamPromptResponseStage extends GenericMeetingStage {
   discussionId: string
   teamMemberId: string
-  phaseType!: 'RESPONSES'
+  phaseType = 'RESPONSES' as const
   constructor(input: Input) {
     super({...input, phaseType: 'RESPONSES'})
     const {teamMemberId, discussionId} = input

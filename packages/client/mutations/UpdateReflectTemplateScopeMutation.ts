@@ -1,7 +1,12 @@
 import graphql from 'babel-plugin-relay/macro'
 import {commitMutation} from 'react-relay'
-import {ConnectionHandler, RecordProxy, RecordSourceSelectorProxy} from 'relay-runtime'
-import {SharedUpdater, StandardMutation} from '../types/relayMutations'
+import {ConnectionHandler, type RecordProxy, type RecordSourceSelectorProxy} from 'relay-runtime'
+import type {UpdateReflectTemplateScopeMutation as TUpdateTemplateScopeMutation} from '../__generated__/UpdateReflectTemplateScopeMutation.graphql'
+import type {
+  SharingScopeEnum,
+  UpdateReflectTemplateScopeMutation_organization$data
+} from '../__generated__/UpdateReflectTemplateScopeMutation_organization.graphql'
+import type {SharedUpdater, StandardMutation} from '../types/relayMutations'
 import addNodeToArray from '../utils/relay/addNodeToArray'
 import getBaseRecord from '../utils/relay/getBaseRecord'
 import getCachedRecord from '../utils/relay/getCachedRecord'
@@ -9,11 +14,6 @@ import getNodeById from '../utils/relay/getNodeById'
 import {insertEdgeAfter} from '../utils/relay/insertEdge'
 import safeRemoveNodeFromArray from '../utils/relay/safeRemoveNodeFromArray'
 import safeRemoveNodeFromConn from '../utils/relay/safeRemoveNodeFromConn'
-import {UpdateReflectTemplateScopeMutation as TUpdateTemplateScopeMutation} from '../__generated__/UpdateReflectTemplateScopeMutation.graphql'
-import {
-  SharingScopeEnum,
-  UpdateReflectTemplateScopeMutation_organization
-} from '../__generated__/UpdateReflectTemplateScopeMutation_organization.graphql'
 import getReflectTemplateOrgConn from './connections/getReflectTemplateOrgConn'
 
 graphql`
@@ -21,7 +21,6 @@ graphql`
     template {
       # these fragments are needed for listening org members
       ...TemplateSharing_template
-      ...ReflectTemplateDetailsTemplate
       id
       orgId
       scope
@@ -29,7 +28,6 @@ graphql`
     }
     clonedTemplate {
       ...TemplateSharing_template
-      ...ReflectTemplateDetailsTemplate
       orgId
     }
   }
@@ -62,7 +60,7 @@ const removeTemplateFromCurrentScope = (
   // not possible for the public list to get mutated because this is an org subscription
 }
 
-const putTemplateInConnection = (
+export const putTemplateInConnection = (
   template: RecordProxy,
   connection: RecordProxy | null | undefined,
   store: RecordSourceSelectorProxy
@@ -110,7 +108,9 @@ const handleUpdateTemplateScope = (
   teamIds.forEach((teamId) => {
     const team = store.get(teamId)
     if (!team) return
-    const meetingSettings = team.getLinkedRecord('meetingSettings', {meetingType: 'retrospective'})
+    const meetingSettings = team.getLinkedRecord('meetingSettings', {
+      meetingType: 'retrospective'
+    })
     if (!meetingSettings) return
     // this is on the ORG subscription, so this won't affect anything on a PUBLIC list because they're at least on the same org
     const scopeList = teamId === templateTeamId ? 'TEAM' : 'ORGANIZATION'
@@ -130,7 +130,7 @@ const handleUpdateTemplateScope = (
 }
 
 export const updateTemplateScopeOrganizationUpdater: SharedUpdater<
-  UpdateReflectTemplateScopeMutation_organization
+  UpdateReflectTemplateScopeMutation_organization$data
 > = (payload: any, {store}) => {
   const template = payload.getLinkedRecord('template')
   if (!template) return
@@ -151,7 +151,10 @@ const UpdateReflectTemplateScopeMutation: StandardMutation<TUpdateTemplateScopeM
     updater: (store) => {
       const payload = store.getRootField('updateTemplateScope')
       if (!payload) return
-      updateTemplateScopeOrganizationUpdater(payload as any, {atmosphere, store})
+      updateTemplateScopeOrganizationUpdater(payload as any, {
+        atmosphere,
+        store
+      })
     },
     optimisticUpdater: (store) => {
       const {scope, templateId} = variables

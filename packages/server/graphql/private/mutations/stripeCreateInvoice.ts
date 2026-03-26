@@ -1,13 +1,12 @@
-import fetchAllLines from '../../../billing/helpers/fetchAllLines'
-import generateInvoice from '../../../billing/helpers/generateInvoice'
+import updateSubscriptionQuantity from '../../../billing/helpers/updateSubscriptionQuantity'
 import {isSuperUser} from '../../../utils/authorization'
 import {getStripeManager} from '../../../utils/stripe'
-import {MutationResolvers} from '../resolverTypes'
+import type {MutationResolvers} from '../resolverTypes'
 
 const stripeCreateInvoice: MutationResolvers['stripeCreateInvoice'] = async (
   _source,
   {invoiceId},
-  {authToken, dataLoader}
+  {authToken}
 ) => {
   // AUTH
   if (!isSuperUser(authToken)) {
@@ -16,16 +15,18 @@ const stripeCreateInvoice: MutationResolvers['stripeCreateInvoice'] = async (
 
   // RESOLUTION
   const manager = getStripeManager()
-  const stripeLineItems = await fetchAllLines(invoiceId)
   const invoice = await manager.retrieveInvoice(invoiceId)
+  const stripeCustomer = await manager.retrieveCustomer(invoice.customer as string)
+  if (stripeCustomer.deleted) {
+    throw new Error('Customer was deleted')
+  }
   const {
     metadata: {orgId}
-  } = await manager.retrieveCustomer(invoice.customer as string)
+  } = stripeCustomer
   if (!orgId) throw new Error(`orgId not found on metadata for invoice ${invoiceId}`)
-  await Promise.all([
-    generateInvoice(invoice, stripeLineItems, orgId, invoiceId, dataLoader),
-    manager.updateInvoice(invoiceId, orgId)
-  ])
+
+  await updateSubscriptionQuantity(orgId, true)
+  await manager.updateInvoice(invoiceId, orgId)
   return true
 }
 

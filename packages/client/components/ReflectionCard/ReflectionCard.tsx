@@ -1,63 +1,40 @@
-import styled from '@emotion/styled'
+import {isNodeEmpty} from '@tiptap/core'
+import {Node as ProseMirrorNode} from '@tiptap/pm/model'
 import graphql from 'babel-plugin-relay/macro'
-import {convertToRaw, EditorProps} from 'draft-js'
-import React, {MouseEvent, useEffect, useRef, useState} from 'react'
+import {type MouseEvent, useEffect, useMemo, useRef, useState} from 'react'
 import {commitLocalUpdate, useFragment} from 'react-relay'
-import AddReactjiToReactableMutation from '~/mutations/AddReactjiToReactableMutation'
-import isDemoRoute from '~/utils/isDemoRoute'
-import {
+import type {
   NewMeetingPhaseTypeEnum,
   ReflectionCard_meeting$key
 } from '~/__generated__/ReflectionCard_meeting.graphql'
+import AddReactjiToReactableMutation from '~/mutations/AddReactjiToReactableMutation'
+import isDemoRoute from '~/utils/isDemoRoute'
+import type {ReflectionCard_reflection$key} from '../../__generated__/ReflectionCard_reflection.graphql'
 import useAtmosphere from '../../hooks/useAtmosphere'
 import useBreakpoint from '../../hooks/useBreakpoint'
-import {MenuPosition} from '../../hooks/useCoords'
-import useEditorState from '../../hooks/useEditorState'
+import useEventCallback from '../../hooks/useEventCallback'
 import useMutationProps from '../../hooks/useMutationProps'
-import useTooltip from '../../hooks/useTooltip'
+import {useTipTapReflectionEditor} from '../../hooks/useTipTapReflectionEditor'
 import EditReflectionMutation from '../../mutations/EditReflectionMutation'
 import RemoveReflectionMutation from '../../mutations/RemoveReflectionMutation'
+import UngroupReflectionMutation from '../../mutations/UngroupReflectionMutation'
 import UpdateReflectionContentMutation from '../../mutations/UpdateReflectionContentMutation'
-import {PALETTE} from '../../styles/paletteV3'
-import {Breakpoint, ZIndex} from '../../types/constEnums'
-import convertToTaskContent from '../../utils/draftjs/convertToTaskContent'
-import isAndroid from '../../utils/draftjs/isAndroid'
-import remountDecorators from '../../utils/draftjs/remountDecorators'
+import {isEqualWhenSerialized} from '../../shared/isEqualWhenSerialized'
+import {Breakpoint} from '../../types/constEnums'
+import {cn} from '../../ui/cn'
 import isPhaseComplete from '../../utils/meetings/isPhaseComplete'
 import isTempId from '../../utils/relay/isTempId'
-import {ReflectionCard_reflection$key} from '../../__generated__/ReflectionCard_reflection.graphql'
-import CardButton from '../CardButton'
-import {OpenSpotlight} from '../GroupingKanbanColumn'
-import IconLabel from '../IconLabel'
-import ReflectionEditorWrapper from '../ReflectionEditorWrapper'
+import type {OpenSpotlight} from '../GroupingKanbanColumn'
 import StyledError from '../StyledError'
+import {TipTapEditor} from '../TipTapEditor/TipTapEditor'
 import ColorBadge from './ColorBadge'
+import DeleteReflectionButton from './DeleteReflectionButton'
 import ReactjiSection from './ReactjiSection'
 import ReflectionCardAuthor from './ReflectionCardAuthor'
-import ReflectionCardDeleteButton from './ReflectionCardDeleteButton'
 import ReflectionCardRoot from './ReflectionCardRoot'
-
-const StyledReacjis = styled(ReactjiSection)({
-  padding: '0 14px 12px'
-})
-
-const SpotlightIcon = styled(IconLabel)({
-  color: PALETTE.SLATE_700
-})
-
-const SpotlightButton = styled(CardButton)<{showSpotlight: boolean}>(({showSpotlight}) => ({
-  bottom: 2,
-  color: PALETTE.SLATE_700,
-  cursor: 'pointer',
-  opacity: 1,
-  position: 'absolute',
-  right: 2,
-  visibility: showSpotlight ? 'inherit' : 'hidden',
-  zIndex: ZIndex.TOOLTIP,
-  ':hover': {
-    backgroundColor: PALETTE.SLATE_200
-  }
-}))
+import SpotlightButton from './SpotlightButton'
+import SubmitReflectionButton from './SubmitReflectionButton'
+import UngroupButton from './UngroupButton'
 
 interface Props {
   isClipped?: boolean
@@ -65,14 +42,19 @@ interface Props {
   meetingRef: ReflectionCard_meeting$key
   openSpotlight?: OpenSpotlight
   stackCount?: number
-  showOriginFooter?: boolean
+  groupSize?: number
+  isExpanded?: boolean
   showReactji?: boolean
   dataCy?: string
   showDragHintAnimation?: boolean
 }
 
 const getReadOnly = (
-  reflection: {id: string; isViewerCreator: boolean | null; isEditing: boolean | null},
+  reflection: {
+    id: string
+    isViewerCreator: boolean | null | undefined
+    isEditing: boolean | null | undefined
+  },
   phaseType: NewMeetingPhaseTypeEnum,
   stackCount: number | undefined,
   phases: any | null,
@@ -82,7 +64,7 @@ const getReadOnly = (
   if (isSpotlightSource) return true
   if (phases && isPhaseComplete('group', phases)) return true
   if (!isViewerCreator || isTempId(id)) return true
-  if (phaseType === 'reflect') return stackCount && stackCount > 1
+  if (phaseType === 'reflect') return stackCount ? stackCount > 1 : false
   if (phaseType === 'group' && isEditing) return false
   return true
 }
@@ -94,6 +76,8 @@ const ReflectionCard = (props: Props) => {
     isClipped,
     openSpotlight,
     stackCount,
+    groupSize,
+    isExpanded,
     showReactji,
     dataCy,
     showDragHintAnimation
@@ -144,6 +128,7 @@ const ReflectionCard = (props: Props) => {
         }
         disableAnonymity
         spotlightSearchQuery
+        teamId
       }
     `,
     meetingRef
@@ -157,10 +142,18 @@ const ReflectionCard = (props: Props) => {
     meetingId,
     reactjis,
     reflectionGroupId,
-    creator
+    creator,
+    isEditing
   } = reflection
-  const {localPhase, localStage, spotlightGroup, phases, disableAnonymity, spotlightSearchQuery} =
-    meeting
+  const {
+    localPhase,
+    localStage,
+    spotlightGroup,
+    phases,
+    disableAnonymity,
+    spotlightSearchQuery,
+    teamId
+  } = meeting
   const {phaseType} = localPhase
   const {isComplete} = localStage
   const spotlightGroupId = spotlightGroup?.id
@@ -169,110 +162,6 @@ const ReflectionCard = (props: Props) => {
   const atmosphere = useAtmosphere()
   const reflectionDivRef = useRef<HTMLDivElement>(null)
   const {onCompleted, submitting, submitMutation, error, onError} = useMutationProps()
-  const editorRef = useRef<HTMLTextAreaElement>(null)
-  const [editorState, setEditorState] = useEditorState(content)
-  const [isHovering, setIsHovering] = useState(false)
-  const isDesktop = useBreakpoint(Breakpoint.SIDEBAR_LEFT)
-  const {
-    tooltipPortal,
-    openTooltip,
-    closeTooltip,
-    originRef: tooltipRef
-  } = useTooltip<HTMLDivElement>(MenuPosition.UPPER_CENTER)
-  const handleEditorFocus = () => {
-    if (isTempId(reflectionId)) return
-    EditReflectionMutation(atmosphere, {isEditing: true, meetingId, promptId})
-  }
-
-  const updateIsEditing = (isEditing: boolean) => {
-    commitLocalUpdate(atmosphere, (store) => {
-      const reflection = store.get(reflectionId)
-      if (!reflection) return
-      reflection.setValue(isEditing, 'isEditing')
-    })
-  }
-
-  useEffect(() => {
-    if (isViewerCreator && !editorState.getCurrentContent().hasText()) {
-      updateIsEditing(true)
-    }
-    return () => updateIsEditing(false)
-  }, [])
-
-  useEffect(() => {
-    const refreshedState = remountDecorators(() => editorState, spotlightSearchQuery)
-    setEditorState(refreshedState)
-  }, [spotlightSearchQuery])
-
-  const handleContentUpdate = () => {
-    if (isAndroid) {
-      const editorEl = editorRef.current
-      if (!editorEl || editorEl.type !== 'textarea') return
-      const {value} = editorEl
-      if (!value) {
-        RemoveReflectionMutation(atmosphere, {reflectionId}, {meetingId, onError, onCompleted})
-      } else {
-        const initialContentState = editorState.getCurrentContent()
-        const initialText = initialContentState.getPlainText()
-        if (initialText === value) return
-        submitMutation()
-        UpdateReflectionContentMutation(
-          atmosphere,
-          {content: convertToTaskContent(value), reflectionId},
-          {onError, onCompleted}
-        )
-        commitLocalUpdate(atmosphere, (store) => {
-          const reflection = store.get(reflectionId)
-          if (!reflection) return
-          reflection.setValue(false, 'isEditing')
-        })
-      }
-      return
-    }
-    const contentState = editorState.getCurrentContent()
-    if (contentState.hasText()) {
-      const nextContent = JSON.stringify(convertToRaw(contentState))
-      if (content === nextContent) return
-      submitMutation()
-      UpdateReflectionContentMutation(
-        atmosphere,
-        {content: nextContent, reflectionId},
-        {onError, onCompleted}
-      )
-      commitLocalUpdate(atmosphere, (store) => {
-        const reflection = store.get(reflectionId)
-        if (!reflection) return
-        reflection.setValue(false, 'isEditing')
-      })
-    } else {
-      submitMutation()
-      RemoveReflectionMutation(atmosphere, {reflectionId}, {meetingId, onError, onCompleted})
-    }
-  }
-
-  const handleEditorBlur = () => {
-    if (isTempId(reflectionId)) return
-    handleContentUpdate()
-    EditReflectionMutation(atmosphere, {isEditing: false, meetingId, promptId})
-  }
-
-  const handleReturn: EditorProps['handleReturn'] = (e) => {
-    if (e.shiftKey) return 'not-handled'
-    editorRef.current && editorRef.current.blur()
-    return 'handled'
-  }
-
-  const handleKeyDownFallback = (e: React.KeyboardEvent<HTMLTextAreaElement>) => {
-    if (e.key === 'Escape') {
-      editorRef.current && editorRef.current.blur()
-    } else if (e.key === 'Enter' && !e.shiftKey) {
-      e.preventDefault()
-      const {value} = e.currentTarget
-      if (!value) return
-      editorRef.current && editorRef.current.blur()
-    }
-  }
-
   const readOnly = getReadOnly(
     reflection,
     phaseType as NewMeetingPhaseTypeEnum,
@@ -280,11 +169,114 @@ const ReflectionCard = (props: Props) => {
     phases,
     isSpotlightSource
   )
-  const userSelect = readOnly
-    ? phaseType === 'discuss' || phaseType === 'vote'
-      ? 'text'
-      : 'none'
-    : undefined
+
+  const handleModEnter = useEventCallback(() => {
+    if (readOnly) return
+    handleContentUpdate()
+    updateIsEditing(false)
+    EditReflectionMutation(atmosphere, {
+      isEditing: false,
+      meetingId,
+      promptId
+    })
+  })
+
+  const {editor} = useTipTapReflectionEditor(content, {
+    atmosphere,
+    teamId,
+    readOnly: !!readOnly,
+    onModEnter: handleModEnter
+  })
+  const [isHovering, setIsHovering] = useState(false)
+  const isDesktop = useBreakpoint(Breakpoint.SIDEBAR_LEFT)
+  const handleEditorFocus = () => {
+    if (isTempId(reflectionId) || readOnly) return
+    if (isEditing) {
+      return
+    }
+    updateIsEditing(true)
+    EditReflectionMutation(atmosphere, {
+      isEditing: true,
+      meetingId,
+      promptId
+    })
+  }
+
+  const updateIsEditing = (isEditing: boolean) => {
+    commitLocalUpdate(atmosphere, (store) => {
+      store.get(reflectionId)?.setValue(isEditing, 'isEditing')
+    })
+  }
+
+  useEffect(() => {
+    if (isViewerCreator && editor?.isEmpty) {
+      updateIsEditing(true)
+    }
+    return () => updateIsEditing(false)
+  }, [])
+
+  useEffect(() => {
+    if (!editor) return
+    editor.commands.setSearchTerm(spotlightSearchQuery || '')
+  }, [spotlightSearchQuery])
+
+  const handleContentUpdate = () => {
+    if (!editor) return
+    if (editor.isEmpty) {
+      submitMutation()
+      RemoveReflectionMutation(atmosphere, {reflectionId}, {meetingId, onError, onCompleted})
+      return
+    }
+    const nextContentJSON = editor.getJSON()
+    if (isEqualWhenSerialized(nextContentJSON, JSON.parse(content))) return
+    const contentStr = JSON.stringify(nextContentJSON)
+    if (contentStr.length > 2000) {
+      onError(new Error('Reflection is too long'))
+      return
+    }
+    submitMutation()
+    UpdateReflectionContentMutation(
+      atmosphere,
+      {content: contentStr, reflectionId},
+      {onError, onCompleted}
+    )
+  }
+
+  const contentChanged = useMemo(() => {
+    if (!editor) return false
+    return !isEqualWhenSerialized(editor.getJSON(), JSON.parse(content))
+  }, [content, editor?.getJSON()])
+
+  const isFirstEdit = useMemo(() => {
+    if (!editor || !isEditing) return false
+    const node = ProseMirrorNode.fromJSON(editor.schema, JSON.parse(content))
+    return isNodeEmpty(node)
+  }, [editor, isEditing, content])
+
+  const handleEditorBlur = (e: React.FocusEvent<HTMLDivElement>) => {
+    if (isTempId(reflectionId) || readOnly) return
+    // Creating a reflection in the group phase is different than in reflect phase. We're creating an empty reflection and start editing it.
+    // For the user however we want to have a consistent behaviour with the reflect phase. This means when they blur without editing, we don't want to submit the reflection.
+    if (isFirstEdit && editor?.isEmpty) return
+    const newFocusedElement = e.relatedTarget as Node
+    // don't trigger a blur if a button inside the element is clicked
+    if (e.currentTarget.contains(newFocusedElement)) return
+    const isClickInModal = !(
+      newFocusedElement === null || document.getElementById('root')?.contains(newFocusedElement)
+    )
+    // If they clicked in a modal, then ignore the blur event, we'll refocus the editor after the modal closes
+    if (isClickInModal) {
+      return
+    }
+
+    handleContentUpdate()
+    updateIsEditing(false)
+    EditReflectionMutation(atmosphere, {
+      isEditing: false,
+      meetingId,
+      promptId
+    })
+  }
 
   const onToggleReactji = (emojiId: string) => {
     if (submitting) return
@@ -316,12 +308,40 @@ const ReflectionCard = (props: Props) => {
     }
   }
 
-  const showSpotlight =
-    phaseType === 'group' &&
-    !isSpotlightOpen &&
-    !isComplete &&
-    !isDemoRoute() &&
-    (isHovering || !isDesktop)
+  const preventPrematureBlur = (e: MouseEvent<HTMLElement>) => {
+    e.preventDefault()
+  }
+
+  const handleDelete = () => {
+    if (readOnly || submitting) return
+    submitMutation()
+    RemoveReflectionMutation(atmosphere, {reflectionId}, {meetingId, onError, onCompleted})
+  }
+
+  const handleClickUngroup = (e: MouseEvent) => {
+    e.stopPropagation()
+    if (isExpanded) {
+      UngroupReflectionMutation(atmosphere, {reflectionId}, {onError, onCompleted})
+    } else {
+      UngroupReflectionMutation(atmosphere, {reflectionGroupId}, {onError, onCompleted})
+    }
+  }
+
+  const enableSpotlight =
+    phaseType === 'group' && !isSpotlightOpen && !isComplete && !isDemoRoute() && !isEditing
+  const showSpotlight = enableSpotlight && (isHovering || !isDesktop)
+  const enableUngroup = phaseType === 'group' && !isComplete && !isEditing && (groupSize ?? 0) > 1
+  const showUngroupButton = enableUngroup && (isHovering || !isDesktop)
+  const showEditButton = !readOnly && isFirstEdit
+
+  const scrollRef = useRef<HTMLDivElement>(null)
+  useEffect(() => {
+    const el = scrollRef.current
+    if (el) {
+      el.scrollTop = isClipped ? el.scrollHeight : 0
+    }
+  }, [isClipped])
+  if (!editor) return null
 
   return (
     <ReflectionCardRoot
@@ -330,44 +350,54 @@ const ReflectionCard = (props: Props) => {
       onMouseLeave={() => setIsHovering(false)}
       showDragHintAnimation={showDragHintAnimation}
       ref={reflectionDivRef}
+      className='py-2'
+      onFocus={handleEditorFocus}
+      onBlur={handleEditorBlur}
     >
       <ColorBadge phaseType={phaseType as NewMeetingPhaseTypeEnum} reflection={reflection} />
-      <ReflectionEditorWrapper
-        dataCy={`editor-wrapper`}
-        isClipped={isClipped}
-        ariaLabel={readOnly ? '' : 'Edit this reflection'}
-        editorRef={editorRef}
-        editorState={editorState}
-        onBlur={handleEditorBlur}
-        onFocus={handleEditorFocus}
-        handleReturn={handleReturn}
-        handleKeyDownFallback={handleKeyDownFallback}
-        placeholder={isViewerCreator ? 'My reflection… (press enter to add)' : '*New Reflection*'}
-        readOnly={readOnly}
-        setEditorState={setEditorState}
-        userSelect={userSelect}
-        disableAnonymity={disableAnonymity}
-      />
+      <div
+        ref={scrollRef}
+        className={cn('relative w-full overflow-auto text-slate-700 text-sm leading-5')}
+      >
+        <TipTapEditor
+          className={cn(
+            'flex min-h-6 w-full px-4',
+            phaseType === 'discuss' ? undefined : isClipped ? 'max-h-6' : 'max-h-41',
+            readOnly ? (phaseType === 'discuss' ? 'select-text' : 'select-none') : undefined
+          )}
+          editor={editor}
+        />
+      </div>
+      <div
+        className={cn('flex flex-row-reverse items-center justify-between pr-2 pl-4', {
+          'h-0': !showEditButton && !disableAnonymity
+        })}
+      >
+        <div
+          className={cn('flex items-center gap-1', {
+            hidden: !showEditButton
+          })}
+        >
+          <SubmitReflectionButton
+            onClick={handleContentUpdate}
+            disabled={readOnly || !contentChanged || submitting}
+          />
+        </div>
+        {disableAnonymity && <ReflectionCardAuthor>{creator?.preferredName}</ReflectionCardAuthor>}
+      </div>
+      {showReactji && (
+        <ReactjiSection className='pt-2 pr-2 pl-4' reactjis={reactjis} onToggle={onToggleReactji} />
+      )}
       {error && <StyledError onClick={clearError}>{error.message}</StyledError>}
       {!readOnly && (
-        <ReflectionCardDeleteButton
-          dataCy={`reflection-delete`}
-          meetingId={meetingId}
-          reflectionId={reflectionId}
-        />
+        <DeleteReflectionButton onMouseDown={preventPrematureBlur} onClick={handleDelete} />
       )}
-      {disableAnonymity && <ReflectionCardAuthor>{creator?.preferredName}</ReflectionCardAuthor>}
-      {showReactji && <StyledReacjis reactjis={reactjis} onToggle={onToggleReactji} />}
-      <ColorBadge phaseType={phaseType as NewMeetingPhaseTypeEnum} reflection={reflection} />
-      <SpotlightButton
-        onClick={handleClickSpotlight}
-        onMouseEnter={openTooltip}
-        onMouseLeave={closeTooltip}
-        showSpotlight={showSpotlight}
-      >
-        <SpotlightIcon ref={tooltipRef} icon='search' />
-      </SpotlightButton>
-      {tooltipPortal('Find similar')}
+      <UngroupButton
+        onClick={handleClickUngroup}
+        showUngroupButton={showUngroupButton}
+        label={isExpanded ? 'Remove from group' : 'Ungroup all'}
+      />
+      <SpotlightButton onClick={handleClickSpotlight} showSpotlight={showSpotlight} />
     </ReflectionCardRoot>
   )
 }

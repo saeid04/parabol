@@ -1,14 +1,13 @@
 import styled from '@emotion/styled'
 import {Menu} from '@mui/icons-material'
 import graphql from 'babel-plugin-relay/macro'
-import React from 'react'
 import {useFragment} from 'react-relay'
-import useRouter from '~/hooks/useRouter'
+import {useNavigate} from 'react-router'
+import type {DashTopBar_query$key} from '~/__generated__/DashTopBar_query.graphql'
 import {PALETTE} from '~/styles/paletteV3'
 import {ICON_SIZE} from '~/styles/typographyV2'
 import {AppBar, Breakpoint, Layout, NavSidebar} from '~/types/constEnums'
 import makeMinWidthMediaQuery from '~/utils/makeMinWidthMediaQuery'
-import {DashTopBar_query$key} from '~/__generated__/DashTopBar_query.graphql'
 import parabolLogo from '../styles/theme/images/brand/lockup_color_mark_white_type.svg'
 import PinnedSnackbarNotifications from './PinnedSnackbarNotifications'
 import PlainButton from './PlainButton/PlainButton'
@@ -23,17 +22,6 @@ interface Props {
   toggle: () => void
   queryRef: DashTopBar_query$key
 }
-
-const Wrapper = styled('header')({
-  backgroundColor: PALETTE.GRAPE_700,
-  display: 'flex',
-  height: AppBar.HEIGHT,
-  justifyContent: 'space-between',
-  width: '100%',
-  [dashWidestBreakpoint]: {
-    paddingRight: NavSidebar.WIDTH
-  }
-})
 
 const LeftNavToggle = styled(PlainButton)({
   borderRadius: 100,
@@ -105,12 +93,12 @@ const DashTopBar = (props: Props) => {
     `,
     queryRef
   )
-  const {history} = useRouter()
+  const navigate = useNavigate()
   const gotoHome = () => {
-    history.push('/meetings')
+    navigate('/meetings')
   }
   return (
-    <Wrapper>
+    <div className='flex h-14 w-full justify-between bg-grape-700 dashboard-widest:pr-64 print:hidden'>
       <LeftNavHeader>
         <LeftNavToggle onClick={toggle} aria-label='Toggle dashboard menu'>
           <Menu />
@@ -128,7 +116,7 @@ const DashTopBar = (props: Props) => {
           <TopBarAvatar viewer={data.viewer || null} />
         </TopBarIcons>
       </TopBarMain>
-    </Wrapper>
+    </div>
   )
 }
 

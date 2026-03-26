@@ -1,25 +1,26 @@
 import styled from '@emotion/styled'
 import {ExpandMore} from '@mui/icons-material'
 import graphql from 'babel-plugin-relay/macro'
-import React, {FormEvent, useEffect, useRef, useState} from 'react'
+import {type FormEvent, useEffect, useRef, useState} from 'react'
 import {useFragment} from 'react-relay'
+import type {NewGitHubIssueInput_meeting$key} from '~/__generated__/NewGitHubIssueInput_meeting.graphql'
+import type {NewGitHubIssueInput_viewer$key} from '~/__generated__/NewGitHubIssueInput_viewer.graphql'
 import useAtmosphere from '~/hooks/useAtmosphere'
 import {MenuPosition} from '~/hooks/useCoords'
 import useGetRepoContributions from '~/hooks/useGetRepoContributions'
 import useMenu from '~/hooks/useMenu'
 import useMutationProps from '~/hooks/useMutationProps'
 import {PALETTE} from '~/styles/paletteV3'
-import {NewGitHubIssueInput_meeting$key} from '~/__generated__/NewGitHubIssueInput_meeting.graphql'
-import {NewGitHubIssueInput_viewer$key} from '~/__generated__/NewGitHubIssueInput_viewer.graphql'
+import type {CreateTaskMutation as TCreateTaskMutation} from '../__generated__/CreateTaskMutation.graphql'
 import useForm from '../hooks/useForm'
 import {PortalStatus} from '../hooks/usePortal'
+import useTimedState from '../hooks/useTimedState'
 import CreateTaskMutation from '../mutations/CreateTaskMutation'
 import UpdatePokerScopeMutation from '../mutations/UpdatePokerScopeMutation'
 import GitHubIssueId from '../shared/gqlIds/GitHubIssueId'
-import {CompletedHandler} from '../types/relayMutations'
-import convertToTaskContent from '../utils/draftjs/convertToTaskContent'
+import {plaintextToTipTap} from '../shared/tiptap/plaintextToTipTap'
+import type {CompletedHandler} from '../types/relayMutations'
 import Legitity from '../validation/Legitity'
-import {CreateTaskMutationResponse} from '../__generated__/CreateTaskMutation.graphql'
 import Checkbox from './Checkbox'
 import NewGitHubIssueMenu from './NewGitHubIssueMenu'
 import PlainButton from './PlainButton/PlainButton'
@@ -141,6 +142,12 @@ const NewGitHubIssueInput = (props: Props) => {
   const {id: teamId} = team!
   const atmosphere = useAtmosphere()
   const {onCompleted, onError} = useMutationProps()
+  const [createTaskError, setCreateTaskError] = useTimedState()
+  useEffect(() => {
+    if (isEditing) {
+      setCreateTaskError(undefined)
+    }
+  }, [isEditing])
   const nameWithOwner = repos.find((repo) => repo.nameWithOwner)?.nameWithOwner
   const [selectedNameWithOwner, setSelectedNameWithOwner] = useState(nameWithOwner)
   const {fields, onChange, validateField, setDirtyField} = useForm({
@@ -180,7 +187,7 @@ const NewGitHubIssueInput = (props: Props) => {
       teamId,
       userId,
       meetingId,
-      content: convertToTaskContent(`${newIssueTitle} #archived`),
+      content: JSON.stringify(plaintextToTipTap(newIssueTitle, {taskTags: ['archived']})),
       plaintextContent: newIssueTitle,
       status: 'active' as const,
       integration: {
@@ -188,8 +195,13 @@ const NewGitHubIssueInput = (props: Props) => {
         serviceProjectHash: selectedNameWithOwner
       }
     }
-    const handleCompleted: CompletedHandler<CreateTaskMutationResponse> = (res) => {
-      const integration = res.createTask?.task?.integration ?? null
+    const handleCompleted: CompletedHandler<TCreateTaskMutation['response']> = (res) => {
+      const {error, task} = res.createTask
+      if (error) {
+        setCreateTaskError(error.message)
+      }
+      if (error || !task) return
+      const {integration} = task
       if (!integration) return
       if (integration.__typename !== '_xGitHubIssue') return
       const {number: issueNumber, repository} = integration
@@ -213,6 +225,17 @@ const NewGitHubIssueInput = (props: Props) => {
     CreateTaskMutation(atmosphere, {newTask}, {onError, onCompleted: handleCompleted})
   }
 
+  if (createTaskError) {
+    return (
+      <Item>
+        <Checkbox active disabled />
+        <Issue>
+          <Error>{createTaskError}</Error>
+          <StyledLink>{selectedNameWithOwner}</StyledLink>
+        </Issue>
+      </Item>
+    )
+  }
   if (!isEditing) return null
   return (
     <>

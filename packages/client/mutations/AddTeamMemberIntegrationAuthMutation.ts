@@ -1,11 +1,12 @@
 import graphql from 'babel-plugin-relay/macro'
 import {commitMutation} from 'react-relay'
-import {StandardMutation} from '../types/relayMutations'
-import {AddTeamMemberIntegrationAuthMutation as TAddTeamMemberIntegrationAuthMutation} from '../__generated__/AddTeamMemberIntegrationAuthMutation.graphql'
+import type {AddTeamMemberIntegrationAuthMutation as TAddTeamMemberIntegrationAuthMutation} from '../__generated__/AddTeamMemberIntegrationAuthMutation.graphql'
+import type {StandardMutation} from '../types/relayMutations'
 
 const mutation = graphql`
   mutation AddTeamMemberIntegrationAuthMutation(
     $providerId: ID!
+    $service: IntegrationProviderServiceEnum
     $oauthCodeOrPat: ID
     $oauthVerifier: ID
     $teamId: ID!
@@ -13,6 +14,7 @@ const mutation = graphql`
   ) {
     addTeamMemberIntegrationAuth(
       providerId: $providerId
+      service: $service
       oauthCodeOrPat: $oauthCodeOrPat
       oauthVerifier: $oauthVerifier
       teamId: $teamId
@@ -27,10 +29,14 @@ const mutation = graphql`
         teamMember {
           ...GitLabProviderRowTeamMember
           ...ScopePhaseAreaGitLab_teamMember
-          ...MattermostProviderRowTeamMember
           ...JiraServerProviderRowTeamMember
           ...AzureDevOpsProviderRowTeamMember
-          ...MSTeamsProviderRowTeamMember
+          ...GcalProviderRowTeamMember
+          ...LinearProviderRowTeamMember
+          integrations {
+            ...MattermostProviderRowTeamMemberIntegrations
+            ...MSTeamsProviderRowTeamMemberIntegrations
+          }
         }
       }
     }

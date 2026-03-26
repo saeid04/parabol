@@ -1,15 +1,13 @@
 {
   "extends": "../../tsconfig.base.json",
   "compilerOptions": {
-    "baseUrl": ".",
     "paths": {
-      "~/*": ["*"],
-      "static/*": ["../../static/*"]
+      "~/*": ["./*"],
+      "parabol-client/*": ["./*"]
     },
     "outDir": "lib",
-    "lib": ["esnext", "dom"],
-    "types": ["node"]
+    "incremental": true,
+    "lib": ["esnext", "dom"]
   },
-  "files": ["client.tsx"],
-  "exclude": ["serviceWorker", "**/node_modules"]
+  "exclude": ["serviceWorker", "node_modules", "dist", "build", "../server", "../embedder"]
 }

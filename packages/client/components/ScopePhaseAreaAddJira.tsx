@@ -1,12 +1,13 @@
 import styled from '@emotion/styled'
 import graphql from 'babel-plugin-relay/macro'
-import React from 'react'
+import {useMemo} from 'react'
 import {useFragment} from 'react-relay'
+import type {ScopePhaseAreaAddJira_meeting$key} from '../__generated__/ScopePhaseAreaAddJira_meeting.graphql'
 import useAtmosphere from '../hooks/useAtmosphere'
 import useMutationProps from '../hooks/useMutationProps'
 import {PALETTE} from '../styles/paletteV3'
-import AtlassianClientManager from '../utils/AtlassianClientManager'
-import {ScopePhaseAreaAddJira_meeting$key} from '../__generated__/ScopePhaseAreaAddJira_meeting.graphql'
+import {ExternalLinks} from '../types/constEnums'
+import AtlassianClientManager, {ERROR_POPUP_CLOSED} from '../utils/AtlassianClientManager'
 import JiraSVG from './JiraSVG'
 import RaisedButton from './RaisedButton'
 
@@ -29,6 +30,7 @@ const StyledLink = styled('span')({
 })
 
 const AddJiraButton = styled(RaisedButton)({
+  gap: 8,
   whiteSpace: 'pre-wrap'
 })
 interface Props {
@@ -39,6 +41,7 @@ interface Props {
 const ScopePhaseAreaAddJira = (props: Props) => {
   const atmosphere = useAtmosphere()
   const mutationProps = useMutationProps()
+  const {error} = mutationProps
 
   const {gotoParabol, meetingRef} = props
   const meeting = useFragment(
@@ -50,6 +53,27 @@ const ScopePhaseAreaAddJira = (props: Props) => {
     meetingRef
   )
   const {teamId} = meeting
+
+  const errorMessage = useMemo(() => {
+    if (!error) return undefined
+    const {message} = error
+    if (message === ERROR_POPUP_CLOSED) {
+      return (
+        <>
+          Having trouble authorizing Parabol? Try our{' '}
+          <a
+            href={ExternalLinks.INTEGRATIONS_SUPPORT_JIRA_AUTHORIZATION}
+            target='_blank'
+            rel='noreferrer'
+          >
+            troubleshooting guide
+          </a>
+        </>
+      )
+    }
+    return message
+  }, [error])
+
   const authJira = () => {
     AtlassianClientManager.openOAuth(atmosphere, teamId, mutationProps)
   }
@@ -59,6 +83,11 @@ const ScopePhaseAreaAddJira = (props: Props) => {
         <JiraSVG />
         Import issues from Jira
       </AddJiraButton>
+      {errorMessage && (
+        <div className='p-4 pb-0 text-tomato-500 [&_a]:font-semibold [&_a]:text-tomato-500 [&_a]:underline'>
+          {errorMessage}
+        </div>
+      )}
       <StyledLink onClick={gotoParabol}>Or add new tasks in Parabol</StyledLink>
     </AddJiraArea>
   )

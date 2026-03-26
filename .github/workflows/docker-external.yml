@@ -1,0 +1,41 @@
+name: Docker publish externally
+
+on: workflow_dispatch
+
+jobs:
+  pull-and-upload:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: "read"
+      id-token: "write"
+    steps:
+      - name: Verify if running from a Tag
+        if: ${{ !startsWith(github.ref, 'refs/tags/') }}
+        run: |
+          echo "This workflow is intended to run only from a Git Tag (e.g., v1.0.0)."
+          echo "Current reference is: ${{ github.ref }}"
+          # Force fail the job
+          exit 1
+
+      - id: "auth"
+        name: "Authenticate to Google Cloud"
+        uses: "google-github-actions/auth@v2"
+        with:
+          token_format: "access_token"
+          workload_identity_provider: ${{ secrets.GCP_WI_PROVIDER_NAME }}
+          service_account: ${{ secrets.GCP_SA_EMAIL }}
+
+      - name: Push Docker image to the external repository
+        run: |-
+          gcloud container images add-tag -q \
+          ${{ secrets.GCP_AR_PARABOL }}:${{ github.ref_name }}  \
+          ${{ secrets.GCP_AR_PARABOL_EXTERNAL }}:${{ github.ref_name }}
+
+      - name: Report Status
+        if: failure()
+        uses: ravsamhq/notify-slack-action@v2
+        with:
+          status: ${{ job.status }}
+          notify_when: "failure"
+        env:
+          SLACK_WEBHOOK_URL: ${{ secrets.SLACK_GH_ACTIONS_NOTIFICATIONS }}

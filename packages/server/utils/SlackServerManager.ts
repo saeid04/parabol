@@ -1,6 +1,7 @@
-import fetch from 'node-fetch'
+import {fetch} from '@whatwg-node/fetch'
 import SlackManager from 'parabol-client/utils/SlackManager'
 import {stringify} from 'querystring'
+import {makeOAuth2Redirect} from './makeOAuth2Redirect'
 
 interface IncomingWebhook {
   url: string
@@ -37,7 +38,7 @@ class SlackServerManager extends SlackManager {
       client_id: process.env.SLACK_CLIENT_ID,
       client_secret: process.env.SLACK_CLIENT_SECRET,
       code,
-      redirect_uri: process.env.OAUTH2_REDIRECT!
+      redirect_uri: makeOAuth2Redirect()
     }
 
     const uri = `https://slack.com/api/oauth.v2.access?${stringify(queryParams)}`
@@ -46,7 +47,8 @@ class SlackServerManager extends SlackManager {
       method: 'POST',
       headers: {
         Accept: 'application/json',
-        'Content-Type': 'application/json'
+        'Content-Type': 'application/json',
+        'User-Agent': 'parabol'
       }
     })
     const tokenJson = (await tokenRes.json()) as OAuth2Response
@@ -58,7 +60,10 @@ class SlackServerManager extends SlackManager {
     return new SlackServerManager(tokenJson.access_token, tokenJson) as Required<SlackServerManager>
   }
 
-  constructor(botAccessToken: string, public response?: OAuth2Response) {
+  constructor(
+    botAccessToken: string,
+    public response?: OAuth2Response
+  ) {
     super(botAccessToken)
   }
 }

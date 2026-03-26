@@ -1,9 +1,10 @@
-import {CreateOAuth1AuthorizeUrlMutationResponse} from '~/__generated__/CreateOAuth1AuthorizeUrlMutation.graphql'
-import Atmosphere from '../Atmosphere'
-import {MenuMutationProps} from '../hooks/useMutationProps'
+import type {CreateOAuth1AuthorizeUrlMutation as TCreateOAuth1AuthorizeUrlMutation} from '~/__generated__/CreateOAuth1AuthorizeUrlMutation.graphql'
+import type Atmosphere from '../Atmosphere'
+import type {MenuMutationProps} from '../hooks/useMutationProps'
 import AddTeamMemberIntegrationAuthMutation from '../mutations/AddTeamMemberIntegrationAuthMutation'
 import CreateOAuth1AuthorizeUrlMutation from '../mutations/CreateOAuth1AuthorizeUrlMutation'
 import getOAuthPopupFeatures from './getOAuthPopupFeatures'
+
 class JiraServerClientManager {
   static SCOPES = 'read_api'
   static openOAuth(
@@ -21,7 +22,7 @@ class JiraServerClientManager {
       getOAuthPopupFeatures({width: 500, height: 750, top: 56})
     )
 
-    const onUrlCompleted = (result: CreateOAuth1AuthorizeUrlMutationResponse) => {
+    const onUrlCompleted = (result: TCreateOAuth1AuthorizeUrlMutation['response']) => {
       if (popup) {
         if (!result.createOAuth1AuthorizeUrl?.url) {
           onError(result.createOAuth1AuthorizeUrl?.error)

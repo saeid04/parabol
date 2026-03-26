@@ -1,12 +1,12 @@
-import {ConnectionHandler, RecordProxy, RecordSourceSelectorProxy} from 'relay-runtime'
+import {ConnectionHandler, type RecordProxy, type RecordSourceSelectorProxy} from 'relay-runtime'
 import {gitlabIssueArgs} from '~/components/GitLabScopingSearchResultsRoot'
 import SearchQueryId from '~/shared/gqlIds/SearchQueryId'
+import type {CreateTaskMutation} from '../../__generated__/CreateTaskMutation.graphql'
 import toTeamMemberId from '../../utils/relay/toTeamMemberId'
-import {CreateTaskMutationResponse} from '../../__generated__/CreateTaskMutation.graphql'
 import getGitLabProjectsIssuesConn from '../connections/getGitLabProjectsIssuesConn'
 
 const handleGitLabCreateIssue = (
-  task: RecordProxy<NonNullable<CreateTaskMutationResponse['createTask']['task']>>,
+  task: RecordProxy<NonNullable<CreateTaskMutation['response']['createTask']['task']>>,
   store: RecordSourceSelectorProxy
 ) => {
   const integration = task.getLinkedRecord('integration')

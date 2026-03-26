@@ -1,7 +1,5 @@
-import React, {useEffect, useState} from 'react'
-import ReactGA from 'react-ga4'
-import useAtmosphere from '../hooks/useAtmosphere'
-import useRouter from '../hooks/useRouter'
+import {useEffect, useState} from 'react'
+import {useNavigate} from 'react-router'
 import DialogContent from './DialogContent'
 import DialogTitle from './DialogTitle'
 import InviteDialog from './InviteDialog'
@@ -10,35 +8,30 @@ import TeamInvitationMeetingAbstract from './TeamInvitationMeetingAbstract'
 
 const SAMLRedirect = () => {
   const [error, setError] = useState('')
-  const atmosphere = useAtmosphere()
-  const {history} = useRouter()
+  const navigate = useNavigate()
   useEffect(() => {
     const params = new URLSearchParams(location.search)
-    const token = params.get('token')
+    const userId = params.get('userId')
     const error = params.get('error')
-    const isNewUser = params.get('isNewUser') === 'true'
-    const isPatient0 = params.get('isPatient0') === 'true'
-    if (isNewUser && !error) {
-      ReactGA.event('sign_up', {isPatient0})
-    }
     let isSameOriginPopup = false
     if (window.opener) {
       try {
         // cross-domain attempts to access opener.location.origin will throw
         // this makes sure that Parabol opened the popup
         isSameOriginPopup = !!window.opener.location.origin
-      } catch {}
+      } catch {
+        /* noop */
+      }
     }
     if (isSameOriginPopup) {
       // SP-initiated
-      window.opener.postMessage({token, error}, window.location.origin)
+      window.opener.postMessage({userId, error}, window.location.origin)
     } else {
       // IdP-initiated
-      if (!token) {
+      if (!userId) {
         setError(error || 'Error logging in')
       } else {
-        atmosphere.setAuthToken(token)
-        history.replace('/meetings')
+        navigate('/meetings', {replace: true})
       }
     }
   }, [])

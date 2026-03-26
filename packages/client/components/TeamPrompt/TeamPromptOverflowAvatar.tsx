@@ -1,5 +1,5 @@
 import styled from '@emotion/styled'
-import React, {useRef} from 'react'
+import {useRef} from 'react'
 import {TransitionStatus} from '~/hooks/useTransition'
 import useResizeFontForElement from '../../hooks/useResizeFontForElement'
 import {BezierCurve} from '../../types/constEnums'
@@ -29,14 +29,14 @@ const OverflowCount = styled('div')<{
   opacity: !isAnimated
     ? undefined
     : status === TransitionStatus.EXITING || status === TransitionStatus.MOUNTED
-    ? 0
-    : 1,
+      ? 0
+      : 1,
   overflow: 'hidden',
   transform: !isAnimated
     ? undefined
     : status === TransitionStatus.EXITING || status === TransitionStatus.MOUNTED
-    ? 'scale(0)'
-    : 'scale(1)',
+      ? 'scale(0)'
+      : 'scale(1)',
   transition: `all 300ms ${BezierCurve.DECELERATE}`,
   userSelect: 'none',
   width

@@ -1,14 +1,14 @@
 import graphql from 'babel-plugin-relay/macro'
-import React, {Suspense} from 'react'
+import {Suspense} from 'react'
 import {useFragment} from 'react-relay'
-import {ParabolSearchQuery} from '~/types/clientSchema'
+import type {ParabolSearchQuery} from '~/types/clientSchema'
 import {taskScopingStatusFilters} from '~/utils/constants'
+import parabolScopingSearchResultsQuery, {
+  type ParabolScopingSearchResultsQuery
+} from '../__generated__/ParabolScopingSearchResultsQuery.graphql'
+import type {ParabolScopingSearchResultsRoot_meeting$key} from '../__generated__/ParabolScopingSearchResultsRoot_meeting.graphql'
 import useQueryLoaderNow from '../hooks/useQueryLoaderNow'
 import MockScopingList from '../modules/meeting/components/MockScopingList'
-import parabolScopingSearchResultsQuery, {
-  ParabolScopingSearchResultsQuery
-} from '../__generated__/ParabolScopingSearchResultsQuery.graphql'
-import {ParabolScopingSearchResultsRoot_meeting$key} from '../__generated__/ParabolScopingSearchResultsRoot_meeting.graphql'
 import ErrorBoundary from './ErrorBoundary'
 import ParabolScopingSearchResults from './ParabolScopingSearchResults'
 

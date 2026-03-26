@@ -1,14 +1,15 @@
 import graphql from 'babel-plugin-relay/macro'
-import React, {Fragment, useState} from 'react'
-import {createFragmentContainer} from 'react-relay'
-import useRouter from '~/hooks/useRouter'
-import isDemoRoute from '~/utils/isDemoRoute'
-import {
+import {Fragment, useState} from 'react'
+import {useFragment} from 'react-relay'
+import {useNavigate} from 'react-router'
+import type {
   NewMeetingPhaseTypeEnum,
-  RetroMeetingSidebar_meeting
+  RetroMeetingSidebar_meeting$key
 } from '~/__generated__/RetroMeetingSidebar_meeting.graphql'
+import isDemoRoute from '~/utils/isDemoRoute'
 import useAtmosphere from '../hooks/useAtmosphere'
-import useGotoStageId from '../hooks/useGotoStageId'
+import type useGotoStageId from '../hooks/useGotoStageId'
+import {GQLID} from '../utils/GQLID'
 import getSidebarItemStage from '../utils/getSidebarItemStage'
 import findStageById from '../utils/meetings/findStageById'
 import isPhaseComplete from '../utils/meetings/isPhaseComplete'
@@ -21,16 +22,50 @@ interface Props {
   gotoStageId: ReturnType<typeof useGotoStageId>
   handleMenuClick: () => void
   toggleSidebar: () => void
-  meeting: RetroMeetingSidebar_meeting
+  meeting: RetroMeetingSidebar_meeting$key
 }
 
 const collapsiblePhases: NewMeetingPhaseTypeEnum[] = ['checkin', 'discuss']
 
 const RetroMeetingSidebar = (props: Props) => {
   const atmosphere = useAtmosphere()
-  const {history} = useRouter()
+  const navigate = useNavigate()
   const {viewerId} = atmosphere
-  const {gotoStageId, handleMenuClick, toggleSidebar, meeting} = props
+  const {gotoStageId, handleMenuClick, toggleSidebar, meeting: meetingRef} = props
+  const meeting = useFragment(
+    graphql`
+      fragment RetroMeetingSidebar_meeting on RetrospectiveMeeting {
+        ...RetroSidebarPhaseListItemChildren_meeting
+        ...NewMeetingSidebar_meeting
+        showSidebar
+        id
+        endedAt
+        facilitatorUserId
+        facilitatorStageId
+        localPhase {
+          phaseType
+        }
+        localStage {
+          id
+        }
+        meetingMembers {
+          id
+        }
+        phases {
+          phaseType
+          stages {
+            id
+            isComplete
+            isNavigable
+            isNavigableByFacilitator
+            readyUserIds
+          }
+        }
+        summaryPageId
+      }
+    `,
+    meetingRef
+  )
   const {
     id: meetingId,
     endedAt,
@@ -39,10 +74,9 @@ const RetroMeetingSidebar = (props: Props) => {
     localPhase,
     localStage,
     phases,
-    settings,
-    meetingMembers
+    meetingMembers,
+    summaryPageId
   } = meeting
-  const {phaseTypes} = settings
   const localPhaseType = localPhase ? localPhase.phaseType : ''
   const facilitatorStageRes = findStageById(phases, facilitatorStageId)
   const facilitatorPhaseType = facilitatorStageRes ? facilitatorStageRes.phase.phaseType : ''
@@ -57,7 +91,7 @@ const RetroMeetingSidebar = (props: Props) => {
       meeting={meeting}
     >
       <MeetingNavList>
-        {phaseTypes.map((phaseType, index) => {
+        {phases.map(({phaseType}, index) => {
           const itemStage = getSidebarItemStage(phaseType, phases, facilitatorStageId)
           const {
             id: itemStageId = '',
@@ -67,15 +101,17 @@ const RetroMeetingSidebar = (props: Props) => {
           } = itemStage ?? {}
           const canNavigate = isViewerFacilitator ? isNavigableByFacilitator : isNavigable
           const handleClick = () => {
-            const prevPhaseType = phaseTypes[index - 1]
+            const prevPhaseType = phases[index - 1]?.phaseType
             const prevItemStage = prevPhaseType
               ? getSidebarItemStage(prevPhaseType, phases, facilitatorStageId)
               : null
 
-            const {isComplete: isPrevItemStageComplete = true, readyCount = 0} = prevItemStage ?? {}
+            const {isComplete: isPrevItemStageComplete = true, readyUserIds = []} =
+              prevItemStage ?? {}
 
             const activeCount = meetingMembers.length
-            const isConfirmRequired = readyCount < activeCount - 1 && activeCount > 1
+            const isConfirmRequired =
+              isViewerFacilitator && readyUserIds.length < activeCount - 1 && activeCount > 1
 
             if (
               isComplete ||
@@ -84,7 +120,9 @@ const RetroMeetingSidebar = (props: Props) => {
               confirmingPhase === phaseType
             ) {
               setConfirmingPhase(null)
-              gotoStageId(itemStageId).catch()
+              gotoStageId(itemStageId).catch(() => {
+                /*ignore*/
+              })
               handleMenuClick()
             } else {
               setConfirmingPhase(phaseType)
@@ -110,7 +148,7 @@ const RetroMeetingSidebar = (props: Props) => {
                 key={phaseType}
                 phaseCount={phaseCount}
                 phaseType={phaseType}
-                isConfirming={confirmingPhase === phaseType}
+                isConfirming={isViewerFacilitator && confirmingPhase === phaseType}
               />
               <RetroSidebarPhaseListItemChildren
                 gotoStageId={gotoStageId}
@@ -129,9 +167,12 @@ const RetroMeetingSidebar = (props: Props) => {
             isUnsyncedFacilitatorPhase={false}
             handleClick={() => {
               if (isDemoRoute()) {
-                history.push('/retrospective-demo-summary')
+                navigate('/retrospective-demo-summary')
               } else {
-                history.push(`/new-summary/${meetingId}`)
+                const summaryURL = summaryPageId
+                  ? `/pages/${GQLID.fromKey(summaryPageId)[0]}`
+                  : `/new-summary/${meetingId}`
+                navigate(summaryURL)
               }
             }}
             phaseType='SUMMARY'
@@ -142,38 +183,4 @@ const RetroMeetingSidebar = (props: Props) => {
   )
 }
 
-export default createFragmentContainer(RetroMeetingSidebar, {
-  meeting: graphql`
-    fragment RetroMeetingSidebar_meeting on RetrospectiveMeeting {
-      ...RetroSidebarPhaseListItemChildren_meeting
-      ...NewMeetingSidebar_meeting
-      showSidebar
-      settings {
-        phaseTypes
-      }
-      id
-      endedAt
-      facilitatorUserId
-      facilitatorStageId
-      localPhase {
-        phaseType
-      }
-      localStage {
-        id
-      }
-      meetingMembers {
-        id
-      }
-      phases {
-        phaseType
-        stages {
-          id
-          isComplete
-          isNavigable
-          isNavigableByFacilitator
-          readyCount
-        }
-      }
-    }
-  `
-})
+export default RetroMeetingSidebar

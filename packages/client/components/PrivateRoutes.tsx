@@ -1,17 +1,8 @@
-import React, {lazy} from 'react'
-import {Route, Switch} from 'react-router'
+import {lazy} from 'react'
+import {type Location, Navigate, Route, Routes, useLocation} from 'react-router'
 import useAuthRoute from '../hooks/useAuthRoute'
 import useNoIndex from '../hooks/useNoIndex'
 
-const Invoice = lazy(
-  () => import(/* webpackChunkName: 'InvoiceRoot' */ '../modules/invoice/containers/InvoiceRoot')
-)
-const NewMeetingSummary = lazy(
-  () =>
-    import(
-      /* webpackChunkName: 'NewMeetingSummaryRoot' */ '../modules/summary/components/NewMeetingSummaryRoot'
-    )
-)
 const Graphql = lazy(
   () =>
     import(
@@ -27,7 +18,6 @@ const Impersonate = lazy(
 const Signout = lazy(
   () => import(/* webpackChunkName: 'SignoutContainer' */ '../containers/Signout/SignoutContainer')
 )
-const NotFound = lazy(() => import(/* webpackChunkName: 'NotFound' */ './NotFound/NotFound'))
 const DashboardRoot = lazy(() => import(/* webpackChunkName: 'DashboardRoot' */ './DashboardRoot'))
 const MeetingRoot = lazy(() => import(/* webpackChunkName: 'MeetingRoot' */ './MeetingRoot'))
 const MeetingSeriesRoot = lazy(
@@ -37,22 +27,54 @@ const ViewerNotOnTeamRoot = lazy(
   () => import(/* webpackChunkName: 'ViewerNotOnTeamRoot' */ './ViewerNotOnTeamRoot')
 )
 
+const ActivityLibraryRoutes = lazy(
+  () =>
+    import(
+      /* webpackChunkName: 'ActivityLibraryRoutes' */ './ActivityLibrary/ActivityLibraryRoutes'
+    )
+)
+
+const ReviewRequestToJoinOrgRoot = lazy(
+  () => import(/* webpackChunkName: 'ReviewRequestToJoinOrgRoot' */ './ReviewRequestToJoinOrgRoot')
+)
+const NotFound = lazy(() => import(/* webpackChunkName: 'NotFound' */ './NotFound/NotFound'))
+
+const DASHBOARD_PREFIXES = ['/meetings', '/me', '/new-summary', '/newteam', '/team', '/pages']
+
+const DashboardOrNotFound = () => {
+  const {pathname} = useLocation()
+  const isDashboardRoute = DASHBOARD_PREFIXES.some(
+    (prefix) => pathname === prefix || pathname.startsWith(prefix + '/')
+  )
+  if (!isDashboardRoute) return <NotFound />
+  return <DashboardRoot />
+}
+
 const PrivateRoutes = () => {
   useAuthRoute()
   useNoIndex()
+  const location = useLocation()
+  const state = location.state as {backgroundLocation?: Location} | null
   return (
-    <Switch>
-      <Route path='(/meetings|/me|/newteam|/team|/usage|/new-meeting)' component={DashboardRoot} />
-      <Route path='/meet/:meetingId' component={MeetingRoot} />
-      <Route path='/meeting-series/:meetingId' component={MeetingSeriesRoot} />
-      <Route path='/invoice/:invoiceId' component={Invoice} />
-      <Route path='/new-summary/:meetingId/:urlAction?' component={NewMeetingSummary} />
-      <Route path='/admin/graphql' component={Graphql} />
-      <Route path='/admin/impersonate' component={Impersonate} />
-      <Route path='/invitation-required' component={ViewerNotOnTeamRoot} />
-      <Route path='/signout' component={Signout} />
-      <Route component={NotFound} />
-    </Switch>
+    <>
+      <Routes location={state?.backgroundLocation || location}>
+        <Route path='/activity-library/*' element={<ActivityLibraryRoutes />} />
+        <Route path='/new-meeting' element={<Navigate to='/activity-library' replace />} />
+        <Route path='/meet/:meetingId/*' element={<MeetingRoot />} />
+        <Route path='/meeting-series/:meetingId/*' element={<MeetingSeriesRoot />} />
+        <Route path='/admin/graphql' element={<Graphql />} />
+        <Route path='/admin/impersonate' element={<Impersonate />} />
+        <Route path='/invitation-required' element={<ViewerNotOnTeamRoot />} />
+        <Route path='/signout' element={<Signout />} />
+        <Route path='*' element={<DashboardOrNotFound />} />
+      </Routes>
+      <Routes>
+        <Route
+          path='/organization-join-request/:requestId'
+          element={<ReviewRequestToJoinOrgRoot />}
+        />
+      </Routes>
+    </>
   )
 }
 

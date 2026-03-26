@@ -1,13 +1,14 @@
 import graphql from 'babel-plugin-relay/macro'
-import React, {Fragment} from 'react'
-import {createFragmentContainer} from 'react-relay'
-import useRouter from '~/hooks/useRouter'
-import {
+import {Fragment} from 'react'
+import {useFragment} from 'react-relay'
+import {useNavigate} from 'react-router'
+import type {
   NewMeetingPhaseTypeEnum,
-  PokerMeetingSidebar_meeting
+  PokerMeetingSidebar_meeting$key
 } from '~/__generated__/PokerMeetingSidebar_meeting.graphql'
 import useAtmosphere from '../hooks/useAtmosphere'
-import useGotoStageId from '../hooks/useGotoStageId'
+import type useGotoStageId from '../hooks/useGotoStageId'
+import {GQLID} from '../utils/GQLID'
 import getSidebarItemStage from '../utils/getSidebarItemStage'
 import findStageById from '../utils/meetings/findStageById'
 import MeetingNavList from './MeetingNavList'
@@ -19,16 +20,49 @@ interface Props {
   gotoStageId: ReturnType<typeof useGotoStageId>
   handleMenuClick: () => void
   toggleSidebar: () => void
-  meeting: PokerMeetingSidebar_meeting
+  meeting: PokerMeetingSidebar_meeting$key
 }
 
 const collapsiblePhases: NewMeetingPhaseTypeEnum[] = ['checkin', 'ESTIMATE']
 
 const PokerMeetingSidebar = (props: Props) => {
   const atmosphere = useAtmosphere()
-  const {history} = useRouter()
+  const navigate = useNavigate()
   const {viewerId} = atmosphere
-  const {gotoStageId, handleMenuClick, toggleSidebar, meeting} = props
+  const {gotoStageId, handleMenuClick, toggleSidebar, meeting: meetingRef} = props
+  const meeting = useFragment(
+    graphql`
+      fragment PokerMeetingSidebar_meeting on PokerMeeting {
+        ...PokerSidebarPhaseListItemChildren_meeting
+        ...NewMeetingSidebar_meeting
+        showSidebar
+        id
+        endedAt
+        facilitatorUserId
+        facilitatorStageId
+        localPhase {
+          phaseType
+        }
+        localStage {
+          id
+        }
+        summaryPageId
+        phases {
+          phaseType
+          stages {
+            id
+            isComplete
+            isNavigable
+            isNavigableByFacilitator
+            ... on EstimateStage {
+              taskId
+            }
+          }
+        }
+      }
+    `,
+    meetingRef
+  )
   const {
     id: meetingId,
     endedAt,
@@ -37,9 +71,8 @@ const PokerMeetingSidebar = (props: Props) => {
     localPhase,
     localStage,
     phases,
-    settings
+    summaryPageId
   } = meeting
-  const {phaseTypes} = settings
   const localPhaseType = localPhase ? localPhase.phaseType : ''
   const facilitatorStageRes = findStageById(phases, facilitatorStageId)
   const facilitatorPhaseType = facilitatorStageRes ? facilitatorStageRes.phase.phaseType : ''
@@ -53,7 +86,7 @@ const PokerMeetingSidebar = (props: Props) => {
       meeting={meeting}
     >
       <MeetingNavList>
-        {phaseTypes.map((phaseType) => {
+        {phases.map(({phaseType}) => {
           const itemStage = getSidebarItemStage(phaseType, phases, facilitatorStageId)
           const {
             id: itemStageId = '',
@@ -62,7 +95,9 @@ const PokerMeetingSidebar = (props: Props) => {
           } = itemStage || {}
           const canNavigate = isViewerFacilitator ? isNavigableByFacilitator : isNavigable
           const handleClick = () => {
-            gotoStageId(itemStageId).catch()
+            gotoStageId(itemStageId).catch(() => {
+              /*ignore*/
+            })
             handleMenuClick()
           }
           const estimatePhase = phases.find((phase) => {
@@ -103,7 +138,10 @@ const PokerMeetingSidebar = (props: Props) => {
             isFacilitatorPhase={false}
             isUnsyncedFacilitatorPhase={false}
             handleClick={() => {
-              history.push(`/new-summary/${meetingId}`)
+              const summaryURL = summaryPageId
+                ? `/pages/${GQLID.fromKey(summaryPageId)[0]}`
+                : `/new-summary/${meetingId}`
+              navigate(summaryURL)
             }}
             phaseType='SUMMARY'
           />
@@ -113,37 +151,4 @@ const PokerMeetingSidebar = (props: Props) => {
   )
 }
 
-export default createFragmentContainer(PokerMeetingSidebar, {
-  meeting: graphql`
-    fragment PokerMeetingSidebar_meeting on PokerMeeting {
-      ...PokerSidebarPhaseListItemChildren_meeting
-      ...NewMeetingSidebar_meeting
-      showSidebar
-      settings {
-        phaseTypes
-      }
-      id
-      endedAt
-      facilitatorUserId
-      facilitatorStageId
-      localPhase {
-        phaseType
-      }
-      localStage {
-        id
-      }
-      phases {
-        phaseType
-        stages {
-          id
-          isComplete
-          isNavigable
-          isNavigableByFacilitator
-          ... on EstimateStage {
-            taskId
-          }
-        }
-      }
-    }
-  `
-})
+export default PokerMeetingSidebar

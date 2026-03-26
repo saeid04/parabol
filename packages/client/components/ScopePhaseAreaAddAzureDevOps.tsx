@@ -1,12 +1,11 @@
 import styled from '@emotion/styled'
 import graphql from 'babel-plugin-relay/macro'
-import React from 'react'
 import {useFragment} from 'react-relay'
 import AzureDevOpsClientManager from '~/utils/AzureDevOpsClientManager'
+import type {ScopePhaseAreaAddAzureDevOps_meeting$key} from '../__generated__/ScopePhaseAreaAddAzureDevOps_meeting.graphql'
 import useAtmosphere from '../hooks/useAtmosphere'
 import useMutationProps from '../hooks/useMutationProps'
 import {PALETTE} from '../styles/paletteV3'
-import {ScopePhaseAreaAddAzureDevOps_meeting$key} from '../__generated__/ScopePhaseAreaAddAzureDevOps_meeting.graphql'
 import AzureDevOpsSVG from './AzureDevOpsSVG'
 import RaisedButton from './RaisedButton'
 
@@ -29,6 +28,7 @@ const StyledLink = styled('span')({
 })
 
 const AddAzureDevOpsButton = styled(RaisedButton)({
+  gap: 8,
   whiteSpace: 'pre-wrap'
 })
 

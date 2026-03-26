@@ -9,10 +9,15 @@
 
   This file accepts resolvers and permissions and applies permissions as higher order functions to those resolvers
 */
+import {defaultFieldResolver, GraphQLError} from 'graphql'
+import type {IRules} from 'graphql-shield'
 import {allow} from 'graphql-shield'
-import type {ShieldRule} from 'graphql-shield/dist/types'
 import hash from 'object-hash'
-import {ResolverFn} from './private/resolverTypes'
+import {Logger} from '../utils/Logger'
+import type {ResolverFn} from './private/resolverTypes'
+
+// hack to get ShieldRule since it's not exported from graphql-shield
+export type ShieldRule = Extract<IRules, {resolve: any}>
 
 type Resolver = ResolverFn<any, any, any, any>
 
@@ -37,11 +42,14 @@ const wrapResolve =
       if (res === true) {
         return await resolve(source, args, context, info)
       } else {
-        if (res === false) return new Error('Not authorized')
-        if (typeof res === 'string') return new Error(res)
+        if (res === false) return new GraphQLError('Not authorized')
+        if (typeof res === 'string') return new GraphQLError(res)
         return res
       }
     } catch (err) {
+      if (!(err instanceof GraphQLError)) {
+        Logger.log(err)
+      }
       throw err
     }
   }
@@ -79,10 +87,8 @@ const composeResolvers = <T extends ResolverMap>(resolverMap: T, permissionMap: 
           nextResolverFieldMap[resolverFieldName] = wrapResolve(resolve as Resolver, rule)
         })
       } else {
-        const unwrappedResolver = nextResolverFieldMap[fieldName]
-        if (!unwrappedResolver) {
-          throw new Error(`No resolver exists for field: ${fieldName}`)
-        }
+        // use default if a resolver isn't provided, e.g. a field exists in the DB but only available to superusers via GQL
+        const unwrappedResolver = nextResolverFieldMap[fieldName] || defaultFieldResolver
         nextResolverFieldMap[fieldName] = wrapResolve(unwrappedResolver, rule)
       }
     })

@@ -1,11 +1,13 @@
-import React, {useContext, useEffect, useRef, useState} from 'react'
+import type * as React from 'react'
+import {useContext, useEffect, useRef, useState} from 'react'
 import {commitLocalUpdate} from 'relay-runtime'
-import SendClientSegmentEventMutation from '~/mutations/SendClientSegmentEventMutation'
-import {DraggableReflectionCard_meeting} from '~/__generated__/DraggableReflectionCard_meeting.graphql'
-import {DragReflectionDropTargetTypeEnum} from '~/__generated__/EndDraggingReflectionMutation_meeting.graphql'
-import {PortalContext, SetPortal} from '../components/AtmosphereProvider/PortalProvider'
-import {SwipeColumn} from '../components/GroupingKanban'
-import {ReflectionDragState} from '../components/ReflectionGroup/DraggableReflectionCard'
+import type {DraggableReflectionCard_meeting$data} from '~/__generated__/DraggableReflectionCard_meeting.graphql'
+import type {DragReflectionDropTargetTypeEnum} from '~/__generated__/EndDraggingReflectionMutation_meeting.graphql'
+import SendClientSideEvent from '~/utils/SendClientSideEvent'
+import type {DraggableReflectionCard_reflection$data} from '../__generated__/DraggableReflectionCard_reflection.graphql'
+import {PortalContext, type SetPortal} from '../components/AtmosphereProvider/PortalProvider'
+import type {SwipeColumn} from '../components/GroupingKanban'
+import type {ReflectionDragState} from '../components/ReflectionGroup/DraggableReflectionCard'
 import RemoteReflection from '../components/ReflectionGroup/RemoteReflection'
 import StartDraggingReflectionMutation from '../mutations/StartDraggingReflectionMutation'
 import UpdateDragLocationMutation from '../mutations/UpdateDragLocationMutation'
@@ -23,7 +25,6 @@ import updateClonePosition, {
   getDroppingStyles,
   getSpotlightAnimation
 } from '../utils/retroGroup/updateClonePosition'
-import {DraggableReflectionCard_reflection} from '../__generated__/DraggableReflectionCard_reflection.graphql'
 import useAtmosphere from './useAtmosphere'
 import useEventCallback from './useEventCallback'
 import useSpotlightResults from './useSpotlightResults'
@@ -35,8 +36,8 @@ const windowDims = {
 
 // Adds the remotely dragged card substitute, does not hide the local card or collapse anything
 const useRemotelyDraggedCard = (
-  meeting: DraggableReflectionCard_meeting,
-  reflection: DraggableReflectionCard_reflection,
+  meeting: DraggableReflectionCard_meeting$data,
+  reflection: DraggableReflectionCard_reflection$data,
   drag: ReflectionDragState,
   staticIdx: number
 ) => {
@@ -138,7 +139,7 @@ const useRemotelyDraggedCard = (
 }
 
 const useLocalDrag = (
-  reflection: DraggableReflectionCard_reflection,
+  reflection: DraggableReflectionCard_reflection$data,
   drag: ReflectionDragState,
   staticIdx: number,
   onMouseMove: any,
@@ -185,7 +186,7 @@ const removeClone = (reflectionId: string, setPortal: SetPortal) => {
   if (el) {
     try {
       el.parentElement!.removeChild(el)
-    } catch (e) {
+    } catch {
       // already removed
     }
   }
@@ -193,7 +194,7 @@ const removeClone = (reflectionId: string, setPortal: SetPortal) => {
 
 const useDroppingDrag = (
   drag: ReflectionDragState,
-  reflection: DraggableReflectionCard_reflection
+  reflection: DraggableReflectionCard_reflection$data
 ) => {
   const setPortal = useContext(PortalContext)
   const {remoteDrag, id: reflectionId, isDropping} = reflection
@@ -230,9 +231,9 @@ const useDroppingDrag = (
 
 const useDragAndDrop = (
   drag: ReflectionDragState,
-  reflection: DraggableReflectionCard_reflection,
+  reflection: DraggableReflectionCard_reflection$data,
   staticIdx: number,
-  meeting: DraggableReflectionCard_meeting,
+  meeting: DraggableReflectionCard_meeting$data,
   teamId: string,
   reflectionCount: number,
   swipeColumn?: SwipeColumn
@@ -261,14 +262,14 @@ const useDragAndDrop = (
       targetGroupId && reflectionGroupId !== targetGroupId
         ? 'REFLECTION_GROUP'
         : !targetGroupId && reflectionCount > 0 && !isReflectionInSpotlightResults
-        ? 'REFLECTION_GRID'
-        : null
+          ? 'REFLECTION_GRID'
+          : null
     handleDrop(atmosphere, reflectionId, drag, targetType, targetGroupId)
     if (spotlightGroup?.id) {
       const event = isReflectionInSpotlightResults
         ? `Spotlight result to ${targetType === 'REFLECTION_GROUP' ? 'source' : 'result'}`
         : `Spotlight source to ${targetType === 'REFLECTION_GROUP' ? 'result' : 'grid'}`
-      SendClientSegmentEventMutation(atmosphere, event, {
+      SendClientSideEvent(atmosphere, event, {
         reflectionId,
         meetingId,
         spotlightSearchQuery
@@ -334,8 +335,12 @@ const useDragAndDrop = (
       // We want to clone the reflection card after the properties were set correctly, especially isDragging, thus the mutation needs to run first.
       // in some cases, e.g. moving a card out of a reflection group, the component tree is shuffled which will set the drag.ref to null.
       const dragRef = drag.ref
-      StartDraggingReflectionMutation(atmosphere, {reflectionId, dragId: drag.id})
+      // clone must come first because once isViewerDragging gets set then the tiptap element disappears if dragging from an expanded stack ???
       drag.clone = cloneReflection(dragRef, reflectionId)
+      StartDraggingReflectionMutation(atmosphere, {
+        reflectionId,
+        dragId: drag.id
+      })
     }
     if (!drag.clone) return
     drag.clientY = clientY
@@ -394,7 +399,7 @@ const useDragAndDrop = (
 
 // Collapse the position of the card in the list if necessary
 const useCollapsePlaceholder = (
-  reflection: DraggableReflectionCard_reflection,
+  reflection: DraggableReflectionCard_reflection$data,
   drag: ReflectionDragState,
   staticIdx: number,
   staticReflectionCount: number
@@ -403,6 +408,10 @@ const useCollapsePlaceholder = (
     const {ref} = drag
     if (!ref) return
     const {style, scrollHeight} = ref
+    const reset = () => {
+      style.height = ''
+      style.transition = ''
+    }
     if (staticIdx === -1) {
       // the card has been picked up
       if (staticReflectionCount > 0) return
@@ -416,10 +425,6 @@ const useCollapsePlaceholder = (
         style.height = '0'
       })
     } else if (reflection.isDropping) {
-      const reset = () => {
-        style.height = ''
-        style.transition = ''
-      }
       if (staticReflectionCount === 1) {
         // the card has created a new group, grow a space for it
         style.height = '0'
@@ -432,13 +437,15 @@ const useCollapsePlaceholder = (
         // the card landed on an existing group
         reset()
       }
+    } else {
+      reset()
     }
   }, [staticIdx === -1])
 }
 
 const useDraggableReflectionCard = (
-  meeting: DraggableReflectionCard_meeting,
-  reflection: DraggableReflectionCard_reflection,
+  meeting: DraggableReflectionCard_meeting$data,
+  reflection: DraggableReflectionCard_reflection$data,
   drag: ReflectionDragState,
   staticIdx: number,
   teamId: string,

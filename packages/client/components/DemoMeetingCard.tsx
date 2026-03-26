@@ -1,13 +1,13 @@
 import styled from '@emotion/styled'
-import React, {useCallback} from 'react'
-import {Link} from 'react-router-dom'
+import {useCallback} from 'react'
+import {Link} from 'react-router'
 import retrospective from '../../../static/images/illustrations/retrospective.png'
 import useAtmosphere from '../hooks/useAtmosphere'
 import useBreakpoint from '../hooks/useBreakpoint'
-import SendClientSegmentEventMutation from '../mutations/SendClientSegmentEventMutation'
 import {Elevation} from '../styles/elevation'
 import {PALETTE} from '../styles/paletteV3'
 import {BezierCurve, Breakpoint, Card, ElementWidth} from '../types/constEnums'
+import SendClientSideEvent from '../utils/SendClientSideEvent'
 
 const CardWrapper = styled('div')<{
   maybeTabletPlus: boolean
@@ -20,7 +20,7 @@ const CardWrapper = styled('div')<{
   transition: `box-shadow 100ms ${BezierCurve.DECELERATE}, opacity 300ms ${BezierCurve.DECELERATE}`,
   marginBottom: maybeTabletPlus ? 0 : 16,
   margin: 8,
-  width: maybeTabletPlus ? ElementWidth.MEETING_CARD : '100%',
+  width: maybeTabletPlus ? ElementWidth.MEETING_CARD : 'calc(100% - 16px)',
   userSelect: 'none',
   ':hover': {
     boxShadow: Elevation.CARD_SHADOW_HOVER
@@ -59,17 +59,17 @@ const BACKGROUND_COLORS = {
   poker: PALETTE.TOMATO_400,
   teamPrompt: PALETTE.JADE_400
 }
-const MeetingImgBackground = styled.div<{meetingType: keyof typeof BACKGROUND_COLORS}>(
-  ({meetingType}) => ({
-    background: BACKGROUND_COLORS[meetingType],
-    borderRadius: `${Card.BORDER_RADIUS}px ${Card.BORDER_RADIUS}px 0 0`,
-    display: 'block',
-    position: 'absolute',
-    top: 0,
-    bottom: '6px',
-    width: '100%'
-  })
-)
+const MeetingImgBackground = styled.div<{
+  meetingType: keyof typeof BACKGROUND_COLORS
+}>(({meetingType}) => ({
+  background: BACKGROUND_COLORS[meetingType],
+  borderRadius: `${Card.BORDER_RADIUS}px ${Card.BORDER_RADIUS}px 0 0`,
+  display: 'block',
+  position: 'absolute',
+  top: 0,
+  bottom: '6px',
+  width: '100%'
+}))
 
 const MeetingImgWrapper = styled('div')({
   borderRadius: `${Card.BORDER_RADIUS}px ${Card.BORDER_RADIUS}px 0 0`,
@@ -107,7 +107,7 @@ const DemoMeetingCard = () => {
   const atmospehere = useAtmosphere()
 
   const onOpen = useCallback(() => {
-    SendClientSegmentEventMutation(atmospehere, 'Demo Meeting Card Clicked')
+    SendClientSideEvent(atmospehere, 'Demo Meeting Card Clicked')
   }, [])
 
   return (

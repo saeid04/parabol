@@ -1,0 +1,4 @@
+type UpdateUserProfilePayload {
+  error: StandardMutationError
+  user: User
+}

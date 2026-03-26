@@ -1,11 +1,11 @@
 import styled from '@emotion/styled'
 import graphql from 'babel-plugin-relay/macro'
-import React from 'react'
-import {createFragmentContainer} from 'react-relay'
+import {useFragment} from 'react-relay'
+import {useNavigate} from 'react-router'
 import EndCheckInMutation from '~/mutations/EndCheckInMutation'
+import type {ActionMeetingLastCall_meeting$key} from '../__generated__/ActionMeetingLastCall_meeting.graphql'
 import useAtmosphere from '../hooks/useAtmosphere'
 import useMutationProps from '../hooks/useMutationProps'
-import useRouter from '../hooks/useRouter'
 import AgendaShortcutHint from '../modules/meeting/components/AgendaShortcutHint/AgendaShortcutHint'
 import MeetingCopy from '../modules/meeting/components/MeetingCopy/MeetingCopy'
 import MeetingFacilitationHint from '../modules/meeting/components/MeetingFacilitationHint/MeetingFacilitationHint'
@@ -13,8 +13,7 @@ import MeetingPhaseHeading from '../modules/meeting/components/MeetingPhaseHeadi
 import {AGENDA_ITEM_LABEL} from '../utils/constants'
 import {phaseLabelLookup} from '../utils/meetings/lookups'
 import plural from '../utils/plural'
-import {ActionMeetingLastCall_meeting} from '../__generated__/ActionMeetingLastCall_meeting.graphql'
-import {ActionMeetingPhaseProps} from './ActionMeeting'
+import type {ActionMeetingPhaseProps} from './ActionMeeting'
 import ErrorBoundary from './ErrorBoundary'
 import MeetingContent from './MeetingContent'
 import MeetingTopBar from './MeetingTopBar'
@@ -22,7 +21,7 @@ import PhaseHeaderTitle from './PhaseHeaderTitle'
 import PrimaryButton from './PrimaryButton'
 
 interface Props extends ActionMeetingPhaseProps {
-  meeting: ActionMeetingLastCall_meeting
+  meeting: ActionMeetingLastCall_meeting$key
 }
 
 const LastCallWrapper = styled('div')({
@@ -35,9 +34,32 @@ const LastCallWrapper = styled('div')({
 })
 
 const ActionMeetingLastCall = (props: Props) => {
-  const {avatarGroup, toggleSidebar, meeting} = props
+  const {avatarGroup, toggleSidebar, meeting: meetingRef} = props
+  const meeting = useFragment(
+    graphql`
+      fragment ActionMeetingLastCall_meeting on ActionMeeting {
+        id
+        endedAt
+        showSidebar
+        id
+        facilitatorUserId
+        facilitator {
+          user {
+            preferredName
+          }
+        }
+        phases {
+          phaseType
+          stages {
+            isComplete
+          }
+        }
+      }
+    `,
+    meetingRef
+  )
   const atmosphere = useAtmosphere()
-  const {history} = useRouter()
+  const navigate = useNavigate()
   const {submitting, onError, onCompleted, submitMutation} = useMutationProps()
   const {viewerId} = atmosphere
   const {endedAt, facilitator, facilitatorUserId, id: meetingId, phases, showSidebar} = meeting
@@ -45,13 +67,15 @@ const ActionMeetingLastCall = (props: Props) => {
   const {stages} = agendaItemPhase ?? {}
   if (!stages) return null
   const agendaItemsCompleted = stages.filter((stage) => stage.isComplete).length
-  const {preferredName} = facilitator
+  const {
+    user: {preferredName}
+  } = facilitator
   const isFacilitating = facilitatorUserId === viewerId && !endedAt
   const labelAgendaItems = plural(0, AGENDA_ITEM_LABEL)
   const endMeeting = () => {
     if (submitting) return
     submitMutation()
-    EndCheckInMutation(atmosphere, {meetingId}, {history, onError, onCompleted})
+    EndCheckInMutation(atmosphere, {meetingId}, {navigate, onError, onCompleted})
   }
 
   const getHeadingText = () => {
@@ -118,23 +142,4 @@ const ActionMeetingLastCall = (props: Props) => {
   )
 }
 
-export default createFragmentContainer(ActionMeetingLastCall, {
-  meeting: graphql`
-    fragment ActionMeetingLastCall_meeting on ActionMeeting {
-      id
-      endedAt
-      showSidebar
-      id
-      facilitatorUserId
-      facilitator {
-        preferredName
-      }
-      phases {
-        phaseType
-        stages {
-          isComplete
-        }
-      }
-    }
-  `
-})
+export default ActionMeetingLastCall

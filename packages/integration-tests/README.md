@@ -10,7 +10,8 @@ site.
 ## Running the Test Suites
 
 1. Start the dev server according to the main [README instructions](/README.md#installation)
-2. In this directory, run `yarn test`.
+2. Install playwrigth `pnpm exec playwright install`
+3. In this directory, run `pnpm test`.
 
 ## Debugging a Test
 
@@ -29,7 +30,5 @@ See [playwright.dev docs](https://playwright.dev/docs/debug)
 ## TODO
 
 - [x] Add eslint, especially for [no-floating-promises](https://github.com/typescript-eslint/typescript-eslint/blob/main/packages/eslint-plugin/docs/rules/no-floating-promises.md) rule
-- [x] Run these tests in CircleCI (see also [https://github.com/ParabolInc/parabol/pull/5481](https://github.com/ParabolInc/parabol/pull/5481), which is related).
-- [x] Junit reporting for CircleCI
 - [ ] Add authenticated tests
 - [ ] Write a test that utilizes multiple [`page` objects](https://playwright.dev/docs/pages#multiple-pages) to test real-time behaviors.

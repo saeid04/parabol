@@ -1,5 +1,6 @@
 import styled from '@emotion/styled'
-import React from 'react'
+import * as React from 'react'
+import {TextareaHTMLAttributes} from 'react'
 import makeFieldColorPalette from '../../styles/helpers/makeFieldColorPalette'
 import ui from '../../styles/ui'
 import StyledError from '../StyledError'
@@ -12,31 +13,16 @@ const TextArea = styled('textarea')<{disabled?: boolean}>(({disabled}) => ({
   ...(disabled && {...ui.fieldDisabled})
 }))
 
-interface Props {
-  autoFocus?: boolean
-  disabled?: boolean
+type Props = TextareaHTMLAttributes<HTMLTextAreaElement> & {
   error?: string | undefined | null
-  name?: string
-  onBlur?: (e: React.FocusEvent<HTMLTextAreaElement>) => void
-  onChange: (e: React.ChangeEvent<HTMLTextAreaElement>) => void
-  placeholder?: string
-  value: string
 }
 
 const BasicTextArea = (props: Props) => {
-  const {autoFocus, disabled, error, name, onBlur, onChange, placeholder, value} = props
+  const {error, ...rest} = props
 
   return (
     <React.Fragment>
-      <TextArea
-        autoFocus={autoFocus}
-        disabled={disabled}
-        name={name}
-        placeholder={placeholder}
-        onBlur={onBlur}
-        onChange={onChange}
-        value={value}
-      />
+      <TextArea {...rest} />
       {error && <StyledError>{error}</StyledError>}
     </React.Fragment>
   )

@@ -1,8 +1,8 @@
 import graphql from 'babel-plugin-relay/macro'
 import {commitMutation} from 'react-relay'
-import {SharedUpdater, StandardMutation} from '../types/relayMutations'
-import {RemovePokerTemplateScaleMutation as IRemovePokerTemplateScaleMutation} from '../__generated__/RemovePokerTemplateScaleMutation.graphql'
-import {RemovePokerTemplateScaleMutation_scale} from '../__generated__/RemovePokerTemplateScaleMutation_scale.graphql'
+import type {RemovePokerTemplateScaleMutation as IRemovePokerTemplateScaleMutation} from '../__generated__/RemovePokerTemplateScaleMutation.graphql'
+import type {RemovePokerTemplateScaleMutation_scale$data} from '../__generated__/RemovePokerTemplateScaleMutation_scale.graphql'
+import type {SharedUpdater, StandardMutation} from '../types/relayMutations'
 import handleRemovePokerTemplateScale from './handlers/handleRemovePokerTemplateScale'
 
 graphql`
@@ -11,9 +11,9 @@ graphql`
       ...ScaleDropdownMenuItem_scale
       id
       teamId
-    }
-    dimensions {
-      ...PokerTemplateScalePicker_dimension
+      dimensions {
+        ...PokerTemplateScalePicker_dimension
+      }
     }
   }
 `
@@ -27,7 +27,7 @@ const mutation = graphql`
 `
 
 export const removePokerTemplateScaleTeamUpdater: SharedUpdater<
-  RemovePokerTemplateScaleMutation_scale
+  RemovePokerTemplateScaleMutation_scale$data
 > = (payload, {store}) => {
   const scaleId = payload.getLinkedRecord('scale').getValue('id')
   const teamId = payload.getLinkedRecord('scale').getValue('teamId')

@@ -1,28 +1,63 @@
 import graphql from 'babel-plugin-relay/macro'
-import React from 'react'
-import {createFragmentContainer} from 'react-relay'
-import {PokerEstimateHeaderCard_stage} from '../__generated__/PokerEstimateHeaderCard_stage.graphql'
+import {useState} from 'react'
+import {useFragment} from 'react-relay'
+import type {
+  PokerEstimateHeaderCard_stage$data,
+  PokerEstimateHeaderCard_stage$key
+} from '../__generated__/PokerEstimateHeaderCard_stage.graphql'
+import type {PokerEstimateHeaderCardQuery as TPokerEstimateHeaderCardQuery} from '../__generated__/PokerEstimateHeaderCardQuery.graphql'
+import type Atmosphere from '../Atmosphere'
+import useAtmosphere from '../hooks/useAtmosphere'
+import UpdatePokerScopeMutation from '../mutations/UpdatePokerScopeMutation'
+import renderMarkdown from '../utils/renderMarkdown'
 import PokerEstimateHeaderCardContent, {
-  PokerEstimateHeaderCardContentProps
+  type PokerEstimateHeaderCardContentProps
 } from './PokerEstimateHeaderCardContent'
 import PokerEstimateHeaderCardError from './PokerEstimateHeaderCardError'
 import PokerEstimateHeaderCardParabol from './PokerEstimateHeaderCardParabol'
 
-interface Props {
-  stage: PokerEstimateHeaderCard_stage
+const refreshStoryIntegrationQuery = graphql`
+  query PokerEstimateHeaderCardQuery($meetingId: ID!, $storyId: ID!) {
+    viewer {
+      meeting(meetingId: $meetingId) {
+        ... on PokerMeeting {
+          story(storyId: $storyId) {
+            ... PokerEstimateHeaderCardTask @relay(mask: false)
+          }
+        }
+      }
+    }
+  }
+`
+
+const RefreshStoryIntegration = async (
+  atmosphere: Atmosphere,
+  variables: {meetingId: string; storyId: string}
+) => {
+  return atmosphere.fetchQuery<TPokerEstimateHeaderCardQuery>(
+    refreshStoryIntegrationQuery,
+    variables,
+    {
+      fetchPolicy: 'network-only'
+    }
+  )
 }
 
-type Integration = NonNullable<PokerEstimateHeaderCard_stage['task']>['integration']
+interface Props {
+  stage: PokerEstimateHeaderCard_stage$key
+}
+
+type Integration = NonNullable<PokerEstimateHeaderCard_stage$data['task']>['integration']
 
 const getHeaderFields = (
   integration: Integration | null
-): PokerEstimateHeaderCardContentProps | null => {
+): Omit<PokerEstimateHeaderCardContentProps, 'taskRef'> | null => {
   if (!integration) return null
   const {__typename} = integration
   switch (__typename) {
     case 'JiraServerIssue':
-    case 'JiraIssue':
-      const name = __typename === 'JiraIssue' ? 'Jira' : 'Jira Server'
+    case 'JiraIssue': {
+      const name = __typename === 'JiraIssue' ? 'Jira' : 'Jira Data Center'
       const {summary, descriptionHTML, jiraUrl, issueKey} = integration
       return {
         cardTitle: summary,
@@ -31,16 +66,18 @@ const getHeaderFields = (
         linkTitle: `${name} Issue #${issueKey}`,
         linkText: issueKey
       }
-    case '_xGitHubIssue':
-      const {number, title: githubTitle, bodyHTML, url} = integration
+    }
+    case '_xGitHubIssue': {
+      const {number, title: githubTitle, bodyHTML, ghUrl} = integration
       return {
         cardTitle: githubTitle,
         descriptionHTML: bodyHTML,
-        url,
+        url: ghUrl,
         linkTitle: `GitHub Issue #${number}`,
         linkText: `#${number}`
       }
-    case 'AzureDevOpsWorkItem':
+    }
+    case 'AzureDevOpsWorkItem': {
       const {
         title: azureDevOpsTitle,
         url: azureDevOpsUrl,
@@ -54,24 +91,128 @@ const getHeaderFields = (
         linkTitle: `${azureDevOpsTitle} Issue #${workItemId}`,
         linkText: `#${workItemId}`
       }
-    case '_xGitLabIssue':
-      const {iid, title, descriptionHtml, webUrl} = integration
+    }
+    case '_xGitLabIssue': {
+      const {iid, title: gitlabTitle, descriptionHtml, webUrl} = integration
       return {
-        cardTitle: title,
+        cardTitle: gitlabTitle,
         descriptionHTML: descriptionHtml ?? '',
         url: webUrl,
         linkTitle: `GitLab Issue #${iid}`,
         linkText: `#${iid}`
       }
+    }
+    case '_xLinearIssue': {
+      const {identifier, title: linearTitle, description, url} = integration
+      const linearDescHTML = renderMarkdown(description ?? '_no description found_')
+      return {
+        cardTitle: linearTitle,
+        descriptionHTML: linearDescHTML ?? '',
+        url: url,
+        linkTitle: `Linear Issue #${identifier}`,
+        linkText: `#${identifier}`
+      }
+    }
   }
   return null
 }
 
+graphql`
+  fragment PokerEstimateHeaderCardTask on Task {
+    ...PokerEstimateHeaderCardParabol_task
+    ...PokerEstimateHeaderCardContent_task
+    integrationHash
+    integration {
+      ... on AzureDevOpsWorkItem {
+        __typename
+        id
+        title
+        teamProject
+        type
+        state
+        url
+        descriptionHTML
+      }
+      ... on JiraIssue {
+        __typename
+        issueKey
+        summary
+        descriptionHTML
+        jiraUrl: url
+      }
+      ... on JiraServerIssue {
+        __typename
+        issueKey
+        summary
+        descriptionHTML
+        jiraUrl: url
+      }
+      ... on _xGitHubIssue {
+        __typename
+        number
+        title
+        bodyHTML
+        ghUrl: url
+      }
+      ... on _xGitLabIssue {
+        __typename
+        descriptionHtml
+        title
+        webUrl
+        iid
+      }
+      ... on _xLinearIssue {
+        __typename
+        description
+        title
+        url
+        identifier
+      }
+    }
+  }
+`
+
 const PokerEstimateHeaderCard = (props: Props) => {
-  const {stage} = props
-  const {task} = stage
+  const {stage: stageRef} = props
+  const atmosphere = useAtmosphere()
+  const [isRefreshing, setIsRefreshing] = useState(false)
+  const stage = useFragment(
+    graphql`
+      fragment PokerEstimateHeaderCard_stage on EstimateStage {
+        meetingId
+        taskId
+        task {
+          ...PokerEstimateHeaderCardTask @relay(mask: false)
+        }
+      }
+    `,
+    stageRef
+  )
+  const {meetingId, task} = stage
   if (!task) {
-    return <PokerEstimateHeaderCardError />
+    const {taskId} = stage
+    const onRemove = () => {
+      UpdatePokerScopeMutation(
+        atmosphere,
+        {
+          meetingId,
+          updates: [
+            {
+              service: 'PARABOL',
+              serviceTaskId: taskId,
+              action: 'DELETE'
+            }
+          ]
+        },
+        {
+          onCompleted: () => {},
+          onError: () => {},
+          contents: []
+        }
+      )
+    }
+
+    return <PokerEstimateHeaderCardError onRemove={onRemove} />
   }
 
   const {integrationHash, integration} = task
@@ -82,58 +223,51 @@ const PokerEstimateHeaderCard = (props: Props) => {
   // it's an integrated task, but the service might be down
   const headerFields = getHeaderFields(integration)
   if (!headerFields) {
-    return <PokerEstimateHeaderCardError service={'Integration'} />
+    const onRemove = () => {
+      UpdatePokerScopeMutation(
+        atmosphere,
+        {
+          meetingId,
+          updates: [
+            {
+              // since this is a delete the service doesn't matter
+              service: 'PARABOL',
+              serviceTaskId: integrationHash,
+              action: 'DELETE'
+            }
+          ]
+        },
+        {
+          onCompleted: () => {},
+          onError: () => {},
+          contents: []
+        }
+      )
+    }
+    return <PokerEstimateHeaderCardError service={'Integration'} onRemove={onRemove} />
   }
-  return <PokerEstimateHeaderCardContent {...headerFields} />
+
+  const handleRefresh = async () => {
+    if (!integrationHash) return
+    setIsRefreshing(true)
+    try {
+      await RefreshStoryIntegration(atmosphere, {
+        storyId: stage.taskId,
+        meetingId
+      })
+    } finally {
+      setIsRefreshing(false)
+    }
+  }
+
+  return (
+    <PokerEstimateHeaderCardContent
+      {...headerFields}
+      onRefresh={handleRefresh}
+      isRefreshing={isRefreshing}
+      taskRef={task}
+    />
+  )
 }
 
-export default createFragmentContainer(PokerEstimateHeaderCard, {
-  stage: graphql`
-    fragment PokerEstimateHeaderCard_stage on EstimateStage {
-      task {
-        ...PokerEstimateHeaderCardParabol_task
-        integrationHash
-        integration {
-          ... on AzureDevOpsWorkItem {
-            __typename
-            id
-            title
-            teamProject
-            type
-            state
-            url
-            descriptionHTML
-          }
-          ... on JiraIssue {
-            __typename
-            issueKey
-            summary
-            descriptionHTML
-            jiraUrl: url
-          }
-          ... on JiraServerIssue {
-            __typename
-            issueKey
-            summary
-            descriptionHTML
-            jiraUrl: url
-          }
-          ... on _xGitHubIssue {
-            __typename
-            number
-            title
-            bodyHTML
-            url
-          }
-          ... on _xGitLabIssue {
-            __typename
-            descriptionHtml
-            title
-            webUrl
-            iid
-          }
-        }
-      }
-    }
-  `
-})
+export default PokerEstimateHeaderCard

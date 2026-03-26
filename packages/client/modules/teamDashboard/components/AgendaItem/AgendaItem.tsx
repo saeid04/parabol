@@ -1,14 +1,19 @@
 import styled from '@emotion/styled'
 import graphql from 'babel-plugin-relay/macro'
-import React, {useEffect, useRef, useState} from 'react'
-import {createFragmentContainer} from 'react-relay'
-import {AgendaItem_meeting} from '~/__generated__/AgendaItem_meeting.graphql'
+import type * as React from 'react'
+import {useEffect, useRef, useState} from 'react'
+import {useFragment} from 'react-relay'
+import type {
+  AgendaItem_meeting$data,
+  AgendaItem_meeting$key
+} from '~/__generated__/AgendaItem_meeting.graphql'
+import type {AgendaItem_agendaItem$key} from '../../../../__generated__/AgendaItem_agendaItem.graphql'
 import Avatar from '../../../../components/Avatar/Avatar'
 import IconButton from '../../../../components/IconButton'
 import MeetingSubnavItem from '../../../../components/MeetingSubnavItem'
 import useAtmosphere from '../../../../hooks/useAtmosphere'
 import {MenuPosition} from '../../../../hooks/useCoords'
-import useGotoStageId from '../../../../hooks/useGotoStageId'
+import type useGotoStageId from '../../../../hooks/useGotoStageId'
 import useScrollIntoView from '../../../../hooks/useScrollIntoVIew'
 import useTooltip from '../../../../hooks/useTooltip'
 import RemoveAgendaItemMutation from '../../../../mutations/RemoveAgendaItemMutation'
@@ -17,7 +22,6 @@ import pinIcon from '../../../../styles/theme/images/icons/pin.svg'
 import unpinIcon from '../../../../styles/theme/images/icons/unpin.svg'
 import {ICON_SIZE} from '../../../../styles/typographyV2'
 import findStageAfterId from '../../../../utils/meetings/findStageAfterId'
-import {AgendaItem_agendaItem} from '../../../../__generated__/AgendaItem_agendaItem.graphql'
 
 const AgendaItemStyles = styled('div')({
   position: 'relative',
@@ -60,7 +64,7 @@ const getItemProps = (
   agendaItemId: string,
   viewerId: string,
   gotoStageId: ReturnType<typeof useGotoStageId> | undefined,
-  meeting: AgendaItem_meeting | null
+  meeting: AgendaItem_meeting$data | null | undefined
 ) => {
   const fallback = {
     isDisabled: false,
@@ -100,21 +104,62 @@ const getItemProps = (
 }
 
 interface Props {
-  agendaItem: AgendaItem_agendaItem
+  agendaItem: AgendaItem_agendaItem$key
   gotoStageId: ReturnType<typeof useGotoStageId> | undefined
   isDragging: boolean
-  meeting: AgendaItem_meeting | null
+  meeting: AgendaItem_meeting$key | null | undefined
 }
 
 const AgendaItem = (props: Props) => {
-  const {agendaItem, gotoStageId, isDragging, meeting} = props
+  const {agendaItem: agendaItemRef, gotoStageId, isDragging, meeting: meetingRef} = props
+  const agendaItem = useFragment(
+    graphql`
+      fragment AgendaItem_agendaItem on AgendaItem {
+        id
+        content
+        pinned
+        teamMember {
+          user {
+            picture
+          }
+        }
+      }
+    `,
+    agendaItemRef
+  )
+  const meeting = useFragment(
+    graphql`
+      fragment AgendaItem_meeting on ActionMeeting {
+        id
+        endedAt
+        facilitatorStageId
+        facilitatorUserId
+        phases {
+          phaseType
+          stages {
+            id
+          }
+          ...AgendaItemPhase @relay(mask: false)
+        }
+        localPhase {
+          phaseType
+          ...AgendaItemPhase @relay(mask: false)
+        }
+        localStage {
+          id
+        }
+      }
+    `,
+    meetingRef
+  )
   const {id: agendaItemId, content, pinned, teamMember} = agendaItem
   const meetingId = meeting?.id
   const endedAt = meeting?.endedAt
   const facilitatorUserId = meeting?.facilitatorUserId
   const facilitatorStageId = meeting?.facilitatorStageId
   const phases = meeting?.phases ?? null
-  const {picture} = teamMember
+  const {user} = teamMember
+  const {picture} = user
   const atmosphere = useAtmosphere()
   const {viewerId} = atmosphere
   const ref = useRef<HTMLDivElement>(null)
@@ -158,7 +203,7 @@ const AgendaItem = (props: Props) => {
 
   const getIcon = () => {
     if (pinned && isHovering) return <SvgIcon alt='unpinIcon' src={unpinIcon} />
-    else if (!pinned && !isHovering) return <Avatar hasBadge={false} picture={picture} size={24} />
+    else if (!pinned && !isHovering) return <Avatar picture={picture} className='h-6 w-6' />
     else return <SvgIcon alt='pinnedIcon' src={pinIcon} />
   }
 
@@ -197,7 +242,9 @@ const AgendaItem = (props: Props) => {
         />
       </AgendaItemStyles>
       {tooltipPortal(
-        pinned ? `Unpin "${content}" from every check-in` : `Pin "${content}" to every check-in`
+        pinned
+          ? `Unpin this agenda topic from every check-in`
+          : `Pin this agenda topic to every check-in`
       )}
     </>
   )
@@ -217,37 +264,4 @@ graphql`
   }
 `
 
-export default createFragmentContainer(AgendaItem, {
-  agendaItem: graphql`
-    fragment AgendaItem_agendaItem on AgendaItem {
-      id
-      content
-      pinned
-      teamMember {
-        picture
-      }
-    }
-  `,
-  meeting: graphql`
-    fragment AgendaItem_meeting on ActionMeeting {
-      id
-      endedAt
-      facilitatorStageId
-      facilitatorUserId
-      phases {
-        phaseType
-        stages {
-          id
-        }
-        ...AgendaItemPhase @relay(mask: false)
-      }
-      localPhase {
-        phaseType
-        ...AgendaItemPhase @relay(mask: false)
-      }
-      localStage {
-        id
-      }
-    }
-  `
-})
+export default AgendaItem

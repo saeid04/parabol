@@ -1,19 +1,19 @@
 import styled from '@emotion/styled'
+import {DragDropContext, Draggable, Droppable, type DropResult} from '@hello-pangea/dnd'
 import graphql from 'babel-plugin-relay/macro'
-import React from 'react'
-import {DragDropContext, Draggable, Droppable, DropResult} from 'react-beautiful-dnd'
-import {createFragmentContainer} from 'react-relay'
+import {useFragment} from 'react-relay'
+import type {TemplateDimensionList_dimensions$key} from '../../../__generated__/TemplateDimensionList_dimensions.graphql'
 import useAtmosphere from '../../../hooks/useAtmosphere'
 import MovePokerTemplateDimensionMutation from '../../../mutations/MovePokerTemplateDimensionMutation'
+import {getSortOrder} from '../../../shared/sortOrder'
 import {TEMPLATE_DIMENSION} from '../../../utils/constants'
-import dndNoise from '../../../utils/dndNoise'
-import {TemplateDimensionList_dimensions} from '../../../__generated__/TemplateDimensionList_dimensions.graphql'
 import TemplateDimensionItem from './TemplateDimensionItem'
 
 interface Props {
   isOwner: boolean
-  dimensions: TemplateDimensionList_dimensions
+  dimensions: TemplateDimensionList_dimensions$key
   templateId: string
+  readOnly?: boolean
 }
 
 const DimensionList = styled('div')({
@@ -23,7 +23,18 @@ const DimensionList = styled('div')({
 })
 
 const TemplateDimensionList = (props: Props) => {
-  const {isOwner, dimensions, templateId} = props
+  const {isOwner, dimensions: dimensionsRef, templateId, readOnly} = props
+  const dimensions = useFragment(
+    graphql`
+      fragment TemplateDimensionList_dimensions on TemplateDimension @relay(plural: true) {
+        id
+        sortOrder
+        ...TemplateDimensionItem_dimension
+        ...TemplateDimensionItem_dimensions
+      }
+    `,
+    dimensionsRef
+  )
   const atmosphere = useAtmosphere()
 
   const onDragEnd = (result: DropResult) => {
@@ -40,20 +51,7 @@ const TemplateDimensionList = (props: Props) => {
     ) {
       return
     }
-
-    let sortOrder
-    if (destination.index === 0) {
-      sortOrder = destinationDimension.sortOrder - 1 + dndNoise()
-    } else if (destination.index === dimensions.length - 1) {
-      sortOrder = destinationDimension.sortOrder + 1 + dndNoise()
-    } else {
-      const offset = source.index > destination.index ? -1 : 1
-      sortOrder =
-        ((dimensions[destination.index + offset]?.sortOrder ?? 0) +
-          destinationDimension.sortOrder) /
-          2 +
-        dndNoise()
-    }
+    const sortOrder = getSortOrder(dimensions, source.index, destination.index)
 
     const {id: dimensionId} = sourceDimension
     const variables = {dimensionId, sortOrder}
@@ -63,7 +61,7 @@ const TemplateDimensionList = (props: Props) => {
   return (
     <DragDropContext onDragEnd={onDragEnd}>
       <DimensionList>
-        <Droppable droppableId={TEMPLATE_DIMENSION} isDropDisabled={!isOwner}>
+        <Droppable droppableId={TEMPLATE_DIMENSION} isDropDisabled={!isOwner || readOnly}>
           {(provided) => {
             return (
               <div ref={provided.innerRef}>
@@ -73,12 +71,13 @@ const TemplateDimensionList = (props: Props) => {
                       key={dimension.id}
                       draggableId={dimension.id}
                       index={idx}
-                      isDragDisabled={!isOwner}
+                      isDragDisabled={!isOwner || readOnly}
                     >
                       {(dragProvided, dragSnapshot) => {
                         return (
                           <TemplateDimensionItem
                             isOwner={isOwner}
+                            readOnly={readOnly}
                             dimension={dimension}
                             dimensions={dimensions}
                             isDragging={dragSnapshot.isDragging}
@@ -99,13 +98,4 @@ const TemplateDimensionList = (props: Props) => {
   )
 }
 
-export default createFragmentContainer(TemplateDimensionList, {
-  dimensions: graphql`
-    fragment TemplateDimensionList_dimensions on TemplateDimension @relay(plural: true) {
-      id
-      sortOrder
-      ...TemplateDimensionItem_dimension
-      ...TemplateDimensionItem_dimensions
-    }
-  `
-})
+export default TemplateDimensionList

@@ -1,18 +1,21 @@
 import graphql from 'babel-plugin-relay/macro'
 import {commitMutation} from 'react-relay'
 import {SprintPokerDefaults} from '~/types/constEnums'
-import {SharedUpdater, StandardMutation} from '../types/relayMutations'
+import type {AddPokerTemplateMutation as TAddPokerTemplateMutation} from '../__generated__/AddPokerTemplateMutation.graphql'
+import type {AddPokerTemplateMutation_team$data} from '../__generated__/AddPokerTemplateMutation_team.graphql'
+import type {SharedUpdater, StandardMutation} from '../types/relayMutations'
 import createProxyRecord from '../utils/relay/createProxyRecord'
 import {setActiveTemplateInRelayStore} from '../utils/relay/setActiveTemplate'
-import {AddPokerTemplateMutation as TAddPokerTemplateMutation} from '../__generated__/AddPokerTemplateMutation.graphql'
-import {AddPokerTemplateMutation_team} from '../__generated__/AddPokerTemplateMutation_team.graphql'
-import handleAddPokerTemplate from './handlers/handleAddPokerTemplate'
+import handleAddMeetingTemplate from './handlers/handleAddMeetingTemplate'
 
 graphql`
-  fragment AddPokerTemplateMutation_team on AddPokerTemplatePayload {
+  fragment AddPokerTemplateMutation_team on AddPokerTemplateSuccess {
+    user {
+      freeCustomPokerTemplatesRemaining
+    }
     pokerTemplate {
       ...TemplateSharing_template
-      ...PokerTemplateDetailsTemplate
+      ...ActivityDetails_template
       id
       teamId
     }
@@ -22,19 +25,24 @@ graphql`
 const mutation = graphql`
   mutation AddPokerTemplateMutation($teamId: ID!, $parentTemplateId: ID) {
     addPokerTemplate(teamId: $teamId, parentTemplateId: $parentTemplateId) {
+      ... on ErrorPayload {
+        error {
+          message
+        }
+      }
       ...AddPokerTemplateMutation_team @relay(mask: false)
     }
   }
 `
 
-export const addPokerTemplateTeamUpdater: SharedUpdater<AddPokerTemplateMutation_team> = (
+export const addPokerTemplateTeamUpdater: SharedUpdater<AddPokerTemplateMutation_team$data> = (
   payload,
   {store}
 ) => {
   const template = payload.getLinkedRecord('pokerTemplate')
   if (!template) return
   const templateId = template.getValue('id')
-  handleAddPokerTemplate(template, store)
+  handleAddMeetingTemplate(template, 'poker', store)
   const teamId = template.getValue('teamId')
   const team = store.get(teamId)
   if (!team) return
@@ -54,14 +62,14 @@ const AddPokerTemplateMutation: StandardMutation<TAddPokerTemplateMutation> = (
     updater: (store) => {
       const payload = store.getRootField('addPokerTemplate')
       if (!payload) return
-      addPokerTemplateTeamUpdater(payload, {atmosphere, store})
+      addPokerTemplateTeamUpdater(payload as any, {atmosphere, store})
     },
     optimisticUpdater: (store) => {
       const {parentTemplateId, teamId} = variables
       const nowISO = new Date().toJSON()
       const team = store.get(teamId)!
       const parentTemplate = parentTemplateId ? store.get(parentTemplateId) : null
-      const name = parentTemplate ? parentTemplate.getValue('name') + ' Copy' : '*New Template'
+      const name = parentTemplate ? parentTemplate.getValue('name') + ' Copy' : '*New Template ##'
 
       const proxyTemplate = createProxyRecord(store, 'PokerTemplate', {
         name,
@@ -72,8 +80,8 @@ const AddPokerTemplateMutation: StandardMutation<TAddPokerTemplateMutation> = (
       const templateId = proxyTemplate.getValue('id')
 
       if (parentTemplate) {
-        const currentPrompts = parentTemplate.getLinkedRecords('prompts')!
-        proxyTemplate.setLinkedRecords(currentPrompts, 'prompts')
+        const currentDimensions = parentTemplate.getLinkedRecords('dimensions')!
+        proxyTemplate.setLinkedRecords(currentDimensions, 'dimensions')
       } else {
         const dimension = createProxyRecord(store, 'TemplateDimension', {
           scaleId: SprintPokerDefaults.DEFAULT_SCALE_ID,
@@ -85,7 +93,7 @@ const AddPokerTemplateMutation: StandardMutation<TAddPokerTemplateMutation> = (
         })
         proxyTemplate.setLinkedRecords([dimension], 'dimensions')
       }
-      handleAddPokerTemplate(proxyTemplate, store)
+      handleAddMeetingTemplate(proxyTemplate, 'poker', store)
     }
   })
 }

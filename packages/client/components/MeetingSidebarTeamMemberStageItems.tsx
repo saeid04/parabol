@@ -1,14 +1,13 @@
 import styled from '@emotion/styled'
 import graphql from 'babel-plugin-relay/macro'
-import React from 'react'
-import {createFragmentContainer} from 'react-relay'
-import {MeetingSidebarTeamMemberStageItems_meeting} from '~/__generated__/MeetingSidebarTeamMemberStageItems_meeting.graphql'
+import {useFragment} from 'react-relay'
+import type {MeetingSidebarTeamMemberStageItems_meeting$key} from '~/__generated__/MeetingSidebarTeamMemberStageItems_meeting.graphql'
+import type {NewMeetingPhaseTypeEnum} from '../__generated__/ActionMeeting_meeting.graphql'
 import Avatar from '../components/Avatar/Avatar'
 import MeetingSubnavItem from '../components/MeetingSubnavItem'
 import useAnimatedPhaseListChildren from '../hooks/useAnimatedPhaseListChildren'
 import useAtmosphere from '../hooks/useAtmosphere'
-import useGotoStageId from '../hooks/useGotoStageId'
-import {NewMeetingPhaseTypeEnum} from '../__generated__/ActionMeeting_meeting.graphql'
+import type useGotoStageId from '../hooks/useGotoStageId'
 import MeetingSidebarPhaseItemChild from './MeetingSidebarPhaseItemChild'
 
 const AvatarBlock = styled('div')({
@@ -19,7 +18,7 @@ const ScrollStageItems = styled('div')<{isActive: boolean}>(({isActive}) => ({
   display: 'flex',
   flexDirection: 'column',
   height: '100%', // trickle down height for overflow
-  // react-beautiful-dnd supports scrolling on 1 parent
+  // @hello-pangea/dnd supports scrolling on 1 parent
   // this is where we need it, in order to scroll a long list
   overflow: isActive ? 'auto' : 'hidden',
   paddingRight: 8,
@@ -29,12 +28,31 @@ const ScrollStageItems = styled('div')<{isActive: boolean}>(({isActive}) => ({
 interface Props {
   gotoStageId: ReturnType<typeof useGotoStageId>
   handleMenuClick: () => void
-  meeting: MeetingSidebarTeamMemberStageItems_meeting
+  meeting: MeetingSidebarTeamMemberStageItems_meeting$key
   phaseType: NewMeetingPhaseTypeEnum
 }
 
 const MeetingSidebarTeamMemberStageItems = (props: Props) => {
-  const {gotoStageId, handleMenuClick, meeting, phaseType} = props
+  const {gotoStageId, handleMenuClick, meeting: meetingRef, phaseType} = props
+  const meeting = useFragment(
+    graphql`
+      fragment MeetingSidebarTeamMemberStageItems_meeting on NewMeeting {
+        facilitatorStageId
+        facilitatorUserId
+        id
+        localPhase {
+          ...MeetingSidebarTeamMemberStageItems_phase @relay(mask: false)
+        }
+        localStage {
+          id
+        }
+        phases {
+          ...MeetingSidebarTeamMemberStageItems_phase @relay(mask: false)
+        }
+      }
+    `,
+    meetingRef
+  )
   const {facilitatorStageId, facilitatorUserId, localPhase, localStage, phases} = meeting
   const sidebarPhase = phases.find((phase) => phase.phaseType === phaseType)
   const localStageId = (localStage && localStage.id) || ''
@@ -42,7 +60,9 @@ const MeetingSidebarTeamMemberStageItems = (props: Props) => {
     const teamMemberStage =
       sidebarPhase && sidebarPhase.stages.find((stage) => stage.teamMemberId === teamMemberId)
     const teamMemberStageId = (teamMemberStage && teamMemberStage.id) || ''
-    gotoStageId(teamMemberStageId).catch()
+    gotoStageId(teamMemberStageId).catch(() => {
+      /*ignore*/
+    })
     handleMenuClick()
   }
   const atmosphere = useAtmosphere()
@@ -66,7 +86,8 @@ const MeetingSidebarTeamMemberStageItems = (props: Props) => {
           if (!teamMember || !teamMemberId) {
             return null
           }
-          const {picture, preferredName} = teamMember
+          const {user} = teamMember
+          const {picture, preferredName} = user
           const isLocalStage = localStageId === stageId
           const isFacilitatorStage = facilitatorStageId === stageId
           const isUnsyncedFacilitatorStage = isFacilitatorStage !== isLocalStage && !isLocalStage
@@ -75,7 +96,7 @@ const MeetingSidebarTeamMemberStageItems = (props: Props) => {
               key={stageId}
               metaContent={
                 <AvatarBlock>
-                  <Avatar hasBadge={false} picture={picture} size={24} />
+                  <Avatar picture={picture} className='h-6 w-6' />
                 </AvatarBlock>
               }
               isDisabled={isViewerFacilitator ? !isNavigableByFacilitator : !isNavigable}
@@ -107,29 +128,14 @@ graphql`
       ... on NewMeetingTeamMemberStage {
         teamMemberId
         teamMember {
-          picture
-          preferredName
+          user {
+            picture
+            preferredName
+          }
         }
       }
     }
   }
 `
 
-export default createFragmentContainer(MeetingSidebarTeamMemberStageItems, {
-  meeting: graphql`
-    fragment MeetingSidebarTeamMemberStageItems_meeting on NewMeeting {
-      facilitatorStageId
-      facilitatorUserId
-      id
-      localPhase {
-        ...MeetingSidebarTeamMemberStageItems_phase @relay(mask: false)
-      }
-      localStage {
-        id
-      }
-      phases {
-        ...MeetingSidebarTeamMemberStageItems_phase @relay(mask: false)
-      }
-    }
-  `
-})
+export default MeetingSidebarTeamMemberStageItems

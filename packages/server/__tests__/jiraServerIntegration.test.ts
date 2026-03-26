@@ -1,4 +1,4 @@
-import {getUserTeams, sendPublic, signUp} from './common'
+import {getUserOrgs, getUserTeams, sendIntranet, sendPublic, signUp} from './common'
 
 const serverBaseUrl = 'https://jira.example.com/'
 const consumerKey = 'CvSE+9fww8PLH07mWTHKUZMiGyX7liUSFbB1pRLVDyQ='
@@ -19,10 +19,40 @@ xCRxttXw+TEbs5T2EQJBANPcs2ztuKos+j0eYBKzhFDWccEYtBOLvJE5uUaxUa8v
 -----END RSA PRIVATE KEY-----
 `
 
-test('Add integration provider', async () => {
-  const {userId, authToken} = await signUp()
+const setOrgUserRole = async (orgId: string, userId: string, role: string) => {
+  const setOrgUserRole = await sendIntranet({
+    query: `
+      mutation SetOrgUserRole($orgId: ID!, $userId: ID!, $role: OrgUserRole!) {
+        setOrgUserRole(orgId: $orgId, userId: $userId, role: $role) {
+          __typename
+        }
+      }
+    `,
+    variables: {
+      orgId,
+      userId,
+      role
+    }
+  })
 
+  expect(setOrgUserRole).toMatchObject({
+    data: {
+      setOrgUserRole: {
+        __typename: 'SetOrgUserRoleSuccess'
+      }
+    }
+  })
+
+  return setOrgUserRole
+}
+
+test('Add integration provider', async () => {
+  const {userId, cookie} = await signUp()
+
+  const orgId = (await getUserOrgs(userId))[0].id
   const teamId = (await getUserTeams(userId))[0].id
+
+  await setOrgUserRole(orgId, userId, 'ORG_ADMIN')
 
   const addIntegrationProvider = await sendPublic({
     query: `
@@ -34,6 +64,7 @@ test('Add integration provider', async () => {
               id
               isActive
               teamId
+              orgId
               ... on IntegrationProviderOAuth1 {
                 serverBaseUrl
               }
@@ -44,7 +75,7 @@ test('Add integration provider', async () => {
     `,
     variables: {
       input: {
-        teamId,
+        orgId,
         service: 'jiraServer',
         authStrategy: 'oauth1',
         scope: 'org',
@@ -55,7 +86,7 @@ test('Add integration provider', async () => {
         }
       }
     },
-    authToken
+    cookie
   })
 
   expect(addIntegrationProvider).toMatchObject({
@@ -65,7 +96,8 @@ test('Add integration provider', async () => {
         provider: {
           id: expect.anything(),
           isActive: true,
-          teamId,
+          orgId,
+          teamId: null,
           serverBaseUrl
         }
       }
@@ -95,7 +127,7 @@ test('Add integration provider', async () => {
     variables: {
       teamId
     },
-    authToken
+    cookie
   })
 
   expect(integrationViewer).toMatchObject({

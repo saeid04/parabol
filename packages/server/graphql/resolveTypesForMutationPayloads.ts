@@ -8,7 +8,7 @@
   adds that `resolveType` if one is not already defined
 */
 
-import {GraphQLSchema} from 'graphql'
+import type {GraphQLSchema} from 'graphql'
 import {isUnionType} from 'graphql/type'
 
 const resolveTypesForMutationPayloads = (schema: GraphQLSchema) => {
@@ -20,7 +20,7 @@ const resolveTypesForMutationPayloads = (schema: GraphQLSchema) => {
     const successType = concreteTypes.find((type) => type.name === successName)
     // Abort if the MutationPayload is not a default 2-part union of an ErrorPayload | Success
     if (!errorType || !successType || concreteTypes.length !== 2) return
-    type.resolveType = ({error}) => (error?.message ? errorType : successType)
+    type.resolveType = ({error}) => (error?.message ? 'ErrorPayload' : successName)
   })
   return schema
 }

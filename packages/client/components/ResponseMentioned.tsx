@@ -1,9 +1,11 @@
 import graphql from 'babel-plugin-relay/macro'
-import React from 'react'
+import {useEffect} from 'react'
 import {useFragment} from 'react-relay'
+import {useNavigate} from 'react-router'
 import NotificationAction from '~/components/NotificationAction'
-import useRouter from '../hooks/useRouter'
-import {ResponseMentioned_notification$key} from '../__generated__/ResponseMentioned_notification.graphql'
+import useAtmosphere from '~/hooks/useAtmosphere'
+import type {ResponseMentioned_notification$key} from '../__generated__/ResponseMentioned_notification.graphql'
+import SendClientSideEvent from '../utils/SendClientSideEvent'
 import NotificationTemplate from './NotificationTemplate'
 
 interface Props {
@@ -27,24 +29,36 @@ const ResponseMentioned = (props: Props) => {
           id
           name
         }
+        type
+        status
       }
     `,
     notificationRef
   )
-  const {history} = useRouter()
-  const {meeting, response} = notification
+  const navigate = useNavigate()
+  const atmosphere = useAtmosphere()
+  const {meeting, response, type, status} = notification
   const {picture: authorPicture, preferredName: authorName} = response.user
+
+  useEffect(() => {
+    SendClientSideEvent(atmosphere, 'Notification Viewed', {
+      notificationType: type,
+      notificationStatus: status
+    })
+  }, [])
 
   const {id: meetingId, name: meetingName} = meeting
   const goThere = () => {
-    history.push(`/meet/${meetingId}/responses?responseId=${encodeURIComponent(response.id)}`)
+    navigate(`/meet/${meetingId}/responses?responseId=${encodeURIComponent(response.id)}`)
   }
+
+  const message = `${authorName} mentioned you in their response in ${meetingName}.`
 
   // :TODO: (jmtaber129): Show mention preview.
   return (
     <NotificationTemplate
       avatar={authorPicture}
-      message={`${authorName} mentioned you in their response in ${meetingName}.`}
+      message={message}
       notification={notification}
       action={<NotificationAction label={'See their response'} onClick={goThere} />}
     />

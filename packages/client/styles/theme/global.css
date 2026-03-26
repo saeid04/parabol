@@ -1,0 +1,866 @@
+@layer theme, base, components, utilities;
+@import 'tailwindcss/theme.css' layer(theme);
+/* `layer(utilities)` makes tailwind classes come before emotion classes.
+   We want the opposite, so until emotion is gone, comment this out
+   Repro: OAuth buttons on login page
+*/
+@import 'tailwindcss/utilities.css' /* layer(utilities) */;
+
+@config '../../../../tailwind.config.js';
+
+@custom-variant no-hover (@media not all and (hover: hover));
+@theme {
+  /* Fonts */
+  --font-sans:
+    'IBM Plex Sans', ui-sans-serif, system-ui, sans-serif, 'Apple Color Emoji', 'Segoe UI Emoji',
+    'Segoe UI Symbol', 'Noto Color Emoji';
+  --font-mono:
+    'IBM Plex Mono' ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, 'Liberation Mono',
+    'Courier New', monospace;
+
+  /* Palette */
+  --color-*: initial;
+  --color-transparent: transparent;
+  --color-inherit: inherit;
+  --color-current: currentColor;
+  --color-black: #000;
+  --color-white: #fff;
+  --color-primary: #493272;
+  --color-tomato-100: #ffe2e0;
+  --color-tomato-200: #ffc1bd;
+  --color-tomato-300: #fea09a;
+  --color-tomato-400: #fd7f77;
+  --color-tomato-500: #fd6157;
+  --color-tomato-600: #f23b31;
+  --color-tomato-700: #d5211a;
+  --color-tomato-800: #9f201e;
+  --color-tomato-900: #6d1d1d;
+  --color-terra-100: #fedccd;
+  --color-terra-200: #ffb89c;
+  --color-terra-300: #fe975d;
+  --color-terra-400: #d28963;
+  --color-terra-500: #d35d22;
+  --color-terra-600: #a34f25;
+  --color-terra-700: #823917;
+  --color-terra-800: #501f08;
+  --color-terra-900: #3a1404;
+  --color-gold-100: #faebd3;
+  --color-gold-200: #fadc9e;
+  --color-gold-300: #ffcc63;
+  --color-gold-400: #fbb337;
+  --color-gold-500: #de8e02;
+  --color-gold-600: #a36200;
+  --color-gold-700: #855000;
+  --color-gold-800: #703c00;
+  --color-gold-900: #522c00;
+  --color-grass-100: #ecf1a7;
+  --color-grass-200: #dee58a;
+  --color-grass-300: #c4cf66;
+  --color-grass-400: #becf3f;
+  --color-grass-500: #acc125;
+  --color-grass-600: #91a617;
+  --color-grass-700: #73880c;
+  --color-grass-800: #556704;
+  --color-grass-900: #354200;
+  --color-forest-100: #e3f7d4;
+  --color-forest-200: #c8ebad;
+  --color-forest-300: #9ec87e;
+  --color-forest-400: #73a153;
+  --color-forest-500: #639442;
+  --color-forest-600: #528433;
+  --color-forest-700: #427326;
+  --color-forest-800: #335f1b;
+  --color-forest-900: #244a11;
+  --color-jade-100: #cff2de;
+  --color-jade-200: #abedc8;
+  --color-jade-300: #91e8b7;
+  --color-jade-400: #66bc8c;
+  --color-jade-500: #40b574;
+  --color-jade-600: #2d9f5f;
+  --color-jade-700: #1d8647;
+  --color-jade-800: #116931;
+  --color-jade-900: #08491e;
+  --color-aqua-100: #cbecf0;
+  --color-aqua-200: #a4dee5;
+  --color-aqua-300: #7ccfd9;
+  --color-aqua-400: #55c0cf;
+  --color-aqua-500: #33b1c7;
+  --color-aqua-600: #2792aa;
+  --color-aqua-700: #1c748d;
+  --color-aqua-800: #12566d;
+  --color-aqua-900: #0a3a4c;
+  --color-sky-100: #e8f4fc;
+  --color-sky-200: #bbddf7;
+  --color-sky-300: #8ec7f1;
+  --color-sky-400: #61b1eb;
+  --color-sky-500: #329ae5;
+  --color-sky-600: #14649e;
+  --color-sky-700: #0f4a76;
+  --color-sky-800: #0a314d;
+  --color-sky-900: #051a29;
+  --color-lilac-100: #eeedf7;
+  --color-lilac-200: #d4d2ef;
+  --color-lilac-300: #b7b4e9;
+  --color-lilac-400: #9694e6;
+  --color-lilac-500: #7272e5;
+  --color-lilac-600: #5454e3;
+  --color-lilac-700: #3333cc;
+  --color-lilac-800: #2121ab;
+  --color-lilac-900: #1a1a7f;
+  --color-grape-100: #bd6bd6;
+  --color-grape-200: #b66bd6;
+  --color-grape-300: #af6bd6;
+  --color-grape-400: #a86bd6;
+  --color-grape-500: #a06bd6;
+  --color-grape-600: #7340b5;
+  --color-grape-700: #493272;
+  --color-grape-800: #2d1d53;
+  --color-grape-900: #170f34;
+  --color-fuscia-100: #edd5f1;
+  --color-fuscia-200: #e4b5e8;
+  --color-fuscia-300: #de94e1;
+  --color-fuscia-400: #db70db;
+  --color-fuscia-500: #d345cf;
+  --color-fuscia-600: #bc29b2;
+  --color-fuscia-700: #941e88;
+  --color-fuscia-800: #6b1460;
+  --color-fuscia-900: #410b38;
+  --color-rose-100: #f9e2ed;
+  --color-rose-200: #f4bed7;
+  --color-rose-300: #f099bf;
+  --color-rose-400: #ee72a4;
+  --color-rose-500: #ed4c86;
+  --color-rose-600: #eb195f;
+  --color-rose-700: #c20f45;
+  --color-rose-800: #95092f;
+  --color-rose-900: #66051c;
+  --color-slate-100: #f8f7fc;
+  --color-slate-200: #f1f0fa;
+  --color-slate-300: #e0ddec;
+  --color-slate-400: #c3c0d8;
+  --color-slate-500: #a7a3c2;
+  --color-slate-600: #82809a;
+  --color-slate-700: #444258;
+  --color-slate-800: #2d2d39;
+  --color-slate-900: #1c1c21;
+  --color-success-light: #2db553;
+  --color-starter: #f2e1f7;
+  --color-team: #cbecf0;
+  --color-enterprise: #FFE2E;
+
+  /* V3 default-- ring outlines are blue */
+  --default-ring-color: var(--color-sky-500);
+
+  /* Animations */
+  --animate-fade-in-scale: fade-in-scale 3s ease-out;
+  @keyframes fade-in-scale {
+    0% {
+      opacity: 0;
+      transform: scale(0.95);
+    }
+    100% {
+      opacity: 1;
+      transform: scale(1);
+    }
+  }
+  --animate-slide-up: slide-up 200ms cubic-bezier(0, 0, 0.2, 1);
+  @keyframes slide-up {
+    from {
+      opacity: 0;
+      transform: translateY(10px);
+    }
+  }
+  --animate-slide-down: slide-down 200ms cubic-bezier(0, 0, 0.2, 1);
+  @keyframes slide-down {
+    from {
+      opacity: 0;
+      transform: translateY(-10px);
+    }
+  }
+  --animate-overlay-show: overlay-show 150ms cubic-bezier(0.16, 1, 0.3, 1);
+  @keyframes overlay-show {
+    from {
+      opacity: 0;
+    }
+  }
+  --animate-scale-in: scale-in 150ms cubic-bezier(0, 0, 0.2, 1);
+  @keyframes scale-in {
+    from {
+      opacity: 0;
+      transform: scale(0);
+    }
+  }
+
+  --animate-shimmer: shimmer 2.5s infinite;
+  @keyframes shimmer {
+    from {
+      mask-position: right;
+    }
+    to {
+      mask-position: left;
+    }
+  }
+
+  --animate-marquee-scroll: marquee-scroll var(--marquee-duration, 3s) linear infinite;
+  @keyframes marquee-scroll {
+    0% {
+      transform: translateX(0);
+    }
+    10% {
+      transform: translateX(0);
+    }
+    45% {
+      transform: translateX(var(--marquee-offset, 0px));
+    }
+    55% {
+      transform: translateX(var(--marquee-offset, 0px));
+    }
+    90% {
+      transform: translateX(0);
+    }
+    100% {
+      transform: translateX(0);
+    }
+  }
+}
+
+:root {
+  --global-banner-height: 24px;
+}
+
+/*
+  The default border color has changed to `currentColor` in Tailwind CSS v4,
+  so we've added these compatibility styles to make sure everything still
+  looks the same as it did with Tailwind CSS v3.
+
+  If we ever want to remove these styles, we need to add an explicit border
+  color utility to any element that depends on these defaults.
+*/
+@layer base {
+  *,
+  ::after,
+  ::before,
+  ::backdrop,
+  ::file-selector-button {
+    border-color: var(--color-gray-200, currentColor);
+  }
+}
+
+@layer utilities {
+  @font-face {
+    font-family: 'IBM Plex Mono';
+    src: url('/static/fonts/IBMPlexMono-Regular.woff2') format('woff2');
+    font-style: normal;
+    font-weight: 400;
+    font-stretch: normal;
+    font-display: swap;
+  }
+
+  @font-face {
+    font-family: 'IBM Plex Mono';
+    src: url('/static/fonts/IBMPlexMono-SemiBold.woff2') format('woff2');
+    font-style: normal;
+    font-weight: 600;
+    font-stretch: normal;
+    font-display: swap;
+  }
+
+  @font-face {
+    font-family: 'IBM Plex Sans';
+    src: url('/static/fonts/IBMPlexSans-Italic.woff2') format('woff2');
+    font-style: italic;
+    font-weight: 400;
+    font-stretch: normal;
+    font-display: swap;
+  }
+
+  @font-face {
+    font-family: 'IBM Plex Sans';
+    src: url('/static/fonts/IBMPlexSans-Regular.woff2') format('woff2');
+    font-style: normal;
+    font-weight: 400;
+    font-stretch: normal;
+    font-display: swap;
+  }
+
+  @font-face {
+    font-family: 'IBM Plex Sans';
+    src: url('/static/fonts/IBMPlexSans-Medium.woff2') format('woff2');
+    font-style: normal;
+    font-weight: 500;
+    font-stretch: normal;
+    font-display: swap;
+  }
+
+  @font-face {
+    font-family: 'IBM Plex Sans';
+    src: url('/static/fonts/IBMPlexSans-MediumItalic.woff2') format('woff2');
+    font-style: italic;
+    font-weight: 500;
+    font-stretch: normal;
+    font-display: swap;
+  }
+
+  @font-face {
+    font-family: 'IBM Plex Sans';
+    src: url('/static/fonts/IBMPlexSans-SemiBold.woff2') format('woff2');
+    font-style: normal;
+    font-weight: 600;
+    font-stretch: normal;
+    font-display: swap;
+  }
+
+  @font-face {
+    font-family: 'IBM Plex Sans';
+    src: url('/static/fonts/IBMPlexSans-SemiBoldItalic.woff2') format('woff2');
+    font-style: italic;
+    font-weight: 600;
+    font-stretch: normal;
+    font-display: swap;
+  }
+
+  /** Global styles - https://tailwindcss.com/docs/adding-custom-styles#adding-base-styles */
+}
+@layer base {
+  /**
+    bg is important since we do a slide up animation we don't want the background to slide up, too
+    I dislike overflow immensely, but required to
+    1) not have a bunch of white space below the app on mobile
+    2) prevent a horizontal scrollbar from causing a vertical scrollbar due to the 100vh
+  */
+  #root {
+    @apply m-0 h-screen w-full bg-slate-200 p-0;
+  }
+
+  *,
+  ::before,
+  ::after {
+    box-sizing: border-box;
+    border-width: 0;
+    border-style: solid;
+  }
+
+  html {
+    @apply text-[16px];
+  }
+
+  body {
+    @apply m-0 p-0 font-sans text-[16px] leading-[normal] font-normal text-slate-700 antialiased;
+  }
+
+  a {
+    @apply text-slate-700;
+    text-decoration: none;
+  }
+
+  a:hover,
+  a:focus {
+    @apply text-grape-700;
+    text-decoration: none;
+  }
+
+  button {
+    @apply p-0;
+  }
+
+  button,
+  input,
+  select,
+  textarea {
+    @apply antialiased;
+    font-family: inherit;
+    font-size: 100%;
+    font-weight: inherit;
+    line-height: inherit;
+    color: inherit;
+    background-color: transparent;
+  }
+
+  img {
+    @apply max-w-full;
+  }
+
+  p {
+    @apply p-0;
+  }
+
+  pre {
+    @apply max-w-full overflow-auto;
+  }
+
+  b {
+    @apply font-semibold;
+  }
+
+  strong {
+    @apply font-semibold;
+  }
+
+  ::placeholder {
+    @apply text-slate-600;
+  }
+
+  ::-webkit-input-placeholder {
+    @apply text-slate-600;
+  }
+
+  :-ms-input-placeholder {
+    @apply text-slate-600;
+  }
+
+  @media print {
+    html,
+    body {
+      font-size: 14px !important;
+    }
+    .hide-print {
+      display: none !important;
+    }
+  }
+}
+/** See constEnums.ZIndex for values */
+@utility z-bottom-bar {
+  z-index: 8;
+}
+@utility z-dialog {
+  z-index: 24;
+}
+@utility z-fab {
+  z-index: 6;
+}
+@utility z-menu {
+  z-index: 24; /* portal needs to float above other components, especially sidebars */
+}
+@utility z-sidebar {
+  z-index: 16;
+}
+@utility z-side-sheet {
+  z-index: 8;
+}
+@utility z-snackbar {
+  z-index: 24; /* snackbar is kind of dialog */
+}
+@utility z-reflection-in-flight {
+  z-index: 8;
+}
+@utility z-reflection-in-flight-local {
+  z-index: 28; /* keep it above the dialog */
+}
+@utility z-reflection-in-flight-spotlight {
+  z-index: 26;
+}
+@utility z-tooltip {
+  z-index: 24; /* portal needs to float above other components, especially sidebars */
+}
+
+@utility shadow-card {
+  box-shadow: rgba(0,0,0,.2) 0px 2px 1px -1px, rgba(0,0,0,.14) 0px 1px 1px 0px, rgba(0,0,0,.12) 0px 1px 3px 0px;
+}
+@utility shadow-card-hover {
+  box-shadow: rgba(0,0,0,.2) 0px 3px 3px -2px, rgba(0,0,0,.14) 0px 3px 4px 0px, rgba(0,0,0,.12) 0px 1px 8px 0px;
+}
+@utility shadow-card-focus {
+  box-shadow: rgba(0,0,0,.2) 0px 3px 5px -1px, rgba(0,0,0,.14) 0px 5px 8px 0px, rgba(0,0,0,.12) 0px 1px 14px 0px;
+}
+@utility shadow-card-dragging {
+  box-shadow: rgba(0,0,0,.2) 0px 5px 5px -3px, rgba(0,0,0,.14) 0px 8px 10px 1px, rgba(0,0,0,.12) 0px 3px 14px 2px;
+}
+
+/** Customize daypicker styles */
+.rdp {
+  @apply m-[8px];
+  --rdp-cell-size: 36px;
+  --rdp-accent-color: var(--color-grape-500);
+  --rdp-background-color: --theme(--color-grape-500 / 30%);
+  --rdp-accent-color-dark: var(--color-grape-500);
+  --rdp-background-color-dark: --theme(--color-grape-500 / 30%);
+}
+
+.link-style a {
+  @apply text-sky-500;
+  text-decoration: underline;
+}
+
+/** Customize TipTap */
+
+.ProseMirror {
+  width: 100%;
+  /* Match top padding for more consistent vertical alignment */
+  padding-bottom: 2px;
+  /* Gap cursor is 2px above the top of an element */
+  padding-top: 2px;
+  blockquote {
+    border-left: 3px solid var(--color-slate-500);
+    margin: 1.5rem 0;
+    padding-left: 1rem;
+  }
+  /* List styles */
+
+  /* List styles */
+  ul,
+  ol {
+    padding: 0 1rem;
+    margin: 1.25rem 1rem 1.25rem 0.4rem;
+
+    li p {
+      margin-top: 0.25em;
+      margin-bottom: 0.25em;
+    }
+  }
+  /* Task list specific styles */
+  ul[data-type='taskList'] {
+    list-style: none;
+    margin-left: 0;
+    padding: 0;
+
+    li {
+      align-items: flex-start;
+      display: flex;
+
+      > label {
+        flex: 0 0 auto;
+        margin-right: 0.5rem;
+        user-select: none;
+      }
+
+      > div {
+        flex: 1 1 auto;
+      }
+    }
+
+    input[type='checkbox'] {
+      cursor: pointer;
+      vertical-align: bottom;
+    }
+
+    ul[data-type='taskList'] {
+      margin: 0;
+    }
+  }
+  .node-imageUpload {
+    @apply relative rounded-sm;
+    &.ProseMirror-selectednode::after {
+      content: '';
+      @apply pointer-events-none absolute inset-0 h-full w-full rounded-sm bg-[#2383e247] select-none;
+    }
+  }
+  .node-imageBlock {
+    @apply relative;
+    &.has-focus > div::after {
+      content: '';
+      @apply pointer-events-none absolute inset-0 h-full w-full bg-[#2383e247] select-none;
+    }
+    & img {
+      @apply overflow-hidden rounded-md;
+    }
+  }
+
+  .node-insightsBlock {
+    @apply relative;
+    &.has-focus > div::after {
+      content: '';
+      @apply pointer-events-none absolute inset-0 h-full w-full bg-[#2383e247] select-none;
+    }
+  }
+  .search-result {
+    background-color: rgba(255, 217, 0, 0.5);
+  }
+
+  .page-user-mention {
+    color: var(--color-slate-600);
+  }
+
+  .page-user-mentioning {
+    background-color: var(--color-slate-200);
+    border-radius: 4px;
+  }
+
+  [data-type='mention'] {
+    background-color: var(--color-gold-100);
+    border-radius: 2px;
+    font-weight: 600;
+  }
+
+  [data-type='taskTag'] {
+    font-weight: 600;
+  }
+
+  :is(ul, ol) {
+    list-style-position: outside;
+    padding-inline-start: 16px;
+    margin-block-start: 4px;
+    margin-block-end: 4px;
+  }
+
+  :is(ol) {
+    margin-inline-start: 2px;
+  }
+
+  a {
+    text-decoration: underline;
+    color: var(--color-slate-700);
+    :hover {
+      cursor: pointer;
+    }
+  }
+  p {
+    margin-block-start: 4px;
+    margin-block-end: 4px;
+    /* Line height: for now most editable surfaces are 14/20 */
+    line-height: 1.4285714286;
+  }
+
+  p:first-of-type {
+    margin-block-start: 0;
+  }
+  p:last-of-type {
+    margin-block-end: 0;
+  }
+
+  hr.ProseMirror-selectednode {
+    border-top: 1px solid #68cef8;
+  }
+
+  hr {
+    border-top: 1px solid var(--color-slate-400);
+  }
+}
+
+/* If a page title is empty, always show it */
+/* If a top-level page block is empty, show when focused */
+/* For other editors, only show placeholder when the whole thing is empty */
+.page-editor .tiptap > h1.is-empty::before,
+.page-editor .tiptap > .is-empty.has-focus::before,
+.tiptap > .is-editor-empty::before,
+.details summary.is-empty::before,
+.details div[data-type="detailsContent"].is-empty::before {
+  content: attr(data-placeholder);
+  float: left;
+  color: hsl(from var(--color-slate-700) h s l / 0.5);
+  pointer-events: none;
+  height: 0;
+}
+
+.ProseMirror-focused:focus {
+  outline: none;
+}
+
+.drag-handle {
+  position: absolute;
+  opacity: 1;
+  transition: opacity ease-in 150ms;
+  border-radius: 0.25rem;
+  transform: translateX(1px);
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 10 10' style='fill: rgba(0, 0, 0, 0.5)'%3E%3Cpath d='M3,2 C2.44771525,2 2,1.55228475 2,1 C2,0.44771525 2.44771525,0 3,0 C3.55228475,0 4,0.44771525 4,1 C4,1.55228475 3.55228475,2 3,2 Z M3,6 C2.44771525,6 2,5.55228475 2,5 C2,4.44771525 2.44771525,4 3,4 C3.55228475,4 4,4.44771525 4,5 C4,5.55228475 3.55228475,6 3,6 Z M3,10 C2.44771525,10 2,9.55228475 2,9 C2,8.44771525 2.44771525,8 3,8 C3.55228475,8 4,8.44771525 4,9 C4,9.55228475 3.55228475,10 3,10 Z M7,2 C6.44771525,2 6,1.55228475 6,1 C6,0.44771525 6.44771525,0 7,0 C7.55228475,0 8,0.44771525 8,1 C8,1.55228475 7.55228475,2 7,2 Z M7,6 C6.44771525,6 6,5.55228475 6,5 C6,4.44771525 6.44771525,4 7,4 C7.55228475,4 8,4.44771525 8,5 C8,5.55228475 7.55228475,6 7,6 Z M7,10 C6.44771525,10 6,9.55228475 6,9 C6,8.44771525 6.44771525,8 7,8 C7.55228475,8 8,8.44771525 8,9 C8,9.55228475 7.55228475,10 7,10 Z'%3E%3C/path%3E%3C/svg%3E");
+  background-size: calc(0.5em + 0.375rem) calc(0.5em + 0.375rem);
+  background-repeat: no-repeat;
+  background-position: center;
+  width: 1.2rem;
+  height: 1.5rem;
+  z-index: 50;
+  cursor: grab;
+
+  &:hover {
+    background-color: var(--color-slate-100);
+    transition: background-color 0.2s;
+  }
+
+  &:active {
+    background-color: var(--color-slate-200);
+    transition: background-color 0.2s;
+    cursor: grabbing;
+  }
+
+  &.hide {
+    transition: none;
+    opacity: 0;
+    pointer-events: none;
+  }
+
+  @media screen and (max-width: 600px) {
+    display: none;
+    pointer-events: none;
+  }
+}
+
+.details {
+  display: flex;
+
+  summary {
+    line-height: 22px;
+    padding-top: 2px;
+  }
+
+  > button {
+    align-items: center;
+    background: transparent;
+    border-radius: 4px;
+    display: flex;
+    width: 24px;
+    height: 24px;
+    justify-content: center;
+    cursor: pointer;
+
+    &:hover {
+      background-color: var(--color-slate-300);
+    }
+
+    &::before {
+      content: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24'%3E%3Cpath d='M10 17l5-5-5-5v10z'%3E%3C/path%3E%3C/svg%3E");
+      width: 24px;
+      height: 24px;
+    }
+
+  }
+
+  &.is-open > button::before {
+    transform: rotate(90deg);
+  }
+
+  > div {
+    display: flex;
+    flex-direction: column;
+    width: 100%;
+
+    > [data-type="detailsContent"] > :last-child {
+      margin-bottom: 0.5rem;
+    }
+  }
+}
+
+/* Basic editor styles */
+.tiptap {
+  :first-child {
+    margin-top: 0;
+  }
+
+  /* Table row and column manipulation specific styling
+   *
+   * Table styling itself is done via tailwind in the extension
+   */
+  [data-highlight="header"] :has([data-active=true]) tr:first-child th::after,
+  [data-highlight="header"] :has([data-active=true]) tr:first-child td::after {
+    background: var(--color-sky-200);
+    opacity: 0.5;
+    content: "";
+    top: 0;
+    left: -100vw;
+    right: -100vw;
+    bottom: 0;
+    pointer-events: none;
+    position: absolute;
+    z-index: 1;
+  }
+  [data-highlight="row"] th[data-active=true]::after,
+  [data-highlight="row"] td[data-active=true]::after {
+    background: var(--color-tomato-400);
+    opacity: 0.5;
+    content: "";
+    top: 0;
+    left: -100vw;
+    right: -100vw;
+    bottom: 0;
+    pointer-events: none;
+    position: absolute;
+    z-index: 1;
+  }
+  [data-highlight="above"] th[data-active=true]::after,
+  [data-highlight="above"] td[data-active=true]::after {
+    background: var(--color-sky-200);
+    content: "";
+    top: -1px;
+    left: -100vw;
+    right: -100vw;
+    height: 2px;
+    pointer-events: none;
+    position: absolute;
+    z-index: 1;
+  }
+  [data-highlight="below"] th[data-active=true]::after,
+  [data-highlight="below"] td[data-active=true]::after {
+    background: var(--color-sky-200);
+    content: "";
+    bottom: -1px;
+    left: -100vw;
+    right: -100vw;
+    height: 2px;
+    pointer-events: none;
+    position: absolute;
+    z-index: 1;
+  }
+  [data-highlight="cell"] th[data-active=true],
+  [data-highlight="cell"] td[data-active=true] {
+    border: 2px solid var(--color-sky-200);
+  }
+  [data-highlight="column"] th[data-active=true]::after,
+  [data-highlight="column"] td[data-active=true]::after {
+    background: var(--color-tomato-400);
+    opacity: 0.5;
+    content: "";
+    left: 0;
+    right: 0;
+    top: -100vh;
+    bottom: -100vh;
+    pointer-events: none;
+    position: absolute;
+    z-index: 1;
+  }
+  [data-highlight="before"] th[data-active=true]::after,
+  [data-highlight="before"] td[data-active=true]::after {
+    background: var(--color-sky-200);
+    content: "";
+    left: -1px;
+    width: 2px;
+    top: -100vh;
+    bottom: -100vh;
+    pointer-events: none;
+    position: absolute;
+    z-index: 1;
+  }
+  [data-highlight="after"] th[data-active=true]::after,
+  [data-highlight="after"] td[data-active=true]::after {
+    background: var(--color-sky-200);
+    content: "";
+    right: -1px;
+    width: 2px;
+    top: -100vh;
+    bottom: -100vh;
+    pointer-events: none;
+    position: absolute;
+    z-index: 1;
+  }
+
+  table {
+    overflow: hidden;
+
+    td,
+    th {
+      position: relative;
+    }
+
+    td[data-active=true],
+    th[data-active=true] {
+      background: var(--color-sky-100);
+    }
+
+    .column-resize-handle {
+      background-color: var(--color-grape-500);
+      bottom: -2px;
+      pointer-events: none;
+      position: absolute;
+      right: -2px;
+      top: 0;
+      width: 4px;
+    }
+  }
+
+  .tableWrapper {
+    margin: 1.5rem 0;
+    overflow-x: auto;
+  }
+
+  &.resize-cursor {
+    cursor: ew-resize;
+    cursor: col-resize;
+  }
+}

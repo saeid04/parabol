@@ -1,8 +1,8 @@
 import {PALETTE} from 'parabol-client/styles/paletteV3'
 import {FONT_FAMILY} from 'parabol-client/styles/typographyV2'
-import React from 'react'
 import {ExternalLinks} from '../../../../../types/constEnums'
-import {CorsOptions} from '../../../../../types/cors'
+import type {CorsOptions} from '../../../../../types/cors'
+import makeAppURL from '../../../../../utils/makeAppURL'
 
 const logoStyle = {
   paddingTop: 64
@@ -29,12 +29,13 @@ const linkStyle = {
 }
 
 interface Props {
+  appOrigin: string
   corsOptions: CorsOptions
 }
 
 const LogoFooter = (props: Props) => {
-  const {corsOptions} = props
-
+  const {appOrigin, corsOptions} = props
+  const profileUrl = makeAppURL(appOrigin, `me/profile`)
   return (
     <>
       <tr>
@@ -55,7 +56,7 @@ const LogoFooter = (props: Props) => {
       <tr>
         <td align='center' style={linkWrapperStyle}>
           <a
-            href='https://action.parabol.co/me/profile'
+            href={profileUrl}
             style={linkStyle}
             rel='noopener noreferrer'
             target='_blank'
