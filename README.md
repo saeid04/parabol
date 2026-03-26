@@ -10,6 +10,7 @@ Some of the problems are the outdated Dockerfile and misconfigured env. Most of 
 > - Single-stage Docker build with migration at container startup
 > - PostgreSQL 16 with pgvector, Valkey (Redis-compatible), no RethinkDB
 > - Uses pnpm (Node 24)
+> - `APP_ORIGIN` env var for correct HTTPS URLs behind a reverse proxy (OAuth callbacks, lazy-loaded assets, email links)
 
 ---
 
@@ -63,6 +64,7 @@ That will create the app and mount the self hosted directory
 ```
 sudo dokku plugin:install https://github.com/dokku/dokku-postgres.git postgres
 sudo dokku plugin:install https://github.com/dokku/dokku-redis.git redis
+```
 
 ### 3. Then create DB
 
@@ -120,6 +122,14 @@ sudo dokku plugin:install https://github.com/dokku/dokku-letsencrypt.git
 sudo dokku letsencrypt:set --global <your@email.address>
 sudo dokku letsencrypt:enable parabol
 sudo dokku letsencrypt:cron-job --add
+```
+
+### 6b. Set APP_ORIGIN (required for HTTPS)
+
+After enabling SSL, set `APP_ORIGIN` to your public HTTPS URL. This is used for OAuth callbacks, email links, and — critically — the webpack public path for lazy-loaded assets. Without it, dynamically imported JS chunks will load over HTTP even when your site is on HTTPS.
+
+```
+sudo dokku config:set parabol APP_ORIGIN=https://<your.domain> --no-restart
 ```
 
 ### 7. Decide using Heroku buildpack / Dockerfile
@@ -203,7 +213,9 @@ For example if your parabol domain is `parabol.foo.com` then on your server run:
 sudo dokku config:set parabol INVITATION_SHORTLINK=parabol.foo.com/invitation-link
 ```
 
-## If something goes wrong, you might need to set this as well
+## Mixed HTTP/HTTPS assets (some JS loads over HTTP)
+
+If you see some static assets (especially lazy-loaded chunks like `UnpaidTeamModalRoot_xxx.js`) loading over HTTP while others load over HTTPS, `APP_ORIGIN` is not set. The server uses it to build `__webpack_public_path__` at runtime — without it, dynamic imports fall back to `http://`.
 
 ```
 sudo dokku config:set parabol APP_ORIGIN=https://<your.domain> --no-restart
